@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import GameCanvas from './components/GameCanvas';
-import Overlay from './components/UI/Overlay';
-import { MainMenu, GameOver } from './components/UI/Menus';
+import Overlay from './components/ui/Overlay';
+import { MainMenu, GameOver } from './components/ui/Menus';
 import { GameState, GameStats, Tier } from './types';
 
 function App() {

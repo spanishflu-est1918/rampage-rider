@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PhysicsWorld } from './PhysicsWorld';
+import { AIManager } from './AIManager';
 import { GameState, Tier, InputState, GameStats } from '../types';
 
 /**
@@ -16,6 +17,7 @@ export class Engine {
 
   // Systems
   public physics: PhysicsWorld;
+  public ai: AIManager;
 
   // Game state
   private state: GameState = GameState.MENU;
@@ -89,8 +91,9 @@ export class Engine {
     // Clock
     this.clock = new THREE.Clock();
 
-    // Initialize physics
+    // Initialize systems
     this.physics = new PhysicsWorld();
+    this.ai = new AIManager();
 
     console.log('[Engine] Created with closer camera at (10, 25, 10)');
   }
@@ -126,6 +129,9 @@ export class Engine {
 
     // Initialize physics
     await this.physics.init();
+
+    // Initialize AI
+    this.ai.init();
 
     // Create temporary ground for testing
     this.createTestGround();
@@ -269,7 +275,10 @@ export class Engine {
 
     // TODO: Update player
     // TODO: Update entities
-    // TODO: Update AI
+
+    // Update AI
+    this.ai.update(dt);
+
     // TODO: Update camera follow
 
     // Send stats update
@@ -291,6 +300,7 @@ export class Engine {
   dispose(): void {
     this.stop();
     this.physics.dispose();
+    this.ai.clear();
     this.renderer.dispose();
 
     // Clear scene

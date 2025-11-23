@@ -1,6 +1,9 @@
 import React from 'react';
 import { GameStats } from '../../types';
 import { TIER_CONFIGS } from '../../constants';
+import { Button } from '@/components/ui/8bit/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/8bit/card';
+import { Badge } from '@/components/ui/8bit/badge';
 
 interface MainMenuProps {
   onStart: () => void;
@@ -8,59 +11,23 @@ interface MainMenuProps {
 
 export const MainMenu: React.FC<MainMenuProps> = ({ onStart }) => {
   return (
-    <div style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'rgba(0, 0, 0, 0.9)',
-      color: 'white',
-      zIndex: 50,
-    }}>
-      <div style={{
-        textAlign: 'center',
-        padding: '40px',
-      }}>
-        <h1 style={{
-          fontSize: '72px',
-          fontWeight: 'bold',
-          marginBottom: '20px',
-          color: '#ff3333',
-        }}>
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50">
+      <div className="text-center p-10">
+        <h1 className="text-7xl font-bold mb-5 text-destructive retro">
           RAMPAGE RIDER
         </h1>
 
-        <p style={{
-          fontSize: '18px',
-          marginBottom: '40px',
-          color: '#888',
-        }}>
+        <p className="text-lg mb-10 text-muted-foreground retro">
           START ON FOOT. KILL TO UPGRADE. SURVIVE THE CHAOS.
         </p>
 
-        <button
+        <Button
           onClick={onStart}
-          style={{
-            padding: '20px 60px',
-            background: '#ff3333',
-            color: 'white',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#cc0000'}
-          onMouseLeave={(e) => e.currentTarget.style.background = '#ff3333'}
+          size="lg"
+          className="px-16 py-8 text-2xl bg-destructive text-white hover:bg-destructive/90 retro"
         >
           START GAME
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -75,72 +42,43 @@ export const GameOver: React.FC<GameOverProps> = ({ stats, onRestart }) => {
   const config = TIER_CONFIGS[stats.tier];
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'rgba(139, 0, 0, 0.9)',
-      color: 'white',
-      zIndex: 50,
-    }}>
-      <div style={{
-        textAlign: 'center',
-        padding: '40px',
-        background: '#1a1a1a',
-        borderRadius: '12px',
-        border: '2px solid #333',
-      }}>
-        <h2 style={{
-          fontSize: '60px',
-          fontWeight: 'bold',
-          marginBottom: '20px',
-          color: '#ff3333',
-        }}>
-          BUSTED!
-        </h2>
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/90 z-50">
+      <Card className="w-96 bg-card border-4 border-foreground">
+        <CardHeader className="text-center">
+          <CardTitle className="text-6xl text-destructive retro">
+            BUSTED!
+          </CardTitle>
+        </CardHeader>
 
-        <div style={{
-          marginBottom: '30px',
-          fontSize: '18px',
-        }}>
-          <div style={{ marginBottom: '10px' }}>
-            <strong>Score:</strong> {stats.score.toLocaleString()}
+        <CardContent className="space-y-3 text-lg retro">
+          <div className="flex justify-between">
+            <strong>Score:</strong>
+            <Badge variant="default">{stats.score.toLocaleString()}</Badge>
           </div>
-          <div style={{ marginBottom: '10px' }}>
-            <strong>Kills:</strong> {stats.kills}
+          <div className="flex justify-between">
+            <strong>Kills:</strong>
+            <Badge variant="destructive">{stats.kills}</Badge>
           </div>
-          <div style={{ marginBottom: '10px' }}>
-            <strong>Tier:</strong> {config.name}
+          <div className="flex justify-between">
+            <strong>Tier:</strong>
+            <Badge variant="secondary">{config.name}</Badge>
           </div>
-          <div>
-            <strong>Time:</strong> {Math.floor(stats.gameTime)}s
+          <div className="flex justify-between">
+            <strong>Time:</strong>
+            <Badge variant="outline">{Math.floor(stats.gameTime)}s</Badge>
           </div>
-        </div>
 
-        <button
-          onClick={onRestart}
-          style={{
-            padding: '15px 40px',
-            background: 'white',
-            color: 'black',
-            fontSize: '20px',
-            fontWeight: 'bold',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#ddd'}
-          onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-        >
-          TRY AGAIN
-        </button>
-      </div>
+          <div className="pt-6">
+            <Button
+              onClick={onRestart}
+              size="lg"
+              className="w-full bg-foreground text-background hover:bg-foreground/90"
+            >
+              TRY AGAIN
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

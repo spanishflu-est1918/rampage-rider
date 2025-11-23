@@ -6,6 +6,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Rampage Rider** is an isometric top-down endless runner video game built with Three.js, React, and Rapier physics. Players start on foot and progressively unlock vehicles (bicycle → motorbike → sedan) by reaching kill milestones while being pursued by police.
 
+## Development Workflow
+
+### Implementation Plan & Changelog System
+
+This project uses a two-file documentation system to track progress:
+
+**IMPLEMENTATION_PLAN.md** - The master roadmap
+- Contains all planned features organized by phase
+- Tasks use checkboxes `[ ]` for pending, `[x]` for completed
+- Updated when new features are planned or scope changes
+- Acts as the single source of truth for what needs to be built
+
+**CHANGELOG.md** - The completion log
+- Documents completed work with technical details
+- Updated immediately when tasks from the implementation plan are finished
+- Follows Keep a Changelog format with dates
+- Includes code examples, file changes, and implementation notes
+
+### Workflow Rules
+
+**When completing tasks:**
+1. Mark the task as complete in IMPLEMENTATION_PLAN.md (`[x]`)
+2. Add a detailed entry to CHANGELOG.md with:
+   - Date of completion
+   - Technical implementation details
+   - Files created/modified
+   - Code examples where relevant
+   - Any breaking changes or migration notes
+3. Commit both files together
+
+**When planning new work:**
+1. Add tasks to IMPLEMENTATION_PLAN.md under appropriate phase
+2. Use descriptive task names with clear acceptance criteria
+3. Organize by logical implementation order
+
+**Before committing:**
+- Run `npx tsc --noEmit` to check for type errors
+- Fix any blocking type errors (non-blocking 8bitcn library errors are acceptable)
+- Update both IMPLEMENTATION_PLAN.md and CHANGELOG.md
+- Commit with descriptive message
+
 ## Development Commands
 
 ```bash
