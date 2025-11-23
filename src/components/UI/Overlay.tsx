@@ -5,28 +5,11 @@ import { Badge } from '@/components/ui/8bit/badge';
 import HealthBar from '@/components/ui/8bit/health-bar';
 import { Progress } from '@/components/ui/8bit/progress';
 
-const AVAILABLE_ANIMATIONS = [
-  'close_door_sitting_left', 'close_door_sitting_right',
-  'close_door_standing_left', 'close_door_standing_right',
-  'driving', 'drop_idle', 'drop_running', 'drop_running_roll',
-  'enter_airplane_left', 'enter_airplane_right', 'falling',
-  'idle', 'jump_idle', 'jump_running',
-  'open_door_standing_left', 'open_door_standing_right',
-  'reset', 'rotate_left', 'rotate_right', 'run',
-  'sit_down_left', 'sit_down_right', 'sitting',
-  'sitting_shift_left', 'sitting_shift_right', 'sprint',
-  'stand_up_left', 'stand_up_right',
-  'start_back_left', 'start_back_right',
-  'start_forward', 'start_left', 'start_right', 'stop'
-];
-
 interface OverlayProps {
   stats: GameStats;
-  selectedAttackAnim: string;
-  onAttackAnimChange: (anim: string) => void;
 }
 
-const Overlay: React.FC<OverlayProps> = ({ stats, selectedAttackAnim, onAttackAnimChange }) => {
+const Overlay: React.FC<OverlayProps> = ({ stats }) => {
   const currentConfig: TierConfig = TIER_CONFIGS[stats.tier];
   const nextTier = (stats.tier + 1) as Tier;
   const nextConfig = TIER_CONFIGS[nextTier];
@@ -38,25 +21,7 @@ const Overlay: React.FC<OverlayProps> = ({ stats, selectedAttackAnim, onAttackAn
   const healthPercent = (stats.health / currentConfig.maxHealth) * 100;
 
   return (
-    <div className="absolute top-0 left-0 w-full h-full p-4 flex flex-col justify-between z-10">
-
-      {/* Animation Selector - Top Right */}
-      <div className="absolute top-4 right-4 pointer-events-auto">
-        <div className="bg-black/90 backdrop-blur-sm p-3 border-2 border-green-500">
-          <label className="block text-xs text-green-400 mb-1 retro">F Key Animation</label>
-          <select
-            value={selectedAttackAnim}
-            onChange={(e) => onAttackAnimChange(e.target.value)}
-            className="bg-black border border-green-600 text-green-400 p-1 text-xs retro w-48"
-          >
-            {AVAILABLE_ANIMATIONS.map(anim => (
-              <option key={anim} value={anim}>{anim}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="pointer-events-none w-full h-full flex flex-col justify-between">
+    <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex flex-col justify-between z-10">
 
       {/* Top Bar */}
       <div className="flex justify-between items-start gap-4">
@@ -135,7 +100,6 @@ const Overlay: React.FC<OverlayProps> = ({ stats, selectedAttackAnim, onAttackAn
             {currentConfig.description}
           </div>
         </div>
-      </div>
       </div>
 
     </div>

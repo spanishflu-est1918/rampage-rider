@@ -54,7 +54,7 @@ export class Player extends THREE.Group {
   private mixer: THREE.AnimationMixer | null = null;
   private animations: THREE.AnimationClip[] = [];
   private currentAnimation: string = 'idle';
-  private attackAnimationName: string = 'drop_running'; // Default attack animation
+  private attackAction: THREE.AnimationAction | null = null;
 
   constructor() {
     super();
@@ -96,14 +96,15 @@ export class Player extends THREE.Group {
 
       // Setup animation mixer (matching Sketchbook line 102)
       this.mixer = new THREE.AnimationMixer(gltf.scene);
+      this.mixer.timeScale = 1.5; // Speed up animations by 1.5x
       this.animations = gltf.animations;
 
       // Play idle animation by default
-      this.playAnimation('idle', 0.3);
+      this.playAnimation('Idle_A', 0.3);
 
       this.modelLoaded = true;
 
-      console.log('[Player] Boxman model loaded with', this.animations.length, 'animations');
+      console.log('[Player] Rogue model loaded with', this.animations.length, 'animations');
       console.log('[Player] Available animations:', this.animations.map(a => a.name).join(', '));
     } catch (error) {
       console.error('[Player] Failed to load boxman model:', error);
@@ -117,6 +118,7 @@ export class Player extends THREE.Group {
       this.modelLoaded = true;
     }
   }
+
 
   /**
    * Play animation by name (matching Sketchbook setAnimation - line 499)
@@ -186,14 +188,6 @@ export class Player extends THREE.Group {
    */
   setCameraDirection(direction: THREE.Vector3): void {
     this.cameraDirection.copy(direction).normalize();
-  }
-
-  /**
-   * Set attack animation name
-   */
-  setAttackAnimation(animName: string): void {
-    this.attackAnimationName = animName;
-    console.log('[Player] Attack animation set to:', animName);
   }
 
   /**
@@ -291,22 +285,43 @@ export class Player extends THREE.Group {
       this.verticalVelocity = 0;
     }
 
-    // Update animation based on state priority
-    if (this.input.attack) {
-      // Attack - play selected attack animation
-      if (this.currentAnimation !== this.attackAnimationName) {
-        this.playAnimation(this.attackAnimationName, 0.05);
-      }
-    } else if (!this.isGrounded && this.currentAnimation !== 'jump_running') {
-      this.playAnimation('jump_running', 0.1);
-    } else if (isMoving && !this.isWalking && this.currentAnimation !== 'sprint') {
+    // Update base animation (movement)
+    if (!this.isGrounded && this.currentAnimation !== 'Jump_Full_Short') {
+      this.playAnimation('Jump_Full_Short', 0.1);
+    } else if (isMoving && !this.isWalking && this.currentAnimation !== 'Running_A') {
       // Default movement = sprint animation
-      this.playAnimation('sprint', 0.1);
-    } else if (this.isWalking && this.currentAnimation !== 'run') {
-      // Shift held = walk/run animation (slower)
-      this.playAnimation('run', 0.1);
-    } else if (!isMoving && this.isGrounded && this.currentAnimation !== 'idle') {
-      this.playAnimation('idle', 0.1);
+      this.playAnimation('Running_A', 0.1);
+    } else if (this.isWalking && this.currentAnimation !== 'Walking_A') {
+      // Shift held = walk animation (slower)
+      this.playAnimation('Walking_A', 0.1);
+    } else if (!isMoving && this.isGrounded && this.currentAnimation !== 'Idle_A') {
+      this.playAnimation('Idle_A', 0.1);
+    }
+
+    // Attack as overlay (plays on top of base animation)
+    if (this.input.attack) {
+      // Only start if not already playing
+      if (!this.attackAction || !this.attackAction.isRunning()) {
+        // Randomize attack animation
+        const attackAnimations = [
+          'Melee_1H_Attack_Stab',
+          'Melee_1H_Attack_Chop',
+          'Melee_1H_Attack_Slice_Diagonal',
+          'Melee_1H_Attack_Slice_Horizontal',
+          'Melee_1H_Attack_Jump_Chop'
+        ];
+        const randomAttack = attackAnimations[Math.floor(Math.random() * attackAnimations.length)];
+
+        const clip = THREE.AnimationClip.findByName(this.animations, randomAttack);
+        if (clip) {
+          this.attackAction = this.mixer!.clipAction(clip);
+          this.attackAction.setLoop(THREE.LoopOnce, 1);
+          this.attackAction.clampWhenFinished = true;
+          this.attackAction.timeScale = 2.0; // Make attacks 2x faster
+          this.attackAction.reset();
+          this.attackAction.play();
+        }
+      }
     }
 
     // Store current input for next frame
@@ -316,6 +331,27 @@ export class Player extends THREE.Group {
 
     // Apply move speed
     const velocity = moveVector.multiplyScalar(currentSpeed);
+
+    // Rotate character to face movement direction
+    if (isMoving) {
+      // Calculate target rotation from movement direction
+      const targetAngle = Math.atan2(moveVector.x, moveVector.z);
+
+      // Smoothly rotate towards target (lerp)
+      const currentRotation = (this as THREE.Group).rotation.y;
+      const rotationSpeed = 10; // radians per second
+      const maxRotation = rotationSpeed * deltaTime;
+
+      // Calculate shortest rotation direction
+      let angleDiff = targetAngle - currentRotation;
+      // Normalize to -PI to PI range
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+      // Apply rotation (clamped to max rotation speed)
+      const rotationChange = Math.max(-maxRotation, Math.min(maxRotation, angleDiff));
+      (this as THREE.Group).rotation.y += rotationChange;
+    }
 
     // Set Rapier velocity (kinematic body) with vertical component
     this.rigidBody.setLinvel(
