@@ -6,6 +6,7 @@ import { GameState, GameStats, Tier } from './types';
 
 function App() {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
+  const [attackAnim, setAttackAnim] = useState<string>('drop_running');
   const [stats, setStats] = useState<GameStats>({
     kills: 0,
     score: 0,
@@ -38,6 +39,7 @@ function App() {
         gameActive={gameState === GameState.PLAYING}
         onStatsUpdate={handleStatsUpdate}
         onGameOver={handleGameOver}
+        attackAnim={attackAnim}
       />
 
       {/* UI Layers */}
@@ -46,7 +48,11 @@ function App() {
       )}
 
       {gameState === GameState.PLAYING && (
-        <Overlay stats={stats} />
+        <Overlay
+          stats={stats}
+          selectedAttackAnim={attackAnim}
+          onAttackAnimChange={setAttackAnim}
+        />
       )}
 
       {gameState === GameState.GAME_OVER && (

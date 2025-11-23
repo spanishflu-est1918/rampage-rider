@@ -6,9 +6,10 @@ interface GameCanvasProps {
   onStatsUpdate: (stats: GameStats) => void;
   onGameOver: (stats: GameStats) => void;
   gameActive: boolean;
+  attackAnim: string;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, gameActive }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, gameActive, attackAnim }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const [engineReady, setEngineReady] = useState(false);
@@ -30,6 +31,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
       await engine.init();
 
       engine.setCallbacks(onStatsUpdate, onGameOver);
+      engine.setAttackAnim(attackAnim);
       engineRef.current = engine;
       setEngineReady(true);
 
@@ -79,7 +81,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
       else if (e.code === 'KeyD' || e.code === 'ArrowRight') inputState.right = isDown;
       else if (e.code === 'Space') inputState.action = isDown; // Jump
       else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') inputState.mount = isDown; // Walk (slows down from default sprint)
-      else if (e.code === 'KeyF') inputState.attack = isDown; // Attack
+      else if (e.code === 'KeyF') {
+        inputState.attack = isDown;
+        console.log('[GameCanvas] F key pressed, attack:', isDown);
+      }
 
       engineRef.current.handleInput(inputState);
     };
@@ -95,6 +100,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
       window.removeEventListener('keyup', onKeyUp);
     };
   }, [engineReady]);
+
+  // Update attack animation when it changes
+  useEffect(() => {
+    if (engineRef.current) {
+      engineRef.current.setAttackAnim(attackAnim);
+    }
+  }, [attackAnim]);
 
   // Start/Stop based on gameActive prop
   useEffect(() => {

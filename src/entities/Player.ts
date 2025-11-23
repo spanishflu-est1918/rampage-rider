@@ -54,6 +54,7 @@ export class Player extends THREE.Group {
   private mixer: THREE.AnimationMixer | null = null;
   private animations: THREE.AnimationClip[] = [];
   private currentAnimation: string = 'idle';
+  private attackAnimationName: string = 'drop_running'; // Default attack animation
 
   constructor() {
     super();
@@ -188,6 +189,14 @@ export class Player extends THREE.Group {
   }
 
   /**
+   * Set attack animation name
+   */
+  setAttackAnimation(animName: string): void {
+    this.attackAnimationName = animName;
+    console.log('[Player] Attack animation set to:', animName);
+  }
+
+  /**
    * Get movement direction for isometric controls
    * Camera at (2.5, 6.25, 2.5) looking at origin
    */
@@ -284,9 +293,9 @@ export class Player extends THREE.Group {
 
     // Update animation based on state priority
     if (this.input.attack) {
-      // Attack - play knife attack animation while moving
-      if (isMoving && this.currentAnimation !== 'run_knife') {
-        this.playAnimation('run_knife', 0.05);
+      // Attack - play selected attack animation
+      if (this.currentAnimation !== this.attackAnimationName) {
+        this.playAnimation(this.attackAnimationName, 0.05);
       }
     } else if (!this.isGrounded && this.currentAnimation !== 'jump_running') {
       this.playAnimation('jump_running', 0.1);

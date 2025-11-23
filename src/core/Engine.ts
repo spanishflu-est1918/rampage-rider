@@ -183,6 +183,15 @@ export class Engine {
   }
 
   /**
+   * Set attack animation
+   */
+  setAttackAnim(anim: string): void {
+    if (this.player) {
+      this.player.setAttackAnimation(anim);
+    }
+  }
+
+  /**
    * Handle input from controls
    */
   handleInput(input: InputState): void {
