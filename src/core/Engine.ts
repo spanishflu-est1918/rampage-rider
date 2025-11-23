@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PhysicsWorld } from './PhysicsWorld';
 import { AIManager } from './AIManager';
+import { Player } from '../entities/Player';
 import { GameState, Tier, InputState, GameStats } from '../types';
 
 /**
@@ -52,15 +53,18 @@ export class Engine {
   // Temp ground reference
   private groundMesh: THREE.Mesh | null = null;
 
+  // Player
+  private player: Player | null = null;
+
   constructor(canvas: HTMLCanvasElement, width: number, height: number) {
     // Initialize Three.js
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1a1a1a);
     this.scene.fog = new THREE.Fog(0x1a1a1a, 30, 80);
 
-    // Orthographic camera for isometric view (closer than before)
+    // Orthographic camera for isometric view
     const aspect = width / height;
-    const frustumSize = 25; // Reduced from 35 for closer view
+    const frustumSize = 7.5; // Very close view (half of 15)
     this.camera = new THREE.OrthographicCamera(
       (frustumSize * aspect) / -2,
       (frustumSize * aspect) / 2,
@@ -70,8 +74,8 @@ export class Engine {
       1000
     );
 
-    // Closer isometric position: (10, 25, 10) instead of (20, 40, 20)
-    this.camera.position.set(10, 25, 10);
+    // Isometric position: half distance again
+    this.camera.position.set(2.5, 6.25, 2.5);
     this.camera.lookAt(0, 0, 0);
 
     // Renderer
@@ -95,7 +99,7 @@ export class Engine {
     this.physics = new PhysicsWorld();
     this.ai = new AIManager();
 
-    console.log('[Engine] Created with closer camera at (10, 25, 10)');
+    console.log('[Engine] Created with isometric camera at (2.5, 6.25, 2.5)');
   }
 
   /**
@@ -150,6 +154,11 @@ export class Engine {
     this.groundMesh.receiveShadow = true;
     this.scene.add(this.groundMesh);
 
+    // Grid helper for visual reference
+    const gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x333333);
+    gridHelper.position.y = 0; // At ground level
+    this.scene.add(gridHelper);
+
     // Physics ground
     const groundBody = this.physics.createRigidBody(
       RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0)
@@ -159,7 +168,7 @@ export class Engine {
       groundBody
     );
 
-    console.log('[Engine] Test ground created');
+    console.log('[Engine] Test ground with grid created');
   }
 
   /**
@@ -178,6 +187,16 @@ export class Engine {
    */
   handleInput(input: InputState): void {
     this.input = input;
+
+    // Forward input to player
+    if (this.player) {
+      this.player.handleInput({
+        up: input.up,
+        down: input.down,
+        left: input.left,
+        right: input.right
+      });
+    }
   }
 
   /**
@@ -209,6 +228,13 @@ export class Engine {
    * Reset game state
    */
   private resetGame(): void {
+    // Clear existing player
+    if (this.player) {
+      this.player.dispose();
+      this.scene.remove(this.player);
+      this.player = null;
+    }
+
     this.stats = {
       kills: 0,
       score: 0,
@@ -220,8 +246,33 @@ export class Engine {
       killHistory: [],
     };
 
-    // TODO: Spawn player
-    console.log('[Engine] Game reset');
+    // Spawn player
+    this.spawnPlayer();
+
+    console.log('[Engine] Game reset - Player spawned');
+  }
+
+  /**
+   * Spawn the player
+   */
+  private spawnPlayer(): void {
+    this.player = new Player();
+
+    // Add to scene
+    this.scene.add(this.player);
+
+    // Create physics body
+    const world = this.physics.getWorld();
+    if (world) {
+      this.player.createPhysicsBody(world);
+    }
+
+    // Set initial camera direction
+    const cameraDirection = new THREE.Vector3();
+    this.camera.getWorldDirection(cameraDirection);
+    this.player.setCameraDirection(cameraDirection);
+
+    console.log('[Engine] Player spawned');
   }
 
   /**
@@ -229,7 +280,7 @@ export class Engine {
    */
   resize(width: number, height: number): void {
     const aspect = width / height;
-    const frustumSize = 25;
+    const frustumSize = 7.5;
 
     this.camera.left = (frustumSize * aspect) / -2;
     this.camera.right = (frustumSize * aspect) / 2;
@@ -273,13 +324,37 @@ export class Engine {
       }
     }
 
-    // TODO: Update player
+    // Update player
+    if (this.player) {
+      // Update camera direction for camera-relative movement
+      // Use camera position as the view vector (for isometric, this works better)
+      const cameraDirection = this.camera.position.clone().normalize();
+      this.player.setCameraDirection(cameraDirection);
+
+      // Update player movement
+      this.player.update(dt);
+    }
+
     // TODO: Update entities
 
     // Update AI
     this.ai.update(dt);
 
-    // TODO: Update camera follow
+    // Camera follow player
+    if (this.player) {
+      const playerPos = this.player.getPosition();
+      // Smooth lerp camera to follow player, maintaining isometric offset
+      const targetCameraPos = new THREE.Vector3(
+        playerPos.x + 2.5,
+        playerPos.y + 6.25,
+        playerPos.z + 2.5
+      );
+      this.camera.position.lerp(targetCameraPos, 0.1);
+
+      // Camera always looks at player position
+      const lookAtTarget = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z);
+      this.camera.lookAt(lookAtTarget);
+    }
 
     // Send stats update
     if (this.callbacks.onStatsUpdate) {

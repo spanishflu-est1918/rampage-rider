@@ -58,19 +58,28 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
   useEffect(() => {
     if (!engineReady) return;
 
+    // Persistent input state - updated per key, not replaced
+    const inputState: InputState = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      action: false,
+      mount: false,
+    };
+
     const handleKey = (e: KeyboardEvent, isDown: boolean) => {
       if (!engineRef.current) return;
 
-      const input: InputState = {
-        up: e.code === 'KeyW' || e.code === 'ArrowUp' ? isDown : false,
-        down: e.code === 'KeyS' || e.code === 'ArrowDown' ? isDown : false,
-        left: e.code === 'KeyA' || e.code === 'ArrowLeft' ? isDown : false,
-        right: e.code === 'KeyD' || e.code === 'ArrowRight' ? isDown : false,
-        action: e.code === 'Space' ? isDown : false,
-        mount: e.code === 'KeyE' ? isDown : false,
-      };
+      // Update only the specific key that changed
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') inputState.up = isDown;
+      else if (e.code === 'KeyS' || e.code === 'ArrowDown') inputState.down = isDown;
+      else if (e.code === 'KeyA' || e.code === 'ArrowLeft') inputState.left = isDown;
+      else if (e.code === 'KeyD' || e.code === 'ArrowRight') inputState.right = isDown;
+      else if (e.code === 'Space') inputState.action = isDown;
+      else if (e.code === 'KeyE') inputState.mount = isDown;
 
-      engineRef.current.handleInput(input);
+      engineRef.current.handleInput(inputState);
     };
 
     const onKeyDown = (e: KeyboardEvent) => handleKey(e, true);

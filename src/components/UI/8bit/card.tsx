@@ -28,10 +28,11 @@ export const cardVariants = cva("", {
 });
 
 export interface BitCardProps
-  extends HTMLAttributes<HTMLDivElement>,
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'className'>,
     VariantProps<typeof cardVariants> {
   children?: ReactNode;
   asChild?: boolean;
+  className?: string;
 }
 
 function Card({ ...props }: BitCardProps) {

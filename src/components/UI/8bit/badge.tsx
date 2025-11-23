@@ -24,10 +24,11 @@ export const badgeVariants = cva("", {
 });
 
 export interface BitBadgeProps
-  extends HTMLAttributes<HTMLDivElement>,
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'className'>,
     VariantProps<typeof badgeVariants> {
   children?: ReactNode;
   asChild?: boolean;
+  className?: string;
 }
 
 function Badge({

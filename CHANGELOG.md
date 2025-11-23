@@ -12,6 +12,101 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-23]
 
+### Phase 2.1 - Basic Player Movement System
+
+**Added:**
+- Created `src/entities/Player.ts` - Complete character controller with Sketchbook movement system
+- Loaded boxman.glb character model from Sketchbook
+- Implemented camera-relative WASD movement for isometric view
+- Added idle and run animation system with smooth blending
+- Implemented smooth camera follow with lerp
+- Added ground grid for spatial reference
+- Fixed character shadow positioning
+
+**Player Movement Features:**
+- Camera-relative controls (WASD moves relative to camera angle, not world axes)
+- Ported Sketchbook movement functions:
+  - `getLocalMovementDirection()` - Converts WASD to local vector
+  - `getCameraRelativeMovementVector()` - Transforms to camera space
+  - `applyVectorMatrixXZ()` - Rotation matrix for XZ plane
+- Kinematic Rapier physics body at Y=0 for proper ground contact
+- Move speed: 4 units/second
+
+**Animation System:**
+- THREE.AnimationMixer integration
+- Idle animation when standing still
+- Run animation when moving (any direction)
+- Smooth 0.1s fade transitions between animations
+- Animations update every frame via mixer.update(deltaTime)
+
+**Camera System:**
+- Isometric position: (2.5, 6.25, 2.5) - close view
+- Frustum size: 7.5 for tight framing
+- Smooth follow with 0.1 lerp factor
+- Maintains isometric offset while following player
+- Always looks at player position
+
+**Visual Improvements:**
+- Character spawns at Y=0 for shadow at feet
+- Model container offset: Y=-0.57 (Sketchbook structure)
+- Ground grid: 50x50 with gray lines (0x444444, 0x333333)
+- Grid positioned at Y=0.01 to prevent z-fighting
+
+**Input System:**
+- Persistent input state prevents diagonal movement bug
+- Per-key state tracking (not replaced on each event)
+- Debug logging on input state changes only
+
+**Files Created:**
+- `src/entities/Player.ts` - Complete player class with animations
+- `public/assets/boxman.glb` - Character model from Sketchbook
+
+**Files Modified:**
+- `src/core/Engine.ts` - Added camera follow, closer camera, ground grid
+- `src/components/GameCanvas.tsx` - Fixed input handling for diagonals
+- `tsconfig.json` - Excluded sketchbook-ref from type checking
+- `src/components/ui/8bit/badge.tsx` - Fixed className prop type
+- `src/components/ui/8bit/card.tsx` - Fixed className prop type
+
+**Technical Implementation:**
+```typescript
+// Camera-relative movement (Player.ts:178-202)
+private getCameraRelativeMovementVector(): THREE.Vector3 {
+  const localDirection = this.getLocalMovementDirection();
+  const flatViewVector = new THREE.Vector3(
+    this.cameraDirection.x,
+    0,
+    this.cameraDirection.z
+  ).normalize();
+  return this.applyVectorMatrixXZ(flatViewVector, localDirection);
+}
+
+// Animation switching (Player.ts:227-232)
+if (isMoving && this.currentAnimation !== 'run') {
+  this.playAnimation('run', 0.1);
+} else if (!isMoving && this.currentAnimation !== 'idle') {
+  this.playAnimation('idle', 0.1);
+}
+
+// Camera follow (Engine.ts:343-357)
+const targetCameraPos = new THREE.Vector3(
+  playerPos.x + 2.5,
+  playerPos.y + 6.25,
+  playerPos.z + 2.5
+);
+this.camera.position.lerp(targetCameraPos, 0.1);
+this.camera.lookAt(playerPos.x, playerPos.y, playerPos.z);
+```
+
+**Bug Fixes:**
+- Fixed diagonal movement - input state now persistent per key
+- Fixed shadow gap - character spawns at Y=0, not Y=2
+- Fixed TypeScript errors with THREE.Group inheritance using type assertions
+
+---
+
+## [2024-11-23]
+
 ### Phase 1.4 - Type System Fixes
 
 **Fixed:**
