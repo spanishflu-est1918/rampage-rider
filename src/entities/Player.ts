@@ -103,6 +103,7 @@ export class Player extends THREE.Group {
       this.modelLoaded = true;
 
       console.log('[Player] Boxman model loaded with', this.animations.length, 'animations');
+      console.log('[Player] Available animations:', this.animations.map(a => a.name).join(', '));
     } catch (error) {
       console.error('[Player] Failed to load boxman model:', error);
 
@@ -282,9 +283,11 @@ export class Player extends THREE.Group {
     }
 
     // Update animation based on state priority
-    if (this.input.attack && this.currentAnimation !== 'idle') {
-      // Attack animation (placeholder - will play idle since attack animation may not exist)
-      console.log('[Player] Attack!');
+    if (this.input.attack) {
+      // Attack - play knife attack animation while moving
+      if (isMoving && this.currentAnimation !== 'run_knife') {
+        this.playAnimation('run_knife', 0.05);
+      }
     } else if (!this.isGrounded && this.currentAnimation !== 'jump_running') {
       this.playAnimation('jump_running', 0.1);
     } else if (isMoving && !this.isWalking && this.currentAnimation !== 'sprint') {
