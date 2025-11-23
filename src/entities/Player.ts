@@ -300,12 +300,8 @@ export class Player extends THREE.Group {
       this.playAnimation('idle', 0.1);
     }
 
-    // Debug logging - only when input changes
+    // Store current input for next frame
     if (inputChanged) {
-      console.log('[Player] Walking:', this.isWalking, 'Speed:', currentSpeed, '(Default=Sprint)');
-      console.log('[Player] Grounded:', this.isGrounded, 'VertVel:', this.verticalVelocity.toFixed(2));
-
-      // Store current input for next frame
       this.prevInput = { ...this.input };
     }
 
