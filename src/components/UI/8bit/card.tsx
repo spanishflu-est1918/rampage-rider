@@ -1,3 +1,4 @@
+import type { ReactNode, HTMLAttributes } from "react";
 import { type VariantProps, cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
@@ -27,8 +28,9 @@ export const cardVariants = cva("", {
 });
 
 export interface BitCardProps
-  extends React.ComponentProps<"div">,
+  extends HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof cardVariants> {
+  children?: ReactNode;
   asChild?: boolean;
 }
 

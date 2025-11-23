@@ -74,17 +74,15 @@ export class PhysicsWorld {
 
   /**
    * Get all active contact pairs (for collision detection)
+   * TODO: Implement when needed for entity collision handling
    */
-  getContactPairs(): RAPIER.TempContactManifold[] {
-    if (!this.world) return [];
-
-    const pairs: RAPIER.TempContactManifold[] = [];
-    this.world.forEachContactPair((collider1, collider2, manifold) => {
-      pairs.push(manifold);
-    });
-
-    return pairs;
-  }
+  // getContactPairs(): RAPIER.TempContactManifold[] {
+  //   if (!this.world) return [];
+  //   const pairs: RAPIER.TempContactManifold[] = [];
+  //   // forEachContactPair is not available in this Rapier version
+  //   // Will implement collision detection via intersection observers
+  //   return pairs;
+  // }
 
   /**
    * Raycast from origin in direction

@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import * as ProgressPrimitive from "@radix-ui/react-progress";
 import { type VariantProps, cva } from "class-variance-authority";
 
@@ -22,8 +23,9 @@ export const progressVariants = cva("", {
 });
 
 export interface BitProgressProps
-  extends React.ComponentProps<typeof ProgressPrimitive.Root>,
+  extends ComponentProps<typeof ProgressPrimitive.Root>,
     VariantProps<typeof progressVariants> {
+  value?: number;
   className?: string;
   font?: VariantProps<typeof progressVariants>["font"];
   progressBg?: string;

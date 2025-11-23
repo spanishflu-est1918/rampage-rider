@@ -1,3 +1,4 @@
+import type { ReactNode, ButtonHTMLAttributes, Ref } from "react";
 import { type VariantProps, cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
@@ -34,10 +35,12 @@ export const buttonVariants = cva("", {
 });
 
 export interface BitButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'ref'>,
     VariantProps<typeof buttonVariants> {
+  children?: ReactNode;
   asChild?: boolean;
-  ref?: React.Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement>;
+  onClick?: () => void;
 }
 
 function Button({ children, asChild, ...props }: BitButtonProps) {

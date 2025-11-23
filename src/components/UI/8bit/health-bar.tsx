@@ -1,6 +1,7 @@
-import { BitProgressProps, Progress } from "@/components/ui/progress";
+import type { ComponentProps } from "react";
+import { BitProgressProps, Progress } from "@/components/ui/8bit/progress";
 
-interface ManaBarProps extends React.ComponentProps<"div"> {
+interface ManaBarProps extends ComponentProps<"div"> {
   className?: string;
   props?: BitProgressProps;
   variant?: "retro" | "default";

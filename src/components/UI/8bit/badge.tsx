@@ -1,3 +1,4 @@
+import type { ReactNode, HTMLAttributes } from "react";
 import { type VariantProps, cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
@@ -22,9 +23,10 @@ export const badgeVariants = cva("", {
   },
 });
 
-export interface BitButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+export interface BitBadgeProps
+  extends HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof badgeVariants> {
+  children?: ReactNode;
   asChild?: boolean;
 }
 
@@ -34,7 +36,7 @@ function Badge({
   font,
   variant,
   ...props
-}: BitButtonProps) {
+}: BitBadgeProps) {
   const color = badgeVariants({ variant, font });
 
   const classes = className.split(" ");

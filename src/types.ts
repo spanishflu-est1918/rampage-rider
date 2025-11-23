@@ -43,7 +43,10 @@ export interface GameStats {
   kills: number;
   score: number;
   tier: Tier;
-  timeSurvived: number;
+  health: number;
+  combo: number;
+  comboTimer: number;
+  gameTime: number;
   killHistory: { time: number; kills: number }[];
 }
 
