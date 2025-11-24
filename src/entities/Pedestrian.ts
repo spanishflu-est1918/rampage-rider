@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as YUKA from 'yuka';
+import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
 
 /**
  * Pedestrian Entity
@@ -14,6 +15,9 @@ import * as YUKA from 'yuka';
  */
 export class Pedestrian extends THREE.Group {
   private rigidBody: RAPIER.RigidBody;
+  private collider: RAPIER.Collider;
+  private characterController: RAPIER.KinematicCharacterController;
+  private world: RAPIER.World;
   private mixer: THREE.AnimationMixer | null = null;
   private animations: THREE.AnimationClip[] = [];
   private currentAnimation: string = 'Idle';
@@ -27,7 +31,7 @@ export class Pedestrian extends THREE.Group {
   private isDead: boolean = false;
   private health: number = 1; // One-shot kill
   private walkSpeed: number = 1.5; // Normal walk speed
-  private runSpeed: number = 4.0; // Panic run speed
+  private runSpeed: number = 6.0; // Panic run speed (1.5x faster)
   private isPanicking: boolean = false;
   private isStumbling: boolean = false;
   private stumbleTimer: number = 0;
@@ -41,6 +45,7 @@ export class Pedestrian extends THREE.Group {
     super();
 
     this.yukaEntityManager = entityManager;
+    this.world = world;
 
     // Create Yuka vehicle for AI steering
     this.yukaVehicle = new YUKA.Vehicle();
@@ -52,16 +57,22 @@ export class Pedestrian extends THREE.Group {
     // Add to Yuka entity manager
     this.yukaEntityManager.add(this.yukaVehicle);
 
-    // Create Rapier physics body (kinematic, controlled by Yuka)
-    const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
-      .setTranslation(position.x, position.y, position.z);
-    this.rigidBody = world.createRigidBody(bodyDesc);
+    // Create kinematic character with building collision using shared helper
+    const groups = KinematicCharacterHelper.getCollisionGroups();
+    const collisionFilter = KinematicCharacterHelper.getPedestrianCollisionFilter();
 
-    // Create capsule collider (same as player)
-    const colliderDesc = RAPIER.ColliderDesc.capsule(0.3, 0.3)
-      .setCollisionGroups(0x0004) // PEDESTRIAN collision group
-      .setTranslation(0, 0.6, 0);
-    world.createCollider(colliderDesc, this.rigidBody);
+    const { body, collider, controller } = KinematicCharacterHelper.createCharacterBody(
+      world,
+      position,
+      0.3, // capsule half height
+      0.3, // capsule radius
+      groups.PEDESTRIAN, // collision group membership
+      collisionFilter // what this pedestrian collides with
+    );
+
+    this.rigidBody = body;
+    this.collider = collider;
+    this.characterController = controller;
 
     // Load character model
     this.loadModel(characterType);
@@ -241,21 +252,35 @@ export class Pedestrian extends THREE.Group {
       }
     }
 
-    // Sync Three.js position with Yuka vehicle (lock Y to ground level)
-    (this as THREE.Group).position.set(
-      this.yukaVehicle.position.x,
-      0, // Keep pedestrians locked to ground level
-      this.yukaVehicle.position.z
+    // Get current position from physics body
+    const currentPos = this.rigidBody.translation();
+
+    // Calculate desired movement from Yuka AI
+    const desiredX = this.yukaVehicle.position.x;
+    const desiredZ = this.yukaVehicle.position.z;
+    const deltaX = desiredX - currentPos.x;
+    const deltaZ = desiredZ - currentPos.z;
+
+    // Use character controller to move with collision detection
+    const desiredMovement = { x: deltaX, y: 0, z: deltaZ };
+    const newPosition = KinematicCharacterHelper.moveCharacter(
+      this.rigidBody,
+      this.collider,
+      this.characterController,
+      desiredMovement
     );
+
+    // Sync Three.js position
+    (this as THREE.Group).position.copy(newPosition);
+
+    // Update Yuka position to match actual collision-corrected position (feedback to AI)
+    this.yukaVehicle.position.set(newPosition.x, 0, newPosition.z);
 
     // Sync rotation (Yuka handles orientation)
     if (this.yukaVehicle.velocity.length() > 0.1) {
       const angle = Math.atan2(this.yukaVehicle.velocity.x, this.yukaVehicle.velocity.z);
       (this as THREE.Group).rotation.y = angle;
     }
-
-    // Sync Rapier body with Three.js position
-    this.rigidBody.setNextKinematicTranslation((this as THREE.Group).position);
 
     // Update animation based on movement (but don't override stumble or death)
     if (!this.isStumbling) {
