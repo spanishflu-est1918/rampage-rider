@@ -85,15 +85,21 @@ export class CopManager {
   /**
    * Update all cops
    */
-  update(deltaTime: number, playerPosition: THREE.Vector3, heat: number): void {
+  update(deltaTime: number, playerPosition: THREE.Vector3, wantedStars: number, playerCanBeTased: boolean, onCopAttack: (damage: number) => void): void {
     // Update Yuka entity manager
     this.entityManager.update(deltaTime);
 
     // Update all cops
     for (const cop of this.cops) {
       if (!cop.isDeadState()) {
-        // Set heat level to determine attack behavior
-        cop.setHeatLevel(heat);
+        // Set wanted star level to determine attack behavior
+        cop.setWantedStars(wantedStars);
+
+        // Tell cop if player can be tased (affects attack choice at 1 star)
+        cop.setPlayerCanBeTased(playerCanBeTased);
+
+        // Set damage callback
+        cop.setDamageCallback(onCopAttack);
 
         // Set chase target to player
         cop.setChaseTarget(playerPosition);
@@ -154,14 +160,15 @@ export class CopManager {
   /**
    * Handle player colliding with cops (damage player)
    * Returns the attacking cop for additional context (stun, etc.)
+   * NOTE: Currently unused - damage is handled via action-based callback in update()
    */
-  handlePlayerCollisions(playerPosition: THREE.Vector3, heat: number): Cop | null {
-    // Collision radius depends on heat level (attack type)
-    let collisionRadius = 2.0; // Punch range
-    if (heat >= 75) {
-      collisionRadius = 7.0; // Shoot range
-    } else if (heat >= 50) {
-      collisionRadius = 4.0; // Taser range
+  handlePlayerCollisions(playerPosition: THREE.Vector3, wantedStars: number): Cop | null {
+    // Collision radius depends on wanted star level (attack type)
+    let collisionRadius = 2.0; // Punch range (0 stars)
+    if (wantedStars >= 2) {
+      collisionRadius = 7.0; // Shoot range (2+ stars)
+    } else if (wantedStars === 1) {
+      collisionRadius = 4.0; // Taser range (1 star)
     }
 
     for (const cop of this.cops) {
@@ -195,5 +202,18 @@ export class CopManager {
    */
   getActiveCopCount(): number {
     return this.cops.filter(cop => !cop.isDeadState()).length;
+  }
+
+  /**
+   * Get all active cops' positions and health for UI rendering
+   */
+  getCopData(): Array<{ position: THREE.Vector3; health: number; maxHealth: number }> {
+    return this.cops
+      .filter(cop => !cop.isDeadState())
+      .map(cop => ({
+        position: (cop as THREE.Group).position.clone(),
+        health: cop.getHealth(),
+        maxHealth: 3
+      }));
   }
 }

@@ -8,6 +8,7 @@ function App() {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [stats, setStats] = useState<GameStats>({
     kills: 0,
+    copKills: 0,
     score: 0,
     health: 100,
     tier: Tier.FOOT,
@@ -15,7 +16,11 @@ function App() {
     comboTimer: 0,
     gameTime: 0,
     heat: 0,
-    killHistory: []
+    wantedStars: 0,
+    killHistory: [],
+    copHealthBars: [],
+    isTased: false,
+    taseEscapeProgress: 0
   });
 
   const handleStatsUpdate = useCallback((newStats: GameStats) => {

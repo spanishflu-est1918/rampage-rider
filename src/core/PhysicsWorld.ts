@@ -17,6 +17,7 @@ export class PhysicsWorld {
     COP: 0x0008,
     DEBRIS: 0x0010,
     PROJECTILE: 0x0020,
+    BUILDING: 0x0040,
   };
 
   constructor() {}

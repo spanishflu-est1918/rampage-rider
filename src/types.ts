@@ -43,14 +43,51 @@ export interface InputState {
 
 export interface GameStats {
   kills: number;
+  copKills: number; // Track cop kills separately for wanted stars
   score: number;
   tier: Tier;
   health: number;
   combo: number;
   comboTimer: number;
   gameTime: number;
-  heat: number;
+  heat: number; // Controls cop spawning rate
+  wantedStars: number; // Controls cop attack type (0=punch, 1=taser, 2+=shoot)
   killHistory: { time: number; kills: number }[];
+  copHealthBars: Array<{ x: number; y: number; health: number; maxHealth: number }>; // Screen-space positions for cop health bars
+  isTased: boolean; // Player is being tased
+  taseEscapeProgress: number; // 0-100, escape progress
+  performance?: {
+    fps: number;
+    frameTime: number;
+    physics: number;
+    entities: number;
+    rendering: number;
+    avgFrameTime: number;
+    avgPhysics: number;
+    avgEntities: number;
+    avgRendering: number;
+    counts: {
+      cops: number;
+      pedestrians: number;
+      particles: number;
+      bloodDecals: number;
+      buildings: number;
+    };
+    worstFrame: {
+      frameTime: number;
+      physics: number;
+      entities: number;
+      rendering: number;
+      bottleneck: 'physics' | 'entities' | 'rendering' | 'none';
+      counts: {
+        cops: number;
+        pedestrians: number;
+        particles: number;
+        bloodDecals: number;
+        buildings: number;
+      };
+    };
+  };
 }
 
 export interface HighScore {

@@ -296,4 +296,11 @@ export class CrowdManager {
   getPedestrians(): Pedestrian[] {
     return this.pedestrians;
   }
+
+  /**
+   * Get pedestrian count (for performance monitoring)
+   */
+  getPedestrianCount(): number {
+    return this.pedestrians.length;
+  }
 }

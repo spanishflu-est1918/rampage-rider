@@ -4,6 +4,7 @@ import { PhysicsWorld } from './PhysicsWorld';
 import { AIManager } from './AIManager';
 import { CrowdManager } from '../managers/CrowdManager';
 import { CopManager } from '../managers/CopManager';
+import { BuildingManager } from '../managers/BuildingManager';
 import { Player } from '../entities/Player';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
@@ -25,12 +26,66 @@ export class Engine {
   public ai: AIManager;
   public crowd: CrowdManager | null = null;
   public cops: CopManager | null = null;
+  public buildings: BuildingManager | null = null;
   public particles: ParticleEmitter;
   public bloodDecals: BloodDecalSystem;
 
   // Game state
   private state: GameState = GameState.MENU;
+  private isDying: boolean = false; // Player is playing death animation
   private animationId: number | null = null;
+
+  // Performance monitoring
+  private performanceStats = {
+    fps: 0,
+    frameTime: 0,
+    physics: 0,
+    entities: 0,
+    rendering: 0,
+    lastFrameTime: performance.now(),
+    // Detailed counts (what's actually causing the load)
+    counts: {
+      cops: 0,
+      pedestrians: 0,
+      particles: 0,
+      bloodDecals: 0,
+      buildings: 0
+    },
+    // Historical tracking (last 120 frames = ~2 seconds at 60fps)
+    history: {
+      frameTime: [] as number[],
+      physics: [] as number[],
+      entities: [] as number[],
+      rendering: [] as number[],
+      maxSize: 120
+    },
+    // Worst frame tracking
+    worstFrame: {
+      frameTime: 0,
+      physics: 0,
+      entities: 0,
+      rendering: 0,
+      bottleneck: 'none' as 'physics' | 'entities' | 'rendering' | 'none',
+      counts: {
+        cops: 0,
+        pedestrians: 0,
+        particles: 0,
+        bloodDecals: 0,
+        buildings: 0
+      }
+    },
+    // Averages
+    avgFrameTime: 0,
+    avgPhysics: 0,
+    avgEntities: 0,
+    avgRendering: 0
+  };
+
+  // Camera shake
+  private cameraShakeIntensity: number = 0;
+  private cameraShakeDecay: number = 5; // Shake decays per second
+  private cameraBasePosition: THREE.Vector3 = new THREE.Vector3();
+  private cameraBaseQuaternion: THREE.Quaternion = new THREE.Quaternion();
   private input: InputState = {
     up: false,
     down: false,
@@ -44,6 +99,7 @@ export class Engine {
   // Stats
   private stats: GameStats = {
     kills: 0,
+    copKills: 0,
     score: 0,
     tier: Tier.FOOT,
     combo: 0,
@@ -51,7 +107,11 @@ export class Engine {
     gameTime: 0,
     health: 100,
     heat: 0,
+    wantedStars: 0,
     killHistory: [],
+    copHealthBars: [],
+    isTased: false,
+    taseEscapeProgress: 0,
   };
 
   // Callbacks
@@ -91,6 +151,7 @@ export class Engine {
     // Isometric position: double distance (was 2.5, 6.25, 2.5)
     this.camera.position.set(5, 12.5, 5);
     this.camera.lookAt(0, 0, 0);
+    this.cameraBasePosition.copy(this.camera.position);
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
@@ -165,6 +226,7 @@ export class Engine {
     if (world) {
       this.crowd = new CrowdManager(this.scene, world);
       this.cops = new CopManager(this.scene, world);
+      this.buildings = new BuildingManager(this.scene, world);
     }
 
     console.log('[Engine] Initialization complete');
@@ -174,21 +236,26 @@ export class Engine {
    * Temporary test ground (will be replaced by WorldSystem)
    */
   private createTestGround(): void {
-    const geometry = new THREE.PlaneGeometry(50, 50);
+    // Large ground for infinite city
+    const groundSize = 1000;
+    const geometry = new THREE.PlaneGeometry(groundSize, groundSize);
 
-    // Load grainy concrete PBR textures
+    // Load wood planks PBR textures
     const textureLoader = new THREE.TextureLoader();
 
-    const albedoMap = textureLoader.load('/assets/textures/grainy-concrete_albedo.png');
-    const normalMap = textureLoader.load('/assets/textures/grainy-concrete_normal-ogl.png');
-    const roughnessMap = textureLoader.load('/assets/textures/grainy-concrete_roughness.png');
-    const aoMap = textureLoader.load('/assets/textures/grainy-concrete_ao.png');
+    const albedoMap = textureLoader.load('/assets/textures/wood-planks/color.jpg');
+    const normalMap = textureLoader.load('/assets/textures/wood-planks/normal.png');
+    const roughnessMap = textureLoader.load('/assets/textures/wood-planks/roughness.jpg');
+    const aoMap = textureLoader.load('/assets/textures/wood-planks/ao.jpg');
 
-    // Set up tiling for all textures
+    // Set color space
+    albedoMap.colorSpace = THREE.SRGBColorSpace;
+
+    // Set up tiling for all textures (more repeats for larger ground)
     [albedoMap, normalMap, roughnessMap, aoMap].forEach(tex => {
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(10, 10);
+      tex.repeat.set(100, 100); // More tiling for large ground
     });
 
     const material = new THREE.MeshStandardMaterial({
@@ -196,7 +263,8 @@ export class Engine {
       normalMap: normalMap,
       roughnessMap: roughnessMap,
       aoMap: aoMap,
-      aoMapIntensity: 0.5
+      aoMapIntensity: 0.5,
+      roughness: 0.9
     });
     this.groundMesh = new THREE.Mesh(geometry, material);
     this.groundMesh.rotation.x = -Math.PI / 2;
@@ -206,16 +274,16 @@ export class Engine {
     this.bloodDecals.setGroundMesh(this.groundMesh);
 
     // Grid helper for visual reference
-    const gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x333333);
+    const gridHelper = new THREE.GridHelper(groundSize, 100, 0x444444, 0x333333);
     gridHelper.position.y = 0; // At ground level
     this.scene.add(gridHelper);
 
-    // Physics ground
+    // Physics ground (much larger)
     const groundBody = this.physics.createRigidBody(
       RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0)
     );
     this.physics.createCollider(
-      RAPIER.ColliderDesc.cuboid(25, 0.1, 25),
+      RAPIER.ColliderDesc.cuboid(groundSize / 2, 0.1, groundSize / 2),
       groundBody
     );
 
@@ -282,6 +350,9 @@ export class Engine {
    * Reset game state
    */
   private resetGame(): void {
+    // Reset death flag
+    this.isDying = false;
+
     // Clear existing player
     if (this.player) {
       this.player.dispose();
@@ -297,11 +368,16 @@ export class Engine {
       this.cops.clear();
     }
 
+    if (this.buildings) {
+      this.buildings.clear();
+    }
+
     this.particles.clear();
     this.bloodDecals.clear();
 
     this.stats = {
       kills: 0,
+      copKills: 0,
       score: 0,
       tier: Tier.FOOT,
       combo: 0,
@@ -309,7 +385,11 @@ export class Engine {
       gameTime: 0,
       health: 100,
       heat: 0,
+      wantedStars: 0,
       killHistory: [],
+      copHealthBars: [],
+      isTased: false,
+      taseEscapeProgress: 0,
     };
 
     // Spawn player
@@ -343,13 +423,18 @@ export class Engine {
     this.camera.getWorldDirection(cameraDirection);
     this.player.setCameraDirection(cameraDirection);
 
+    // Set taser escape callback for screen shake
+    this.player.setOnEscapePress(() => {
+      this.shakeCamera(0.5); // Strong shake for taser escape
+    });
+
     // Set attack callback to damage pedestrians and cops
     this.player.setOnAttack((attackPosition) => {
-      const attackRadius = 3.0;
+      const attackRadius = 4.5; // Increased from 3.0 for easier kills
       const damage = 1;
       const maxKills = this.stats.combo >= 10 ? Infinity : 1;
       const attackDirection = this.player.getFacingDirection();
-      const coneAngle = Math.PI * 5 / 6;
+      const coneAngle = Math.PI; // Increased cone angle for wider arc
 
       let totalKills = 0;
       const allKillPositions: THREE.Vector3[] = [];
@@ -392,13 +477,24 @@ export class Engine {
 
         if (copResult.kills > 0) {
           this.stats.score += copResult.kills * 50;
+          this.stats.copKills += copResult.kills;
+
+          // Calculate wanted stars based on cop kills (0 = punch, 1-3 = taser, 4+ = shoot)
+          if (this.stats.copKills === 0) {
+            this.stats.wantedStars = 0;
+          } else if (this.stats.copKills >= 1 && this.stats.copKills <= 3) {
+            this.stats.wantedStars = 1;
+          } else {
+            this.stats.wantedStars = 2;
+          }
+
           // Killing cops adds SIGNIFICANT heat (25% per cop)
           this.stats.heat = Math.min(100, this.stats.heat + (copResult.kills * 25));
 
           totalKills += copResult.kills;
           allKillPositions.push(...copResult.positions);
 
-          console.log(`[Engine] Killed ${copResult.kills} cops! Heat: ${this.stats.heat.toFixed(1)}%`);
+          console.log(`[Engine] Killed ${copResult.kills} cops! Cop kills: ${this.stats.copKills}, Stars: ${this.stats.wantedStars}, Heat: ${this.stats.heat.toFixed(1)}%`);
         }
       }
 
@@ -450,9 +546,67 @@ export class Engine {
 
     this.animationId = requestAnimationFrame(this.animate);
 
+    const frameStart = performance.now();
     const deltaTime = this.clock.getDelta();
     this.update(deltaTime);
+
+    const renderStart = performance.now();
     this.render();
+    const renderEnd = performance.now();
+
+    this.performanceStats.rendering = renderEnd - renderStart;
+    this.performanceStats.frameTime = renderEnd - frameStart;
+    this.performanceStats.fps = 1000 / (frameStart - this.performanceStats.lastFrameTime);
+    this.performanceStats.lastFrameTime = frameStart;
+
+    // Collect detailed counts (what's causing the load)
+    this.performanceStats.counts = {
+      cops: this.cops?.getActiveCopCount() || 0,
+      pedestrians: this.crowd?.getPedestrianCount() || 0,
+      particles: this.particles?.getParticleCount() || 0,
+      bloodDecals: this.bloodDecals?.getDecalCount() || 0,
+      buildings: this.buildings?.getBuildingCount() || 0
+    };
+
+    // Track historical data
+    const history = this.performanceStats.history;
+    history.frameTime.push(this.performanceStats.frameTime);
+    history.physics.push(this.performanceStats.physics);
+    history.entities.push(this.performanceStats.entities);
+    history.rendering.push(this.performanceStats.rendering);
+
+    // Keep only last N frames
+    if (history.frameTime.length > history.maxSize) {
+      history.frameTime.shift();
+      history.physics.shift();
+      history.entities.shift();
+      history.rendering.shift();
+    }
+
+    // Calculate averages
+    const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
+    this.performanceStats.avgFrameTime = sum(history.frameTime) / history.frameTime.length;
+    this.performanceStats.avgPhysics = sum(history.physics) / history.physics.length;
+    this.performanceStats.avgEntities = sum(history.entities) / history.entities.length;
+    this.performanceStats.avgRendering = sum(history.rendering) / history.rendering.length;
+
+    // Track worst frame and identify bottleneck
+    if (this.performanceStats.frameTime > this.performanceStats.worstFrame.frameTime) {
+      this.performanceStats.worstFrame = {
+        frameTime: this.performanceStats.frameTime,
+        physics: this.performanceStats.physics,
+        entities: this.performanceStats.entities,
+        rendering: this.performanceStats.rendering,
+        bottleneck:
+          this.performanceStats.physics > this.performanceStats.entities &&
+          this.performanceStats.physics > this.performanceStats.rendering
+            ? 'physics'
+            : this.performanceStats.entities > this.performanceStats.rendering
+            ? 'entities'
+            : 'rendering',
+        counts: { ...this.performanceStats.counts }
+      };
+    }
   };
 
   /**
@@ -460,12 +614,19 @@ export class Engine {
    */
   private update(dt: number): void {
     // Step physics
+    const physicsStart = performance.now();
     if (this.physics.isReady()) {
       this.physics.step(dt);
     }
+    this.performanceStats.physics = performance.now() - physicsStart;
 
     // Update game time
     this.stats.gameTime += dt;
+
+    // Decrease camera shake
+    if (this.cameraShakeIntensity > 0) {
+      this.cameraShakeIntensity = Math.max(0, this.cameraShakeIntensity - (this.cameraShakeDecay * dt));
+    }
 
     // Update combo timer
     if (this.stats.comboTimer > 0) {
@@ -480,6 +641,9 @@ export class Engine {
       this.stats.heat = Math.max(0, this.stats.heat - (0.5 * dt));
     }
 
+    // Measure entity updates
+    const entitiesStart = performance.now();
+
     // Update player
     if (this.player) {
       // Update camera direction for camera-relative movement
@@ -489,6 +653,17 @@ export class Engine {
 
       // Update player movement
       this.player.update(dt);
+
+      // Update taser state in stats
+      const taserState = this.player.getTaserState();
+      this.stats.isTased = taserState.isTased;
+      this.stats.taseEscapeProgress = taserState.escapeProgress;
+    }
+
+    // Update buildings (spawn/despawn based on player position)
+    if (this.buildings && this.player) {
+      const playerPos = this.player.getPosition();
+      this.buildings.update(playerPos);
     }
 
     // Update crowd
@@ -507,26 +682,45 @@ export class Engine {
       // Update cop spawns based on heat
       this.cops.updateSpawns(this.stats.heat, playerPos);
 
-      // Update cop AI (pass heat for attack behavior)
-      this.cops.update(dt, playerPos, this.stats.heat);
+      // Check if player can be tased (not immune and not already tased)
+      const playerCanBeTased = this.player.canBeTased();
 
-      // Handle cop contact damage (10 HP/s)
-      const attackingCop = this.cops.handlePlayerCollisions(playerPos, this.stats.heat);
-      if (attackingCop) {
-        // Apply taser stun at medium heat (50-75%)
-        if (this.stats.heat >= 50 && this.stats.heat < 75) {
+      // Update cop AI with damage callback (action-based damage)
+      this.cops.update(dt, playerPos, this.stats.wantedStars, playerCanBeTased, (damage: number) => {
+        // Taser attacks don't deal damage (only stun)
+        if (this.stats.wantedStars === 1) {
+          console.log('[Engine] Taser attack - no damage dealt');
+          // Don't apply damage for taser attacks, but continue to apply stun effect below
+        } else {
+          // Punch (0 stars) or Shoot (2+ stars) - apply damage normally
+          this.stats.health -= damage;
+        }
+
+        // Apply hit stun reaction (brief freeze + animation)
+        this.player.applyHitStun();
+
+        // Apply taser stun at 1 star (taser attacks)
+        // applyTaserStun() handles immunity and already-tased checks internally
+        if (this.stats.wantedStars === 1) {
           this.player.applyTaserStun();
         }
 
-        this.stats.health -= 10 * dt;
-        if (this.stats.health <= 0) {
+        // Check for game over
+        if (this.stats.health <= 0 && !this.isDying) {
           this.stats.health = 0;
-          console.log('[Engine] Game Over - Killed by cops!');
-          if (this.callbacks.onGameOver) {
-            this.callbacks.onGameOver({ ...this.stats });
-          }
+          this.isDying = true;
+          console.log('[Engine] Player killed - playing death animation...');
+
+          // Trigger death animation, then show game over screen
+          this.player.die(() => {
+            console.log('[Engine] Death animation complete - Game Over!');
+            this.state = GameState.GAME_OVER;
+            if (this.callbacks.onGameOver) {
+              this.callbacks.onGameOver({ ...this.stats });
+            }
+          });
         }
-      }
+      });
     }
 
     // Update AI
@@ -538,16 +732,21 @@ export class Engine {
     // Update blood decals (removes expired ones)
     this.bloodDecals.update();
 
+    // Record entity update timing
+    this.performanceStats.entities = performance.now() - entitiesStart;
+
     // Camera follow player (unless manual control is active)
     if (this.player && !this.disableCameraFollow) {
       const playerPos = this.player.getPosition();
 
-      // Smooth lerp camera to follow player, maintaining isometric offset
+      // Isometric camera with fixed offset
       const targetCameraPos = new THREE.Vector3(
         playerPos.x + 2.5,
         playerPos.y + 6.25,
         playerPos.z + 2.5
       );
+
+      // Smooth lerp camera to follow player
       this.camera.position.lerp(targetCameraPos, 0.1);
 
       // Apply screen shake AFTER lerp (so it's not smoothed out)
@@ -570,18 +769,68 @@ export class Engine {
       // Camera always looks at player position
       const lookAtTarget = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z);
       this.camera.lookAt(lookAtTarget);
+
+      // Update base position AND rotation AFTER lookAt (so render() preserves both)
+      this.cameraBasePosition.copy(this.camera.position);
+      this.cameraBaseQuaternion.copy(this.camera.quaternion);
     }
 
-    // Send stats update
-    if (this.callbacks.onStatsUpdate) {
-      this.callbacks.onStatsUpdate({ ...this.stats });
+    // Update cop health bars (project 3D positions to 2D screen space)
+    if (this.cops) {
+      const copData = this.cops.getCopData();
+      this.stats.copHealthBars = copData.map(cop => {
+        // Project 3D world position to 2D screen coordinates
+        // Just offset up from cop's actual position for head height
+        const screenPos = cop.position.clone();
+        screenPos.y += 1.5; // Offset up to above head
+        screenPos.project(this.camera);
+
+        // Convert normalized device coordinates to screen pixels
+        const canvas = this.renderer.domElement;
+        const x = (screenPos.x * 0.5 + 0.5) * canvas.clientWidth;
+        const y = (-(screenPos.y * 0.5) + 0.5) * canvas.clientHeight;
+
+        return {
+          x,
+          y,
+          health: cop.health,
+          maxHealth: cop.maxHealth
+        };
+      });
     }
+
+    // Send stats update (including performance data)
+    if (this.callbacks.onStatsUpdate) {
+      this.callbacks.onStatsUpdate({ ...this.stats, performance: this.performanceStats });
+    }
+  }
+
+  /**
+   * Trigger camera shake
+   */
+  private shakeCamera(intensity: number = 0.3): void {
+    this.cameraShakeIntensity = Math.max(this.cameraShakeIntensity, intensity);
   }
 
   /**
    * Render scene
    */
   private render(): void {
+    // Apply camera shake
+    if (this.cameraShakeIntensity > 0) {
+      const shake = this.cameraShakeIntensity;
+      this.camera.position.set(
+        this.cameraBasePosition.x + (Math.random() - 0.5) * shake,
+        this.cameraBasePosition.y + (Math.random() - 0.5) * shake,
+        this.cameraBasePosition.z + (Math.random() - 0.5) * shake
+      );
+    } else {
+      this.camera.position.copy(this.cameraBasePosition);
+    }
+
+    // Restore rotation from update()
+    this.camera.quaternion.copy(this.cameraBaseQuaternion);
+
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -597,6 +846,9 @@ export class Engine {
     }
     if (this.cops) {
       this.cops.clear();
+    }
+    if (this.buildings) {
+      this.buildings.clear();
     }
     this.particles.clear();
     this.bloodDecals.dispose();
@@ -627,5 +879,12 @@ export class Engine {
    */
   getStats(): GameStats {
     return { ...this.stats };
+  }
+
+  /**
+   * Get performance stats
+   */
+  getPerformanceStats() {
+    return { ...this.performanceStats };
   }
 }
