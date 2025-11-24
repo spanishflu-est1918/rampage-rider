@@ -76,6 +76,7 @@ export class CopManager {
     );
 
     const cop = new Cop(spawnPos, this.world, this.entityManager);
+    cop.setParentScene(this.scene); // Enable visual effects
     this.cops.push(cop);
     this.scene.add(cop);
 
@@ -214,6 +215,15 @@ export class CopManager {
         health: cop.getHealth(),
         maxHealth: 3
       }));
+  }
+
+  /**
+   * Remove all active taser beams (called when player escapes taser)
+   */
+  clearTaserBeams(): void {
+    for (const cop of this.cops) {
+      cop.removeTaserBeam();
+    }
   }
 
   /**

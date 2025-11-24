@@ -51,6 +51,14 @@ export class Cop extends THREE.Group {
   private isCurrentlyAttacking: boolean = false;
   private onDealDamage?: (damage: number) => void;
 
+  // Attack visual effects
+  private taserBeam: THREE.Line | null = null;
+  private taserBeamActive: boolean = false;
+  private bulletProjectile: THREE.Mesh | null = null;
+  private bulletTarget: THREE.Vector3 | null = null;
+  private bulletSpeed: number = 40; // units per second
+  private parentScene: THREE.Scene | null = null;
+
   constructor(
     position: THREE.Vector3,
     world: RAPIER.World,
@@ -346,6 +354,14 @@ export class Cop extends THREE.Group {
     // Get attack parameters based on current heat level
     const attackParams = this.getAttackParams();
 
+    // Update bullet projectile movement
+    this.updateBulletProjectile(deltaTime);
+
+    // Update taser beam if active (follows cop and player)
+    if (this.taserBeamActive && this.lastTarget) {
+      this.updateTaserBeam(this.lastTarget);
+    }
+
     // Attack logic: if within range and cooldown ready, execute attack
     if (distanceToTarget <= attackParams.range && this.attackCooldown <= 0) {
       // Stop moving
@@ -373,6 +389,17 @@ export class Cop extends THREE.Group {
         }
       }
       this.isCurrentlyAttacking = true;
+
+      // Create visual effects based on attack type
+      if (this.lastTarget) {
+        if (this.currentWantedStars >= 2) {
+          // Shooting - create bullet projectile
+          this.createBulletProjectile(this.lastTarget);
+        } else if (this.currentWantedStars === 1 && this.playerCanBeTased) {
+          // Taser - create electric beam
+          this.createTaserBeam(this.lastTarget);
+        }
+      }
 
       // Deal damage when attack executes
       if (this.onDealDamage) {
@@ -441,6 +468,8 @@ export class Cop extends THREE.Group {
    */
   dispose(): void {
     this.yukaEntityManager.remove(this.yukaVehicle);
+    this.removeTaserBeam();
+    this.removeBulletProjectile();
   }
 
   /**
@@ -508,5 +537,154 @@ export class Cop extends THREE.Group {
   getPosition(): THREE.Vector3 {
     const pos = this.rigidBody.translation();
     return new THREE.Vector3(pos.x, pos.y, pos.z);
+  }
+
+  /**
+   * Set parent scene for spawning visual effects
+   */
+  setParentScene(scene: THREE.Scene): void {
+    this.parentScene = scene;
+  }
+
+  /**
+   * Create taser beam effect
+   */
+  private createTaserBeam(targetPos: THREE.Vector3): void {
+    if (!this.parentScene) return;
+
+    // Remove existing beam
+    this.removeTaserBeam();
+
+    const copPos = this.getPosition();
+    copPos.y += 0.8; // Chest height
+
+    // Create electric beam geometry
+    const points = [copPos, targetPos.clone().setY(targetPos.y + 0.5)];
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+    // Electric yellow material with glow
+    const material = new THREE.LineBasicMaterial({
+      color: 0xffff00,
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.9,
+    });
+
+    this.taserBeam = new THREE.Line(geometry, material);
+    this.taserBeamActive = true;
+    this.parentScene.add(this.taserBeam);
+  }
+
+  /**
+   * Update taser beam to follow cop and player
+   */
+  private updateTaserBeam(targetPos: THREE.Vector3): void {
+    if (!this.taserBeam || !this.taserBeamActive) return;
+
+    const copPos = this.getPosition();
+    copPos.y += 0.8;
+
+    const targetWithHeight = targetPos.clone().setY(targetPos.y + 0.5);
+
+    // Add some electric jitter
+    const jitter = 0.05;
+    const midPoint = new THREE.Vector3().lerpVectors(copPos, targetWithHeight, 0.5);
+    midPoint.x += (Math.random() - 0.5) * jitter;
+    midPoint.y += (Math.random() - 0.5) * jitter;
+    midPoint.z += (Math.random() - 0.5) * jitter;
+
+    // Update line points
+    const positions = new Float32Array([
+      copPos.x, copPos.y, copPos.z,
+      midPoint.x, midPoint.y, midPoint.z,
+      targetWithHeight.x, targetWithHeight.y, targetWithHeight.z
+    ]);
+    this.taserBeam.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.taserBeam.geometry.attributes.position.needsUpdate = true;
+
+    // Flicker effect
+    const material = this.taserBeam.material as THREE.LineBasicMaterial;
+    material.opacity = 0.7 + Math.random() * 0.3;
+  }
+
+  /**
+   * Remove taser beam
+   */
+  removeTaserBeam(): void {
+    if (this.taserBeam && this.parentScene) {
+      this.parentScene.remove(this.taserBeam);
+      this.taserBeam.geometry.dispose();
+      (this.taserBeam.material as THREE.Material).dispose();
+      this.taserBeam = null;
+    }
+    this.taserBeamActive = false;
+  }
+
+  /**
+   * Create bullet projectile
+   */
+  private createBulletProjectile(targetPos: THREE.Vector3): void {
+    if (!this.parentScene) return;
+
+    // Remove existing bullet
+    this.removeBulletProjectile();
+
+    const copPos = this.getPosition();
+    copPos.y += 0.8; // Chest height
+
+    // Create small bullet mesh
+    const geometry = new THREE.SphereGeometry(0.08, 8, 8);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffcc00,
+      emissive: 0xffcc00,
+      emissiveIntensity: 1,
+    });
+
+    this.bulletProjectile = new THREE.Mesh(geometry, material);
+    this.bulletProjectile.position.copy(copPos);
+    this.bulletTarget = targetPos.clone().setY(targetPos.y + 0.5);
+    this.parentScene.add(this.bulletProjectile);
+  }
+
+  /**
+   * Update bullet projectile movement
+   */
+  private updateBulletProjectile(deltaTime: number): void {
+    if (!this.bulletProjectile || !this.bulletTarget) return;
+
+    const direction = new THREE.Vector3()
+      .subVectors(this.bulletTarget, this.bulletProjectile.position)
+      .normalize();
+
+    const distance = this.bulletProjectile.position.distanceTo(this.bulletTarget);
+    const moveDistance = this.bulletSpeed * deltaTime;
+
+    if (distance <= moveDistance) {
+      // Bullet reached target
+      this.removeBulletProjectile();
+    } else {
+      // Move bullet toward target
+      this.bulletProjectile.position.add(direction.multiplyScalar(moveDistance));
+    }
+  }
+
+  /**
+   * Remove bullet projectile
+   */
+  private removeBulletProjectile(): void {
+    if (this.bulletProjectile && this.parentScene) {
+      this.parentScene.remove(this.bulletProjectile);
+      this.bulletProjectile.geometry.dispose();
+      (this.bulletProjectile.material as THREE.Material).dispose();
+      this.bulletProjectile = null;
+    }
+    this.bulletTarget = null;
+  }
+
+  /**
+   * Check if taser beam is active
+   */
+  isTaserActive(): boolean {
+    return this.taserBeamActive;
   }
 }

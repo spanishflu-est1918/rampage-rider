@@ -438,9 +438,10 @@ export class Engine {
       // Big screen shake for the explosion
       this.shakeCamera(1.5);
 
-      // Knockback all cops in radius
+      // Knockback all cops in radius and clear taser beams
       if (this.cops) {
         this.cops.applyKnockbackInRadius(position, radius, force);
+        this.cops.clearTaserBeams();
       }
 
       // Emit blood/spark particles for visual effect
