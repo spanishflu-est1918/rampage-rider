@@ -212,7 +212,11 @@ export class Engine {
   async init(): Promise<void> {
     console.log('[Engine] Initializing...');
 
-    // Initialize physics FIRST (Rapier WASM must load before anything else)
+    // Wait for preloader to finish (RAPIER WASM + assets)
+    const { preloader } = await import('./Preloader');
+    await preloader.preloadAll();
+
+    // Initialize physics (RAPIER already loaded by preloader)
     await this.physics.init();
 
     // Initialize AI
@@ -229,11 +233,7 @@ export class Engine {
       this.buildings = new BuildingManager(this.scene, world);
     }
 
-    // Preload all assets AFTER physics is ready (pedestrian models, etc.)
-    const { AssetLoader } = await import('./AssetLoader');
-    const assetLoader = AssetLoader.getInstance();
-    await assetLoader.preloadAll();
-
+    // Assets already loaded by preloader
     console.log('[Engine] Initialization complete');
   }
 

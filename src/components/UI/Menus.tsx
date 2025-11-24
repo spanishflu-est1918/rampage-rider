@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/8bit/badge';
 
 interface MainMenuProps {
   onStart: () => void;
+  isLoading?: boolean;
 }
 
-export const MainMenu: React.FC<MainMenuProps> = ({ onStart }) => {
+export const MainMenu: React.FC<MainMenuProps> = ({ onStart, isLoading = false }) => {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50" style={{ transform: 'scale(0.75)', transformOrigin: 'center center' }}>
       <div className="text-center p-10">
@@ -23,10 +24,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart }) => {
 
         <Button
           onClick={onStart}
+          disabled={isLoading}
           size="lg"
-          className="px-16 py-8 text-2xl bg-destructive text-white hover:bg-destructive/90 retro"
+          className="px-16 py-8 text-2xl bg-destructive text-white hover:bg-destructive/90 retro disabled:opacity-50"
         >
-          START GAME
+          {isLoading ? 'LOADING...' : 'START GAME'}
         </Button>
       </div>
     </div>

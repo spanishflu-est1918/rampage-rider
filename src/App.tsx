@@ -1,12 +1,21 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import GameCanvas from './components/GameCanvas';
 import Overlay from './components/ui/Overlay';
 import { MainMenu, GameOver } from './components/ui/Menus';
 import { GameState, GameStats, Tier } from './types';
 import ErrorBoundary from './components/ErrorBoundary';
+import { preloader } from './core/Preloader';
 
 function App() {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Preload heavy assets (Rapier WASM + models) on mount
+  useEffect(() => {
+    preloader.preloadAll().then(() => {
+      setIsLoading(false);
+    });
+  }, []);
   const [stats, setStats] = useState<GameStats>({
     kills: 0,
     copKills: 0,
@@ -51,7 +60,7 @@ function App() {
 
       {/* UI Layers */}
       {gameState === GameState.MENU && (
-        <MainMenu onStart={startGame} />
+        <MainMenu onStart={startGame} isLoading={isLoading} />
       )}
 
       {gameState === GameState.PLAYING && (

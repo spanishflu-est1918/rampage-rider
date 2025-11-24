@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import { preloader } from './Preloader';
 
 /**
  * PhysicsWorld - Wrapper around Rapier physics engine
@@ -26,7 +27,10 @@ export class PhysicsWorld {
    * Initialize Rapier world (async because Rapier needs to load WASM)
    */
   async init(): Promise<void> {
-    await RAPIER.init();
+    // Only init RAPIER if not already loaded by preloader
+    if (!preloader.isRapierReady()) {
+      await RAPIER.init();
+    }
 
     // Create world with gravity
     this.world = new RAPIER.World({ x: 0.0, y: -9.81, z: 0.0 });
