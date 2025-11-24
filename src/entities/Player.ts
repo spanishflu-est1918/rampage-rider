@@ -16,6 +16,7 @@ export class Player extends THREE.Group {
   private sprintSpeed: number = 7; // Default speed (character naturally sprints)
   private cameraDirection: THREE.Vector3 = new THREE.Vector3(0, 0, -1);
   private isWalking: boolean = false; // Shift slows down instead of speeding up
+  private isAttacking: boolean = false; // Locks movement during attack animation
 
   // Jump
   private jumpForce: number = 5;
@@ -318,11 +319,19 @@ export class Player extends THREE.Group {
           this.attackAction = this.mixer!.clipAction(clip);
           this.attackAction.setLoop(THREE.LoopOnce, 1);
           this.attackAction.clampWhenFinished = true;
-          this.attackAction.timeScale = 2.0; // Make attacks 2x faster
+          this.attackAction.timeScale = 2.0;
           this.attackAction.reset();
           this.attackAction.play();
 
-          // Trigger attack callback
+          this.isAttacking = true;
+
+          const mixer = this.mixer!;
+          const onFinished = () => {
+            this.isAttacking = false;
+            mixer.removeEventListener('finished', onFinished);
+          };
+          mixer.addEventListener('finished', onFinished);
+
           if (this.onAttackCallback) {
             this.onAttackCallback((this as THREE.Group).position.clone());
           }
@@ -335,11 +344,14 @@ export class Player extends THREE.Group {
       this.prevInput = { ...this.input };
     }
 
-    // Apply move speed
-    const velocity = moveVector.multiplyScalar(currentSpeed);
+    // Apply move speed (prevent movement during attack)
+    let velocity = moveVector.multiplyScalar(currentSpeed);
+    if (this.isAttacking) {
+      velocity.set(0, 0, 0);
+    }
 
     // Rotate character to face movement direction
-    if (isMoving) {
+    if (isMoving && !this.isAttacking) {
       // Calculate target rotation from movement direction
       const targetAngle = Math.atan2(moveVector.x, moveVector.z);
 

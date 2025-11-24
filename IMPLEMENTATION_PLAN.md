@@ -139,7 +139,7 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 ## Phase 5: Combat & Progression
 
 ### 5.1 Combat Mechanics
-- [ ] Implement melee combat (foot)
+- [x] Implement melee combat (foot) - Attack locks movement during animation
 - [ ] Add vehicle ramming mechanics
 - [ ] Create projectile system
 - [x] Add combo system with timer (implemented: 5s timer, maxed-out at 10+ combo for unlimited kills)

@@ -12,6 +12,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-24]
 
+### Attack Movement Lock - Player Stops When Stabbing
+
+**Added:**
+- Player movement completely stops during attack animations
+- Character becomes vulnerable while attacking
+- Movement and rotation lock when `isAttacking` flag is true
+- Attack animation finished listener automatically unlocks movement
+
+**Implementation Details:**
+```typescript
+// In Player.ts
+private isAttacking: boolean = false;
+
+// When attack starts
+this.isAttacking = true;
+const onFinished = () => {
+  this.isAttacking = false;
+  mixer.removeEventListener('finished', onFinished);
+};
+mixer.addEventListener('finished', onFinished);
+
+// In update() - prevent movement
+if (this.isAttacking) {
+  velocity.set(0, 0, 0);
+}
+if (isMoving && !this.isAttacking) {
+  // Apply rotation
+}
+```
+
+**Gameplay Impact:**
+- Tactical combat: Must commit to attacks
+- Vulnerability window: Can't run away while stabbing
+- Risk/reward: Killing slows you down
+- Police counter: Easier to get caught when attacking multiple enemies
+
+**Files Modified:**
+- `src/entities/Player.ts` - Added isAttacking flag, movement lock, animation listener
+
+---
+
 ### Maxed-Out Combo System - Kill Limitation
 
 **Added:**
