@@ -175,8 +175,9 @@ export class Pedestrian extends THREE.Group {
     // Clear existing behaviors
     this.yukaVehicle.steering.clear();
 
-    // Flee from danger
-    const fleeBehavior = new YUKA.FleeBehavior(dangerPosition);
+    // Flee from danger (flatten to 2D to prevent vertical movement)
+    const flatDangerPosition = new YUKA.Vec3(dangerPosition.x, 0, dangerPosition.z);
+    const fleeBehavior = new YUKA.FleeBehavior(flatDangerPosition);
     fleeBehavior.panicDistance = 15;
     this.yukaVehicle.steering.add(fleeBehavior);
 
@@ -205,6 +206,14 @@ export class Pedestrian extends THREE.Group {
     this.yukaVehicle.maxSpeed = 0;
     this.yukaVehicle.steering.clear();
 
+    // Disable physics collider so dead bodies don't block player movement
+    const numColliders = this.rigidBody.numColliders();
+    for (let i = 0; i < numColliders; i++) {
+      const collider = this.rigidBody.collider(i);
+      // Set collision groups to 0 to disable all collisions
+      collider.setCollisionGroups(0);
+    }
+
     // Play death animation
     this.playAnimation('Death', 0.1);
 
@@ -232,8 +241,12 @@ export class Pedestrian extends THREE.Group {
       }
     }
 
-    // Sync Three.js position with Yuka vehicle
-    (this as THREE.Group).position.copy(this.yukaVehicle.position);
+    // Sync Three.js position with Yuka vehicle (lock Y to ground level)
+    (this as THREE.Group).position.set(
+      this.yukaVehicle.position.x,
+      0, // Keep pedestrians locked to ground level
+      this.yukaVehicle.position.z
+    );
 
     // Sync rotation (Yuka handles orientation)
     if (this.yukaVehicle.velocity.length() > 0.1) {

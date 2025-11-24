@@ -56,6 +56,7 @@ export class Player extends THREE.Group {
   private animations: THREE.AnimationClip[] = [];
   private currentAnimation: string = 'idle';
   private attackAction: THREE.AnimationAction | null = null;
+  private attackTimer: number = 0; // Timeout to force reset isAttacking
 
   // Attack callback
   private onAttackCallback: ((position: THREE.Vector3) => void) | null = null;
@@ -304,8 +305,8 @@ export class Player extends THREE.Group {
 
     // Attack as overlay (plays on top of base animation)
     if (this.input.attack && !this.prevInput.attack) {
-      // Only start if not already playing
-      if (!this.attackAction || !this.attackAction.isRunning()) {
+      // Only start if not already attacking
+      if (!this.isAttacking) {
         // Randomize attack animation
         const attackAnimations = [
           'Melee_1H_Attack_Stab',
@@ -318,24 +319,36 @@ export class Player extends THREE.Group {
         if (clip) {
           this.attackAction = this.mixer!.clipAction(clip);
           this.attackAction.setLoop(THREE.LoopOnce, 1);
-          this.attackAction.clampWhenFinished = true;
+          this.attackAction.clampWhenFinished = false; // Don't clamp - let it finish cleanly
           this.attackAction.timeScale = 2.0;
           this.attackAction.reset();
           this.attackAction.play();
 
           this.isAttacking = true;
-
-          const mixer = this.mixer!;
-          const onFinished = () => {
-            this.isAttacking = false;
-            mixer.removeEventListener('finished', onFinished);
-          };
-          mixer.addEventListener('finished', onFinished);
+          // Set max attack duration (500ms) as safety timeout
+          this.attackTimer = 0.5;
 
           if (this.onAttackCallback) {
             this.onAttackCallback((this as THREE.Group).position.clone());
           }
         }
+      }
+    }
+
+    // Update attack timer and reset state when animation completes
+    if (this.isAttacking && this.attackAction) {
+      this.attackTimer -= deltaTime;
+
+      // Check if attack animation finished OR timeout exceeded
+      const attackDuration = this.attackAction.getClip().duration / this.attackAction.timeScale;
+      const attackTime = this.attackAction.time;
+
+      if (attackTime >= attackDuration || this.attackTimer <= 0) {
+        // Reset attack state
+        this.isAttacking = false;
+        this.attackAction.stop();
+        this.attackAction = null;
+        this.attackTimer = 0;
       }
     }
 
