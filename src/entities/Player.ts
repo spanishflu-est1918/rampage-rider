@@ -10,6 +10,8 @@ export class Player extends THREE.Group {
   // Physics
   private rigidBody: RAPIER.RigidBody | null = null;
   private world: RAPIER.World | null = null;
+  private collider: RAPIER.Collider | null = null;
+  private characterController: RAPIER.KinematicCharacterController | null = null;
 
   // Movement
   private walkSpeed: number = 4; // Slow walk when holding Shift
@@ -23,6 +25,17 @@ export class Player extends THREE.Group {
   private taseEscapeProgress: number = 0; // 0-100, button mashing fills this
   private readonly taseEscapeDecay: number = 20; // Progress decays 20% per second
   private readonly taseEscapePerPress: number = 12; // Each Space press adds 12%
+  private taseFlashTimer: number = 0; // Timer for color flash effect
+  private taserImmunityTimer: number = 0; // 10 seconds of immunity after escaping taser
+
+  // Hit stun state (when damaged by cops)
+  private isHitStunned: boolean = false;
+  private hitStunTimer: number = 0;
+  private readonly hitStunDuration: number = 0.3; // 300ms hit stun
+
+  // Death state
+  private isDead: boolean = false;
+  private onDeathComplete?: () => void;
 
   // Jump
   private jumpForce: number = 5;
@@ -66,6 +79,9 @@ export class Player extends THREE.Group {
 
   // Attack callback
   private onAttackCallback: ((position: THREE.Vector3) => void) | null = null;
+
+  // Taser escape callback (for screen shake feedback)
+  private onEscapePressCallback: (() => void) | null = null;
 
   constructor() {
     super();
@@ -159,18 +175,28 @@ export class Player extends THREE.Group {
   createPhysicsBody(world: RAPIER.World): void {
     this.world = world;
 
-    // Create kinematic rigid body (we control velocity directly)
-    // Spawn at Y=0.57 to compensate for modelContainer offset of -0.57
-    const bodyDesc = RAPIER.RigidBodyDesc.kinematicVelocityBased()
-      .setTranslation(0, 0.57, 0);
+    // Create kinematic position-based body for character controller
+    // Spawn in a street (odd grid cell) not in a building (even grid cell)
+    // Grid cell size is 13x20, so spawn at (6.5, 0.57, 10) which is in the middle of a street
+    const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
+      .setTranslation(6.5, 0.57, 10);
 
     this.rigidBody = world.createRigidBody(bodyDesc);
 
-    // Create capsule collider
-    const colliderDesc = RAPIER.ColliderDesc.capsule(0.5, 0.3);
-    world.createCollider(colliderDesc, this.rigidBody);
+    // Create capsule collider with collision groups
+    // Membership: 0x0002 (PLAYER group)
+    // Filter: 0x0045 (can collide with GROUND=0x0001, PEDESTRIAN=0x0004, BUILDING=0x0040)
+    const colliderDesc = RAPIER.ColliderDesc.capsule(0.5, 0.3)
+      .setCollisionGroups(0x00450002); // Filter=0x0045, Membership=0x0002
 
-    console.log('[Player] Physics body at Y=0.57, visual model at Y=0 (ground)');
+    this.collider = world.createCollider(colliderDesc, this.rigidBody);
+
+    // Create character controller for collision handling
+    this.characterController = world.createCharacterController(0.01);
+    this.characterController.enableAutostep(0.5, 0.2, true);
+    this.characterController.enableSnapToGround(0.5);
+
+    console.log('[Player] Character controller created with collision detection');
   }
 
   /**
@@ -259,9 +285,56 @@ export class Player extends THREE.Group {
     // Get current position before updates
     const translation = this.rigidBody.translation();
 
+    // Stop all movement and input when dead
+    if (this.isDead) {
+      this.rigidBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      if (this.mixer) {
+        this.mixer.update(deltaTime);
+      }
+      return;
+    }
+
     // Handle taser stun decay
     if (this.isTased && this.taseEscapeProgress > 0) {
       this.taseEscapeProgress = Math.max(0, this.taseEscapeProgress - (this.taseEscapeDecay * deltaTime));
+    }
+
+    // Decrement taser immunity timer
+    if (this.taserImmunityTimer > 0) {
+      this.taserImmunityTimer = Math.max(0, this.taserImmunityTimer - deltaTime);
+      if (this.taserImmunityTimer === 0) {
+        console.log('[Player] Taser immunity expired');
+      }
+    }
+
+    // Taser visual effect: flash between normal and white
+    if (this.isTased) {
+      this.taseFlashTimer += deltaTime;
+      const flashSpeed = 10; // Flashes per second
+      const isFlashOn = Math.floor(this.taseFlashTimer * flashSpeed) % 2 === 0;
+
+      (this as THREE.Group).traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const mat = child.material as THREE.MeshStandardMaterial;
+          if (isFlashOn) {
+            mat.emissive.setHex(0xffffff);
+            mat.emissiveIntensity = 0.8;
+          } else {
+            mat.emissive.setHex(0x000000);
+            mat.emissiveIntensity = 0;
+          }
+        }
+      });
+    } else {
+      // Reset flash timer and ensure emissive is off
+      this.taseFlashTimer = 0;
+      (this as THREE.Group).traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const mat = child.material as THREE.MeshStandardMaterial;
+          mat.emissive.setHex(0x000000);
+          mat.emissiveIntensity = 0;
+        }
+      });
     }
 
     // Check if input changed
@@ -308,21 +381,23 @@ export class Player extends THREE.Group {
       this.verticalVelocity = 0;
     }
 
-    // Update base animation (movement)
-    if (!this.isGrounded && this.currentAnimation !== 'Jump_Full_Short') {
-      this.playAnimation('Jump_Full_Short', 0.1);
-    } else if (isMoving && !this.isWalking && this.currentAnimation !== 'Running_A') {
-      // Default movement = sprint animation
-      this.playAnimation('Running_A', 0.1);
-    } else if (this.isWalking && this.currentAnimation !== 'Walking_A') {
-      // Shift held = walk animation (slower)
-      this.playAnimation('Walking_A', 0.1);
-    } else if (!isMoving && this.isGrounded && this.currentAnimation !== 'Idle_A') {
-      this.playAnimation('Idle_A', 0.1);
+    // Update base animation (movement) - skip if dead
+    if (!this.isDead) {
+      if (!this.isGrounded && this.currentAnimation !== 'Jump_Full_Short') {
+        this.playAnimation('Jump_Full_Short', 0.1);
+      } else if (isMoving && !this.isWalking && this.currentAnimation !== 'Running_A') {
+        // Default movement = sprint animation
+        this.playAnimation('Running_A', 0.1);
+      } else if (this.isWalking && this.currentAnimation !== 'Walking_A') {
+        // Shift held = walk animation (slower)
+        this.playAnimation('Walking_A', 0.1);
+      } else if (!isMoving && this.isGrounded && this.currentAnimation !== 'Idle_A') {
+        this.playAnimation('Idle_A', 0.1);
+      }
     }
 
     // Attack as overlay (plays on top of base animation)
-    if (this.input.attack && !this.prevInput.attack) {
+    if (this.input.attack && !this.prevInput.attack && !this.isDead) {
       // Only start if not already attacking
       if (!this.isAttacking) {
         // Randomize attack animation
@@ -402,14 +477,33 @@ export class Player extends THREE.Group {
       (this as THREE.Group).rotation.y += rotationChange;
     }
 
-    // Set Rapier velocity (kinematic body) with vertical component
-    this.rigidBody.setLinvel(
-      { x: velocity.x, y: this.verticalVelocity, z: velocity.z },
-      true
-    );
+    // Use character controller to compute movement with collisions
+    if (this.characterController && this.collider) {
+      // Desired movement including gravity
+      const desiredMovement = {
+        x: velocity.x * deltaTime,
+        y: this.verticalVelocity * deltaTime,
+        z: velocity.z * deltaTime
+      };
 
-    // Sync visual position with physics
-    (this as THREE.Group).position.set(translation.x, translation.y, translation.z);
+      // Compute movement accounting for obstacles
+      this.characterController.computeColliderMovement(this.collider, desiredMovement);
+
+      // Get corrected movement
+      const correctedMovement = this.characterController.computedMovement();
+
+      // Apply to rigid body
+      const newPosition = {
+        x: translation.x + correctedMovement.x,
+        y: translation.y + correctedMovement.y,
+        z: translation.z + correctedMovement.z
+      };
+
+      this.rigidBody.setNextKinematicTranslation(newPosition);
+
+      // Sync visual position
+      (this as THREE.Group).position.set(newPosition.x, newPosition.y, newPosition.z);
+    }
 
     // Update animation mixer
     if (this.mixer) {
@@ -437,11 +531,86 @@ export class Player extends THREE.Group {
    * Apply taser stun to player
    */
   applyTaserStun(): void {
+    // Check immunity
+    if (this.taserImmunityTimer > 0) {
+      console.log(`[Player] Taser blocked by immunity (${this.taserImmunityTimer.toFixed(1)}s remaining)`);
+      return;
+    }
+
     if (!this.isTased) {
       this.isTased = true;
       this.taseEscapeProgress = 0;
       console.log('[Player] Tased! Mash Space to escape!');
     }
+  }
+
+  /**
+   * Trigger death animation and call callback when complete
+   */
+  die(onComplete: () => void): void {
+    console.log('[Player] die() called, isDead:', this.isDead);
+    if (this.isDead) {
+      console.log('[Player] Already dead, ignoring');
+      return;
+    }
+
+    this.isDead = true;
+    this.onDeathComplete = onComplete;
+
+    console.log('[Player] Setting death state...');
+    console.log('[Player] Mixer:', this.mixer ? 'exists' : 'null');
+    console.log('[Player] Animations count:', this.animations.length);
+
+    // Play random death animation (Death_A or Death_B)
+    if (this.mixer && this.animations.length > 0) {
+      const deathAnim = Math.random() < 0.5 ? 'Death_A' : 'Death_B';
+      console.log('[Player] Looking for animation:', deathAnim);
+
+      const clip = THREE.AnimationClip.findByName(this.animations, deathAnim);
+
+      if (clip) {
+        console.log(`[Player] Found ${deathAnim}, duration: ${clip.duration}s`);
+        this.mixer.stopAllAction();
+        const action = this.mixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        action.reset();
+        action.play();
+        console.log('[Player] Animation started playing');
+
+        // Call callback after animation finishes (minus 150ms to feel snappier)
+        const duration = clip.duration * 1000 - 150;
+        console.log(`[Player] Setting timeout for ${duration}ms`);
+        setTimeout(() => {
+          console.log('[Player] Death animation timeout complete');
+          if (this.onDeathComplete) {
+            this.onDeathComplete();
+          }
+        }, duration);
+      } else {
+        // No death animation found, call immediately
+        console.log('[Player] Animation not found! Available:', this.animations.map(a => a.name).join(', '));
+        console.log('[Player] Calling onComplete immediately');
+        if (this.onDeathComplete) {
+          this.onDeathComplete();
+        }
+      }
+    } else {
+      // No animations available, call immediately
+      console.log('[Player] No mixer or animations, calling onComplete immediately');
+      if (this.onDeathComplete) {
+        this.onDeathComplete();
+      }
+    }
+  }
+
+  /**
+   * Apply hit stun to player (when damaged by cops)
+   * No visual effects - player is never stunned except by taser
+   */
+  applyHitStun(): void {
+    // Do nothing - player doesn't get stunned or show effects when hit
+    // Only taser (applyTaserStun) causes visual effects
   }
 
   /**
@@ -452,11 +621,17 @@ export class Player extends THREE.Group {
       this.taseEscapeProgress = Math.min(100, this.taseEscapeProgress + this.taseEscapePerPress);
       console.log(`[Player] Escape progress: ${this.taseEscapeProgress.toFixed(1)}%`);
 
+      // Trigger screen shake feedback
+      if (this.onEscapePressCallback) {
+        this.onEscapePressCallback();
+      }
+
       // Check if escaped
       if (this.taseEscapeProgress >= 100) {
         this.isTased = false;
         this.taseEscapeProgress = 0;
-        console.log('[Player] Escaped from taser!');
+        this.taserImmunityTimer = 10; // 10 seconds of immunity
+        console.log('[Player] Escaped from taser! Taser immunity granted for 10 seconds.');
       }
     }
   }
@@ -472,10 +647,24 @@ export class Player extends THREE.Group {
   }
 
   /**
+   * Check if player can be tased (not immune and not already tased)
+   */
+  canBeTased(): boolean {
+    return this.taserImmunityTimer <= 0 && !this.isTased;
+  }
+
+  /**
    * Set attack callback (called when player attacks)
    */
   setOnAttack(callback: (position: THREE.Vector3) => void): void {
     this.onAttackCallback = callback;
+  }
+
+  /**
+   * Set taser escape press callback (for screen shake feedback)
+   */
+  setOnEscapePress(callback: () => void): void {
+    this.onEscapePressCallback = callback;
   }
 
   /**

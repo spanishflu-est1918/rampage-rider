@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as YUKA from 'yuka';
+import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
 
 /**
  * Cop Entity
@@ -31,14 +32,29 @@ export class Cop extends THREE.Group {
   private health: number = 3; // Requires 3 knife hits to kill
   private chaseSpeed: number = 9.0; // Much faster than player
   private lastTarget: THREE.Vector3 | null = null; // Track player position for rotation
+  private isHitStunned: boolean = false;
+  private hitStunTimer: number = 0;
+  private readonly hitStunDuration: number = 0.6; // 600ms hit stun (more visible)
 
   // Attack state
-  private currentHeat: number = 0;
+  private currentWantedStars: number = 0; // 0=punch, 1=taser, 2+=shoot
+  private playerCanBeTased: boolean = true; // If false, cop punches instead of tasing at 1 star
+  private attackCooldown: number = 0;
+  private isCurrentlyAttacking: boolean = false;
+  private onDealDamage?: (damage: number) => void; // Callback to damage player
 
-  // Attack ranges based on heat level
-  private readonly punchRange: number = 1.5; // Low heat: punch at very close range
-  private readonly taserRange: number = 3.0; // Medium heat: taser at close range
-  private readonly shootRange: number = 6.0; // High heat: shoot at medium range
+  // Attack ranges and damage based on wanted stars
+  private readonly punchRange: number = 1.5; // 0 stars: punch at very close range
+  private readonly taserRange: number = 6.0; // 1 star: taser at medium range (doubled)
+  private readonly shootRange: number = 8.0; // 2+ stars: shoot at longer range
+
+  private readonly punchDamage: number = 10;
+  private readonly taserDamage: number = 15;
+  private readonly shootDamage: number = 20;
+
+  private readonly punchCooldown: number = 1.5; // 1.5 seconds between punches
+  private readonly taserCooldown: number = 2.0; // 2 seconds between tasers
+  private readonly shootCooldown: number = 1.0; // 1 second between shots
 
   constructor(
     position: THREE.Vector3,
@@ -60,32 +76,22 @@ export class Cop extends THREE.Group {
     // Add to Yuka entity manager
     this.yukaEntityManager.add(this.yukaVehicle);
 
-    // Create Rapier physics body
-    const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
-      .setTranslation(position.x, position.y, position.z);
-    this.rigidBody = world.createRigidBody(bodyDesc);
+    // Create kinematic character with building collision using shared helper
+    const groups = KinematicCharacterHelper.getCollisionGroups();
+    const collisionFilter = KinematicCharacterHelper.getCopCollisionFilter();
 
-    // Create capsule collider with cop-to-cop collision
-    // Membership: COP (0x0008)
-    // Filter: GROUND (0x0001) + COP (0x0008) = 0x0009
-    // Format: (filter << 16) | membership
-    const membership = 0x0008; // COP group
-    const filter = 0x0001 | 0x0008; // Collide with GROUND and other COPS
-    const collisionGroups = (filter << 16) | membership;
+    const { body, collider, controller } = KinematicCharacterHelper.createCharacterBody(
+      world,
+      position,
+      0.3, // capsule half height
+      0.3, // capsule radius
+      groups.COP, // collision group membership
+      collisionFilter // what this cop collides with (GROUND, BUILDING, PEDESTRIAN, other COPS)
+    );
 
-    const colliderDesc = RAPIER.ColliderDesc.capsule(0.3, 0.3)
-      .setCollisionGroups(collisionGroups)
-      .setTranslation(0, 0.6, 0);
-    this.collider = world.createCollider(colliderDesc, this.rigidBody);
-
-    // Create character controller for collision-aware movement
-    const controller = world.createCharacterController(0.01);
-    if (!controller) {
-      throw new Error('[Cop] Failed to create character controller');
-    }
+    this.rigidBody = body;
+    this.collider = collider;
     this.characterController = controller;
-    this.characterController.enableAutostep(0.5, 0.2, true); // Auto-step over small obstacles
-    this.characterController.setSlideEnabled(true); // Enable sliding along walls
 
     // Load police character model
     this.loadModel();
@@ -197,25 +203,54 @@ export class Cop extends THREE.Group {
   }
 
   /**
-   * Update current heat level to determine attack type
+   * Update current wanted star level to determine attack type
    */
-  setHeatLevel(heat: number): void {
-    this.currentHeat = heat;
+  setWantedStars(stars: number): void {
+    this.currentWantedStars = stars;
   }
 
   /**
-   * Get attack parameters based on current heat level
+   * Set whether player can be tased (affects attack choice at 1 star)
    */
-  private getAttackParams(): { range: number; animation: string } {
-    if (this.currentHeat >= 75) {
-      // High heat: Shoot at range
-      return { range: this.shootRange, animation: 'Shoot_OneHanded' };
-    } else if (this.currentHeat >= 50) {
-      // Medium heat: Taser at medium-close range
-      return { range: this.taserRange, animation: 'Punch' }; // Using Punch for taser effect
+  setPlayerCanBeTased(canBeTased: boolean): void {
+    this.playerCanBeTased = canBeTased;
+  }
+
+  /**
+   * Set damage callback (called when cop deals damage)
+   */
+  setDamageCallback(callback: (damage: number) => void): void {
+    this.onDealDamage = callback;
+  }
+
+  /**
+   * Get attack parameters based on current wanted star level
+   */
+  private getAttackParams(): { range: number; animation: string; damage: number; cooldown: number } {
+    if (this.currentWantedStars >= 2) {
+      // 2+ stars: Shoot at range
+      return {
+        range: this.shootRange,
+        animation: 'Shoot_OneHanded',
+        damage: this.shootDamage,
+        cooldown: this.shootCooldown
+      };
+    } else if (this.currentWantedStars === 1 && this.playerCanBeTased) {
+      // 1 star: Taser at medium-close range (only if player can be tased)
+      return {
+        range: this.taserRange,
+        animation: 'Punch', // Using Punch for taser effect
+        damage: this.taserDamage,
+        cooldown: this.taserCooldown
+      };
     } else {
-      // Low heat: Punch at very close range
-      return { range: this.punchRange, animation: 'Punch' };
+      // 0 stars OR 1 star but player can't be tased: Punch at very close range
+      return {
+        range: this.punchRange,
+        animation: 'Punch',
+        damage: this.punchDamage,
+        cooldown: this.punchCooldown
+      };
     }
   }
 
@@ -258,6 +293,52 @@ export class Cop extends THREE.Group {
 
     this.health -= amount;
 
+    // Trigger hit stun reaction
+    this.isHitStunned = true;
+    this.hitStunTimer = this.hitStunDuration;
+    console.log(`[Cop] Hit stunned for ${this.hitStunDuration}s!`);
+
+    // Visual hit reaction: flash white
+    (this as THREE.Group).traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const mat = child.material as THREE.MeshStandardMaterial;
+        const originalEmissive = mat.emissive.getHex();
+        const originalEmissiveIntensity = mat.emissiveIntensity;
+
+        // Flash white
+        mat.emissive.setHex(0xffffff);
+        mat.emissiveIntensity = 1.0;
+
+        // Reset after short delay
+        setTimeout(() => {
+          mat.emissive.setHex(originalEmissive);
+          mat.emissiveIntensity = originalEmissiveIntensity;
+        }, 100);
+      }
+    });
+
+    // Try to play a hit animation if available
+    if (this.mixer && this.animations.length > 0) {
+      const hitAnimNames = ['RecieveHit', 'HitReact', 'Hit_Reaction', 'GetHit', 'TakeDamage', 'Damage'];
+      let hitAnim = null;
+
+      for (const name of hitAnimNames) {
+        hitAnim = THREE.AnimationClip.findByName(this.animations, name);
+        if (hitAnim) {
+          console.log(`[Cop] Playing hit animation: ${name}`);
+          const action = this.mixer.clipAction(hitAnim);
+          action.setLoop(THREE.LoopOnce, 1);
+          action.reset();
+          action.play();
+          break;
+        }
+      }
+
+      if (!hitAnim) {
+        console.log('[Cop] No hit reaction animation found, using visual flash only. Available:', this.animations.map(a => a.name).join(', '));
+      }
+    }
+
     if (this.health <= 0) {
       this.die();
     }
@@ -294,6 +375,26 @@ export class Cop extends THREE.Group {
 
     if (this.isDead) return;
 
+    // Update hit stun timer
+    if (this.hitStunTimer > 0) {
+      this.hitStunTimer -= deltaTime;
+      if (this.hitStunTimer <= 0) {
+        this.isHitStunned = false;
+      }
+    }
+
+    // Don't move or attack while hit stunned
+    if (this.isHitStunned) {
+      // Freeze in place - stop Yuka velocity
+      this.yukaVehicle.velocity.set(0, 0, 0);
+      return;
+    }
+
+    // Update attack cooldown
+    if (this.attackCooldown > 0) {
+      this.attackCooldown -= deltaTime;
+    }
+
     // Get current position
     const currentPos = this.rigidBody.translation();
     const currentPosition = new THREE.Vector3(currentPos.x, currentPos.y, currentPos.z);
@@ -307,8 +408,8 @@ export class Cop extends THREE.Group {
     // Get attack parameters based on current heat level
     const attackParams = this.getAttackParams();
 
-    // Attack logic: if within range, stop and play attack animation
-    if (distanceToTarget <= attackParams.range) {
+    // Attack logic: if within range and cooldown ready, execute attack
+    if (distanceToTarget <= attackParams.range && this.attackCooldown <= 0) {
       // Stop moving
       this.yukaVehicle.velocity.set(0, 0, 0);
 
@@ -320,11 +421,31 @@ export class Cop extends THREE.Group {
         (this as THREE.Group).rotation.y = angle;
       }
 
-      // Play attack animation based on heat level
-      if (this.currentAnimation !== attackParams.animation) {
-        this.playAnimation(attackParams.animation, 0.1);
+      // Execute attack: play animation once and hold final pose
+      if (this.mixer && this.animations.length > 0) {
+        const clip = THREE.AnimationClip.findByName(this.animations, attackParams.animation);
+        if (clip) {
+          this.mixer.stopAllAction();
+          const action = this.mixer.clipAction(clip);
+          action.setLoop(THREE.LoopOnce, 1);
+          action.clampWhenFinished = true; // Hold final pose
+          action.reset();
+          action.play();
+          this.currentAnimation = attackParams.animation;
+        }
       }
-    } else {
+      this.isCurrentlyAttacking = true;
+
+      // Deal damage when attack executes
+      if (this.onDealDamage) {
+        this.onDealDamage(attackParams.damage);
+        console.log(`[Cop] Dealt ${attackParams.damage} damage!`);
+      }
+
+      // Set cooldown for next attack
+      this.attackCooldown = attackParams.cooldown;
+    } else if (distanceToTarget > attackParams.range) {
+      this.isCurrentlyAttacking = false;
       // Chase logic: move toward target
       // Get desired position from Yuka AI
       const desiredX = this.yukaVehicle.position.x;
@@ -335,21 +456,13 @@ export class Cop extends THREE.Group {
       const deltaZ = desiredZ - currentPos.z;
       const desiredMovement = { x: deltaX, y: 0.0, z: deltaZ };
 
-      // Use character controller to compute collision-safe movement
-      this.characterController.computeColliderMovement(this.collider, desiredMovement);
-
-      // Get the corrected movement (accounts for collisions and sliding)
-      const correctedMovement = this.characterController.computedMovement();
-
-      // Apply corrected movement
-      const newPosition = new THREE.Vector3(
-        currentPos.x + correctedMovement.x,
-        0,
-        currentPos.z + correctedMovement.z
+      // Use shared helper to move with collision detection
+      const newPosition = KinematicCharacterHelper.moveCharacter(
+        this.rigidBody,
+        this.collider,
+        this.characterController,
+        desiredMovement
       );
-
-      // Update physics body
-      this.rigidBody.setNextKinematicTranslation(newPosition);
 
       // Sync Three.js
       (this as THREE.Group).position.copy(newPosition);
@@ -370,15 +483,17 @@ export class Cop extends THREE.Group {
         }
       }
 
-      // Update animation based on movement
-      const speed = this.yukaVehicle.velocity.length();
-      if (speed > 0.5) {
-        if (this.currentAnimation !== 'Run') {
-          this.playAnimation('Run', 0.1);
-        }
-      } else {
-        if (this.currentAnimation !== 'Idle') {
-          this.playAnimation('Idle', 0.2);
+      // Update animation based on movement (only if not attacking)
+      if (!this.isCurrentlyAttacking) {
+        const speed = this.yukaVehicle.velocity.length();
+        if (speed > 0.5) {
+          if (this.currentAnimation !== 'Run') {
+            this.playAnimation('Run', 0.1);
+          }
+        } else {
+          if (this.currentAnimation !== 'Idle') {
+            this.playAnimation('Idle', 0.2);
+          }
         }
       }
     }
@@ -403,5 +518,12 @@ export class Cop extends THREE.Group {
    */
   getYukaVehicle(): YUKA.Vehicle {
     return this.yukaVehicle;
+  }
+
+  /**
+   * Get current health (for UI health bars)
+   */
+  getHealth(): number {
+    return this.health;
   }
 }
