@@ -12,6 +12,79 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-24]
 
+### Attack Lock and Pedestrian Physics Bug Fixes
+
+**Fixed:**
+- Player no longer gets stuck unable to move after stabbing attacks
+- Pedestrians no longer sink through floor during panic/run-away behavior
+- Attack animation state properly resets after each attack
+- Dead pedestrian bodies no longer physically block player movement
+
+**Root Causes Resolved:**
+
+1. **Attack Animation Lock Bug**
+   - Global AnimationMixer event listener was firing for ANY animation completion
+   - Multiple event listeners accumulated on repeated attacks
+   - `clampWhenFinished` kept actions "running" indefinitely
+   - Attack state could get stuck permanently
+
+2. **Pedestrian Floor-Sinking Bug**
+   - Yuka steering behaviors operated in 3D space with Y-axis movement
+   - FleeBehavior calculated vertical movement when fleeing from danger
+   - No Y-axis constraint existed during position synchronization
+   - Pedestrians gradually drifted downward and disappeared
+
+3. **Dead Body Collision Bug**
+   - Dead pedestrians kept active Rapier colliders
+   - Kinematic-kinematic collisions created physical blockage
+   - Player couldn't push through corpses
+
+**Implementation Details:**
+
+```typescript
+// Player.ts - Timer-based attack completion
+private attackTimer: number = 0;
+
+// Replace buggy event listener with explicit checks
+if (attackTime >= attackDuration || this.attackTimer <= 0) {
+  this.isAttacking = false;
+  this.attackAction.stop();
+  this.attackAction = null;
+  this.attackTimer = 0;
+}
+
+// Pedestrian.ts - Y-axis constraint during position sync
+(this as THREE.Group).position.set(
+  this.yukaVehicle.position.x,
+  0, // Keep pedestrians locked to ground level
+  this.yukaVehicle.position.z
+);
+
+// Pedestrian.ts - Flatten danger position to 2D
+const flatDangerPosition = new YUKA.Vec3(dangerPosition.x, 0, dangerPosition.z);
+const fleeBehavior = new YUKA.FleeBehavior(flatDangerPosition);
+
+// Pedestrian.ts - Disable colliders on death
+const numColliders = this.rigidBody.numColliders();
+for (let i = 0; i < numColliders; i++) {
+  const collider = this.rigidBody.collider(i);
+  collider.setCollisionGroups(0); // Disable all collisions
+}
+```
+
+**Files Modified:**
+- `src/entities/Player.ts` - Fixed animation state management, added timeout safety
+- `src/entities/Pedestrian.ts` - Constrained Y-axis, disabled dead body colliders
+
+**Gameplay Impact:**
+- Smooth, reliable attack system without lock-ups
+- Can spam attacks without getting stuck
+- Pedestrians stay properly grounded during all behaviors
+- Can walk through dead bodies without obstruction
+- More fluid combat experience
+
+---
+
 ### Directional Cone-Based Attack System
 
 **Added:**
