@@ -337,11 +337,11 @@ export class Engine {
     // Set attack callback to damage pedestrians
     this.player.setOnAttack((attackPosition) => {
       if (this.crowd) {
-        const attackRadius = 2.0;
+        const attackRadius = 3.0;
         const damage = 1;
         const maxKills = this.stats.combo >= 10 ? Infinity : 1;
         const attackDirection = this.player.getFacingDirection();
-        const coneAngle = Math.PI / 2;
+        const coneAngle = Math.PI * 5 / 6;
 
         const result = this.crowd.damageInRadius(
           attackPosition,
