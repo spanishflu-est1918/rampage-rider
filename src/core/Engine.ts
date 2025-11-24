@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PhysicsWorld } from './PhysicsWorld';
 import { AIManager } from './AIManager';
+import { CrowdManager } from '../managers/CrowdManager';
 import { Player } from '../entities/Player';
+import { ParticleEmitter } from '../rendering/ParticleSystem';
+import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
 import { GameState, Tier, InputState, GameStats } from '../types';
 
 /**
@@ -19,6 +22,9 @@ export class Engine {
   // Systems
   public physics: PhysicsWorld;
   public ai: AIManager;
+  public crowd: CrowdManager | null = null;
+  public particles: ParticleEmitter;
+  public bloodDecals: BloodDecalSystem;
 
   // Game state
   private state: GameState = GameState.MENU;
@@ -31,6 +37,7 @@ export class Engine {
     action: false,
     mount: false,
   };
+  public disableCameraFollow: boolean = false;
 
   // Stats
   private stats: GameStats = {
@@ -56,6 +63,10 @@ export class Engine {
   // Player
   private player: Player | null = null;
 
+  // Screen shake
+  private shakeIntensity: number = 0;
+  private shakeDecay: number = 0.9;
+
   constructor(canvas: HTMLCanvasElement, width: number, height: number) {
     // Initialize Three.js
     this.scene = new THREE.Scene();
@@ -64,7 +75,7 @@ export class Engine {
 
     // Orthographic camera for isometric view
     const aspect = width / height;
-    const frustumSize = 7.5; // Very close view (half of 15)
+    const frustumSize = 15; // Double the previous 7.5 to pull back camera
     this.camera = new THREE.OrthographicCamera(
       (frustumSize * aspect) / -2,
       (frustumSize * aspect) / 2,
@@ -74,8 +85,8 @@ export class Engine {
       1000
     );
 
-    // Isometric position: half distance again
-    this.camera.position.set(2.5, 6.25, 2.5);
+    // Isometric position: double distance (was 2.5, 6.25, 2.5)
+    this.camera.position.set(5, 12.5, 5);
     this.camera.lookAt(0, 0, 0);
 
     // Renderer
@@ -98,6 +109,12 @@ export class Engine {
     // Initialize systems
     this.physics = new PhysicsWorld();
     this.ai = new AIManager();
+    this.particles = new ParticleEmitter(this.scene);
+    this.bloodDecals = new BloodDecalSystem(this.scene);
+
+    this.particles.setOnGroundHit((position, size) => {
+      this.bloodDecals.addBloodDecal(position, size);
+    });
 
     console.log('[Engine] Created with isometric camera at (2.5, 6.25, 2.5)');
   }
@@ -140,6 +157,12 @@ export class Engine {
     // Create temporary ground for testing
     this.createTestGround();
 
+    // Initialize crowd manager
+    const world = this.physics.getWorld();
+    if (world) {
+      this.crowd = new CrowdManager(this.scene, world);
+    }
+
     console.log('[Engine] Initialization complete');
   }
 
@@ -148,11 +171,35 @@ export class Engine {
    */
   private createTestGround(): void {
     const geometry = new THREE.PlaneGeometry(50, 50);
-    const material = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+
+    // Load grainy concrete PBR textures
+    const textureLoader = new THREE.TextureLoader();
+
+    const albedoMap = textureLoader.load('/assets/textures/grainy-concrete_albedo.png');
+    const normalMap = textureLoader.load('/assets/textures/grainy-concrete_normal-ogl.png');
+    const roughnessMap = textureLoader.load('/assets/textures/grainy-concrete_roughness.png');
+    const aoMap = textureLoader.load('/assets/textures/grainy-concrete_ao.png');
+
+    // Set up tiling for all textures
+    [albedoMap, normalMap, roughnessMap, aoMap].forEach(tex => {
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(10, 10);
+    });
+
+    const material = new THREE.MeshStandardMaterial({
+      map: albedoMap,
+      normalMap: normalMap,
+      roughnessMap: roughnessMap,
+      aoMap: aoMap,
+      aoMapIntensity: 0.5
+    });
     this.groundMesh = new THREE.Mesh(geometry, material);
     this.groundMesh.rotation.x = -Math.PI / 2;
     this.groundMesh.receiveShadow = true;
     this.scene.add(this.groundMesh);
+
+    this.bloodDecals.setGroundMesh(this.groundMesh);
 
     // Grid helper for visual reference
     const gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x333333);
@@ -180,15 +227,6 @@ export class Engine {
   ): void {
     this.callbacks.onStatsUpdate = onStatsUpdate;
     this.callbacks.onGameOver = onGameOver;
-  }
-
-  /**
-   * Set attack animation
-   */
-  setAttackAnim(anim: string): void {
-    if (this.player) {
-      this.player.setAttackAnimation(anim);
-    }
   }
 
   /**
@@ -247,6 +285,13 @@ export class Engine {
       this.player = null;
     }
 
+    if (this.crowd) {
+      this.crowd.clear();
+    }
+
+    this.particles.clear();
+    this.bloodDecals.clear();
+
     this.stats = {
       kills: 0,
       score: 0,
@@ -261,7 +306,12 @@ export class Engine {
     // Spawn player
     this.spawnPlayer();
 
-    console.log('[Engine] Game reset - Player spawned');
+    // Spawn initial crowd around player
+    if (this.crowd && this.player) {
+      this.crowd.spawnInitialCrowd(this.player.getPosition());
+    }
+
+    console.log('[Engine] Game reset - Player and crowd spawned');
   }
 
   /**
@@ -284,6 +334,40 @@ export class Engine {
     this.camera.getWorldDirection(cameraDirection);
     this.player.setCameraDirection(cameraDirection);
 
+    // Set attack callback to damage pedestrians
+    this.player.setOnAttack((attackPosition) => {
+      if (this.crowd) {
+        const attackRadius = 3.5; // 3.5 unit attack range (increased from 2.0)
+        const damage = 1; // One-shot kill
+
+        // Damage pedestrians in range
+        const result = this.crowd.damageInRadius(attackPosition, attackRadius, damage);
+
+        if (result.kills > 0) {
+          // Update kill stats
+          this.stats.kills += result.kills;
+          this.stats.score += result.kills * 10;
+          this.stats.combo += result.kills;
+          this.stats.comboTimer = 5.0; // 5 second combo window
+
+          const playerPos = this.player.getPosition();
+          for (const killPos of result.positions) {
+            const direction = new THREE.Vector3().subVectors(killPos, playerPos).normalize();
+            this.particles.emitBlood(killPos, 30);
+            this.particles.emitBloodSpray(killPos, direction, 20);
+          }
+
+          // Make other pedestrians panic
+          this.crowd.panicCrowd(attackPosition, 10);
+
+          // Screen shake on hit
+          this.shakeIntensity = 0.5 * result.kills; // Stronger shake for multiple kills
+
+          console.log(`[Engine] ${result.kills} kills! Total: ${this.stats.kills}`);
+        }
+      }
+    });
+
     console.log('[Engine] Player spawned');
   }
 
@@ -292,7 +376,7 @@ export class Engine {
    */
   resize(width: number, height: number): void {
     const aspect = width / height;
-    const frustumSize = 7.5;
+    const frustumSize = 15; // Match the doubled camera distance
 
     this.camera.left = (frustumSize * aspect) / -2;
     this.camera.right = (frustumSize * aspect) / 2;
@@ -347,14 +431,25 @@ export class Engine {
       this.player.update(dt);
     }
 
-    // TODO: Update entities
+    // Update crowd
+    if (this.crowd && this.player) {
+      const playerPos = this.player.getPosition();
+      this.crowd.update(dt, playerPos);
+
+      // Handle player-pedestrian collisions
+      this.crowd.handlePlayerCollisions(playerPos);
+    }
 
     // Update AI
     this.ai.update(dt);
 
-    // Camera follow player
-    if (this.player) {
+    // Update particles
+    this.particles.update(dt);
+
+    // Camera follow player (unless manual control is active)
+    if (this.player && !this.disableCameraFollow) {
       const playerPos = this.player.getPosition();
+
       // Smooth lerp camera to follow player, maintaining isometric offset
       const targetCameraPos = new THREE.Vector3(
         playerPos.x + 2.5,
@@ -362,6 +457,23 @@ export class Engine {
         playerPos.z + 2.5
       );
       this.camera.position.lerp(targetCameraPos, 0.1);
+
+      // Apply screen shake AFTER lerp (so it's not smoothed out)
+      if (this.shakeIntensity > 0) {
+        const shakeX = (Math.random() - 0.5) * this.shakeIntensity;
+        const shakeY = (Math.random() - 0.5) * this.shakeIntensity;
+        const shakeZ = (Math.random() - 0.5) * this.shakeIntensity;
+
+        this.camera.position.x += shakeX;
+        this.camera.position.y += shakeY;
+        this.camera.position.z += shakeZ;
+
+        // Decay shake intensity
+        this.shakeIntensity -= dt * 2; // Decay over time instead of exponential
+        if (this.shakeIntensity < 0) {
+          this.shakeIntensity = 0;
+        }
+      }
 
       // Camera always looks at player position
       const lookAtTarget = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z);
@@ -388,6 +500,11 @@ export class Engine {
     this.stop();
     this.physics.dispose();
     this.ai.clear();
+    if (this.crowd) {
+      this.crowd.clear();
+    }
+    this.particles.clear();
+    this.bloodDecals.dispose();
     this.renderer.dispose();
 
     // Clear scene

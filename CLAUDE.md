@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Rampage Rider** is an isometric top-down endless runner video game built with Three.js, React, and Rapier physics. Players start on foot and progressively unlock vehicles (bicycle → motorbike → sedan) by reaching kill milestones while being pursued by police.
 
+## Code Quality Principles
+
+**The user hates duplication.** Always:
+- Consolidate duplicate documentation into single sources of truth
+- Refactor repeated code patterns into reusable functions/classes
+- Remove redundant guides, specs, or files
+- Keep documentation DRY (Don't Repeat Yourself)
+
 ## Development Workflow
 
 ### Implementation Plan & Changelog System

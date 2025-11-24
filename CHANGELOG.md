@@ -10,6 +10,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2024-11-24]
+
+### Blood Effects System - Particle-to-Decal Implementation
+
+**Added:**
+- Particle-to-decal blood system inspired by Ultrakill
+- Three.js DecalGeometry for persistent floor blood splatters
+- Physics-driven blood particle simulation with gravity
+- Ground collision detection for particles
+- Dark blood aesthetic (very dark red/almost black)
+
+**Particle System (`src/rendering/ParticleSystem.ts`):**
+- Blood particles spray from character torso height (0.8-1.2 units)
+- 30 burst particles + 20 directional spray particles per kill
+- Real physics: initial velocity + gravity (-9.8 m/s²)
+- Ground collision detection at y <= 0.05
+- Particles removed after spawning decal
+- Normal blending (not additive) for dark appearance
+- 3 second lifetime to allow particles to fall
+
+**Decal System (`src/rendering/BloodDecalSystem.ts`):**
+- Procedurally generated blood textures (5 variations)
+- Organic splatter shapes with droplets and streaks
+- Dark color palette: rgba(50-80, 0-15, 0-15)
+- DecalGeometry projects onto ground mesh
+- Proper z-fighting prevention (polygonOffsetFactor: -4)
+- Random rotation and sizing for variation
+- Max 100 decals for performance (oldest removed when limit reached)
+
+**Integration:**
+- Particle ground hit callback triggers decal creation
+- Decal size based on particle size
+- Blood accumulates on floor as kills increase
+- Screen shake (0.5 intensity per kill)
+- Pedestrian panic and stumble system
+
+**Visual Flow:**
+```
+Character → Blood Spray → Particles Fall with Physics → Hit Ground → Decal Spawned → Blood Stays Forever
+```
+
+**Files Added:**
+- `src/rendering/ParticleSystem.ts` - Particle emitter with collision detection
+- `src/rendering/BloodDecalSystem.ts` - DecalGeometry blood splatters
+
+**Files Modified:**
+- `src/core/Engine.ts` - Integrated particle and decal systems
+- `src/managers/CrowdManager.ts` - Returns kill positions for blood spawning
+
+---
+
 ## [2024-11-23]
 
 ### Phase 2.2 - Jump, Sprint, and Attack Mechanics

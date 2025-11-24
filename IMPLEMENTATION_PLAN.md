@@ -101,7 +101,7 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 ### 3.3 Visual Enhancements
 - [ ] Enhance procedural humanoid materials
 - [ ] Add particle effects (explosions, debris)
-- [ ] Implement blood/damage effects
+- [x] Implement blood/damage effects (particle-to-decal system with DecalGeometry)
 - [ ] Create vehicle damage visualization
 - [ ] Add environmental effects (fire, smoke)
 

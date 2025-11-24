@@ -6,10 +6,9 @@ interface GameCanvasProps {
   onStatsUpdate: (stats: GameStats) => void;
   onGameOver: (stats: GameStats) => void;
   gameActive: boolean;
-  attackAnim: string;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, gameActive, attackAnim }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, gameActive }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const [engineReady, setEngineReady] = useState(false);
@@ -31,7 +30,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
       await engine.init();
 
       engine.setCallbacks(onStatsUpdate, onGameOver);
-      engine.setAttackAnim(attackAnim);
       engineRef.current = engine;
       setEngineReady(true);
 
@@ -71,14 +69,62 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
       attack: false, // F key for attack
     };
 
+    // Camera rotation
+    let cameraAngle = 0;
+    let cameraHeight = 6.25;
+
     const handleKey = (e: KeyboardEvent, isDown: boolean) => {
       if (!engineRef.current) return;
 
-      // Update only the specific key that changed
-      if (e.code === 'KeyW' || e.code === 'ArrowUp') inputState.up = isDown;
-      else if (e.code === 'KeyS' || e.code === 'ArrowDown') inputState.down = isDown;
-      else if (e.code === 'KeyA' || e.code === 'ArrowLeft') inputState.left = isDown;
-      else if (e.code === 'KeyD' || e.code === 'ArrowRight') inputState.right = isDown;
+      // Camera rotation with Q/E/W/S
+      if (isDown) {
+        const camera = engineRef.current.getCamera();
+
+        if (e.code === 'KeyQ') {
+          engineRef.current.disableCameraFollow = true;
+          cameraAngle += 0.1; // Rotate left
+          const radius = 7.5;
+          camera.position.x = Math.cos(cameraAngle) * radius;
+          camera.position.z = Math.sin(cameraAngle) * radius;
+          camera.position.y = cameraHeight;
+          camera.lookAt(0, 0, 0);
+        } else if (e.code === 'KeyE') {
+          engineRef.current.disableCameraFollow = true;
+          cameraAngle -= 0.1; // Rotate right
+          const radius = 7.5;
+          camera.position.x = Math.cos(cameraAngle) * radius;
+          camera.position.z = Math.sin(cameraAngle) * radius;
+          camera.position.y = cameraHeight;
+          camera.lookAt(0, 0, 0);
+        } else if (e.code === 'KeyW') {
+          engineRef.current.disableCameraFollow = true;
+          cameraHeight += 0.5; // Move up
+          const radius = 7.5;
+          camera.position.x = Math.cos(cameraAngle) * radius;
+          camera.position.z = Math.sin(cameraAngle) * radius;
+          camera.position.y = cameraHeight;
+          camera.lookAt(0, 0, 0);
+        } else if (e.code === 'KeyS') {
+          engineRef.current.disableCameraFollow = true;
+          cameraHeight = Math.max(1, cameraHeight - 0.5); // Move down (min height 1)
+          const radius = 7.5;
+          camera.position.x = Math.cos(cameraAngle) * radius;
+          camera.position.z = Math.sin(cameraAngle) * radius;
+          camera.position.y = cameraHeight;
+          camera.lookAt(0, 0, 0);
+        } else if (e.code === 'KeyR') {
+          // Reset camera to auto-follow
+          engineRef.current.disableCameraFollow = false;
+          cameraAngle = 0;
+          cameraHeight = 6.25;
+        }
+      }
+
+      // Movement with Arrow keys only
+      if (e.code === 'ArrowUp') inputState.up = isDown;
+      else if (e.code === 'ArrowDown') inputState.down = isDown;
+      else if (e.code === 'ArrowLeft') inputState.left = isDown;
+      else if (e.code === 'ArrowRight') inputState.right = isDown;
       else if (e.code === 'Space') inputState.action = isDown; // Jump
       else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') inputState.mount = isDown; // Walk (slows down from default sprint)
       else if (e.code === 'KeyF') {
@@ -100,13 +146,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
       window.removeEventListener('keyup', onKeyUp);
     };
   }, [engineReady]);
-
-  // Update attack animation when it changes
-  useEffect(() => {
-    if (engineRef.current) {
-      engineRef.current.setAttackAnim(attackAnim);
-    }
-  }, [attackAnim]);
 
   // Start/Stop based on gameActive prop
   useEffect(() => {
