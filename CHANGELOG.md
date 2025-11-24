@@ -12,6 +12,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-24]
 
+### Directional Cone-Based Attack System
+
+**Added:**
+- Cone-based directional attack system (90° forward arc)
+- Player must face victims to attack them
+- Attack radius reduced from 3.5 to 2.0 units
+- `getFacingDirection()` method on Player class
+- Dot product angle check for cone validation
+
+**Implementation Details:**
+```typescript
+// In Player.ts
+getFacingDirection(): THREE.Vector3 {
+  const direction = new THREE.Vector3(0, 0, 1);
+  direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
+  return direction;
+}
+
+// In CrowdManager.ts
+const toPedestrian = new THREE.Vector3().subVectors(pedPos, position).normalize();
+const dotProduct = direction.dot(toPedestrian);
+const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
+inCone = angle <= coneAngle / 2;
+```
+
+**Attack Parameters:**
+- **Radius**: 2.0 units (reduced from 3.5)
+- **Cone Angle**: 90° (π/2 radians) forward arc
+- **Direction**: Player's facing direction from rotation
+
+**Gameplay Impact:**
+- More precise attacks requiring aim
+- Can't hit enemies behind or beside you
+- Must face victims to kill them
+- Reduces accidental kills
+- More skill-based combat
+
+**Files Modified:**
+- `src/entities/Player.ts` - Added getFacingDirection() method
+- `src/managers/CrowdManager.ts` - Added direction and coneAngle parameters
+- `src/core/Engine.ts` - Passes facing direction to attack
+
+---
+
 ### Attack Movement Lock - Player Stops When Stabbing
 
 **Added:**

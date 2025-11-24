@@ -172,7 +172,14 @@ export class CrowdManager {
    * Damage pedestrians in radius (e.g., player attack)
    * Returns kill count and positions of killed pedestrians
    */
-  damageInRadius(position: THREE.Vector3, radius: number, damage: number, maxKills: number = Infinity): {
+  damageInRadius(
+    position: THREE.Vector3,
+    radius: number,
+    damage: number,
+    maxKills: number = Infinity,
+    direction?: THREE.Vector3,
+    coneAngle: number = Math.PI / 3
+  ): {
     kills: number;
     positions: THREE.Vector3[]
   } {
@@ -183,14 +190,26 @@ export class CrowdManager {
       if (pedestrian.isDeadState()) continue;
       if (killCount >= maxKills) break;
 
-      const distance = (pedestrian as THREE.Group).position.distanceTo(position);
+      const pedPos = (pedestrian as THREE.Group).position;
+      const distance = pedPos.distanceTo(position);
 
       if (distance < radius) {
-        pedestrian.takeDamage(damage);
+        let inCone = true;
 
-        if (pedestrian.isDeadState()) {
-          killCount++;
-          killPositions.push((pedestrian as THREE.Group).position.clone());
+        if (direction) {
+          const toPedestrian = new THREE.Vector3().subVectors(pedPos, position).normalize();
+          const dotProduct = direction.dot(toPedestrian);
+          const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
+          inCone = angle <= coneAngle / 2;
+        }
+
+        if (inCone) {
+          pedestrian.takeDamage(damage);
+
+          if (pedestrian.isDeadState()) {
+            killCount++;
+            killPositions.push(pedPos.clone());
+          }
         }
       }
     }

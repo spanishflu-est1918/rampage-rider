@@ -394,6 +394,15 @@ export class Player extends THREE.Group {
   }
 
   /**
+   * Get player facing direction (normalized vector in XZ plane)
+   */
+  getFacingDirection(): THREE.Vector3 {
+    const direction = new THREE.Vector3(0, 0, 1);
+    direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), (this as THREE.Group).rotation.y);
+    return direction;
+  }
+
+  /**
    * Set attack callback (called when player attacks)
    */
   setOnAttack(callback: (position: THREE.Vector3) => void): void {
