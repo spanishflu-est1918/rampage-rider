@@ -56,6 +56,9 @@ export class Player extends THREE.Group {
   private currentAnimation: string = 'idle';
   private attackAction: THREE.AnimationAction | null = null;
 
+  // Attack callback
+  private onAttackCallback: ((position: THREE.Vector3) => void) | null = null;
+
   constructor() {
     super();
 
@@ -299,15 +302,13 @@ export class Player extends THREE.Group {
     }
 
     // Attack as overlay (plays on top of base animation)
-    if (this.input.attack) {
+    if (this.input.attack && !this.prevInput.attack) {
       // Only start if not already playing
       if (!this.attackAction || !this.attackAction.isRunning()) {
         // Randomize attack animation
         const attackAnimations = [
           'Melee_1H_Attack_Stab',
           'Melee_1H_Attack_Chop',
-          'Melee_1H_Attack_Slice_Diagonal',
-          'Melee_1H_Attack_Slice_Horizontal',
           'Melee_1H_Attack_Jump_Chop'
         ];
         const randomAttack = attackAnimations[Math.floor(Math.random() * attackAnimations.length)];
@@ -320,6 +321,11 @@ export class Player extends THREE.Group {
           this.attackAction.timeScale = 2.0; // Make attacks 2x faster
           this.attackAction.reset();
           this.attackAction.play();
+
+          // Trigger attack callback
+          if (this.onAttackCallback) {
+            this.onAttackCallback((this as THREE.Group).position.clone());
+          }
         }
       }
     }
@@ -373,6 +379,13 @@ export class Player extends THREE.Group {
    */
   getPosition(): THREE.Vector3 {
     return (this as THREE.Group).position.clone();
+  }
+
+  /**
+   * Set attack callback (called when player attacks)
+   */
+  setOnAttack(callback: (position: THREE.Vector3) => void): void {
+    this.onAttackCallback = callback;
   }
 
   /**
