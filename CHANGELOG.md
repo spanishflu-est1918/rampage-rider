@@ -12,6 +12,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-24]
 
+### Phase 2.5: Code Quality & Refactoring
+
+**Added:**
+- `src/utils/AnimationHelper.ts` - Shared animation utilities for all entities
+- `src/constants.ts` - Expanded with entity configuration constants:
+  - `SKIN_TONES` - European skin tone palette for humanoid entities
+  - `ENTITY_SPEEDS` - Movement speeds for Player, Pedestrian, Cop
+  - `PHYSICS_CONFIG` - Gravity, jump force, ground check values
+  - `ATTACK_CONFIG` - Cop attack ranges, damages, cooldowns
+  - `HIT_STUN` - Stun durations for Player and Cop
+  - `COP_CONFIG` - Cop health, steering force, uniform colors
+  - `PEDESTRIAN_CONFIG` - Health, panic distance, stumble duration
+  - `TASER_CONFIG` - Escape decay, per-press progress, immunity duration
+
+**Changed:**
+- **Cop.ts**: Now uses AssetLoader cache instead of fresh GLTFLoader
+  - Uses `SkeletonUtils.clone()` for proper animated model cloning
+  - References constants instead of hardcoded magic numbers
+  - Uses `AnimationHelper` for visual effects (flash, shadows, skin tones)
+  - Removed 12 hardcoded values → imported from constants
+
+- **Player.ts**: Now uses AssetLoader cache instead of fresh GLTFLoader
+  - References `ENTITY_SPEEDS`, `PHYSICS_CONFIG`, `TASER_CONFIG`
+  - Uses `AnimationHelper.setupShadows()` for model setup
+  - Removed 8 hardcoded values → imported from constants
+
+- **Pedestrian.ts**: Updated to use constants and AnimationHelper
+  - References `ENTITY_SPEEDS`, `PEDESTRIAN_CONFIG`, `SKIN_TONES`
+  - Uses `AnimationHelper` for shadows, skin tones
+  - Removed duplicate skin tone array
+
+- **AssetLoader.ts**: Added boxman.glb to preload list
+
+**Performance Impact:**
+- Cop spawning no longer triggers network requests (uses cache)
+- Player model loading uses cache instead of fresh load
+- Reduced memory churn from repeated GLTFLoader instantiation
+
+**Code Quality Impact:**
+- All gameplay-affecting values now in single location (`constants.ts`)
+- Balance tuning requires editing one file instead of hunting through entities
+- Duplicate code eliminated across 3 entity files
+- AnimationHelper provides consistent patterns for all entities
+
+**Files Created:**
+- `src/utils/AnimationHelper.ts` (170 lines)
+
+**Files Modified:**
+- `src/constants.ts` (+100 lines of entity configuration)
+- `src/core/AssetLoader.ts` (+2 lines - boxman.glb preload)
+- `src/entities/Cop.ts` (refactored loadModel, constants imports)
+- `src/entities/Player.ts` (refactored loadModel, constants imports)
+- `src/entities/Pedestrian.ts` (constants imports, AnimationHelper usage)
+
+---
+
 ### Attack Lock and Pedestrian Physics Bug Fixes
 
 **Fixed:**

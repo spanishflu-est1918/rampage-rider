@@ -430,7 +430,23 @@ export class Engine {
 
     // Set taser escape callback for screen shake
     this.player.setOnEscapePress(() => {
-      this.shakeCamera(0.5); // Strong shake for taser escape
+      this.shakeCamera(0.3); // Shake on each button press
+    });
+
+    // Set taser escape explosion callback for knockback
+    this.player.setOnTaserEscape((position, radius, force) => {
+      // Big screen shake for the explosion
+      this.shakeCamera(1.5);
+
+      // Knockback all cops in radius
+      if (this.cops) {
+        this.cops.applyKnockbackInRadius(position, radius, force);
+      }
+
+      // Emit blood/spark particles for visual effect
+      if (this.particles) {
+        this.particles.emitBlood(position, 50); // Big burst
+      }
     });
 
     // Set attack callback to damage pedestrians and cops
@@ -499,32 +515,22 @@ export class Engine {
           totalKills += copResult.kills;
           allKillPositions.push(...copResult.positions);
 
-          console.log(`[Engine] Killed ${copResult.kills} cops! Cop kills: ${this.stats.copKills}, Stars: ${this.stats.wantedStars}, Heat: ${this.stats.heat.toFixed(1)}%`);
         }
       }
 
       // Spawn blood for all kills
       if (totalKills > 0) {
-        console.log(`[Engine] Spawning blood for ${totalKills} kills at ${allKillPositions.length} positions`);
         const playerPos = this.player.getPosition();
         for (const killPos of allKillPositions) {
           const direction = new THREE.Vector3().subVectors(killPos, playerPos).normalize();
-          console.log('[Engine] Emitting blood at', killPos);
           this.particles.emitBlood(killPos, 30);
           this.particles.emitBloodSpray(killPos, direction, 20);
         }
 
         this.shakeIntensity = 0.5 * totalKills;
-
-        if (maxKills === Infinity) {
-          console.log(`[Engine] MAXED OUT! ${totalKills} kills! Total: ${this.stats.kills}`);
-        } else {
-          console.log(`[Engine] ${totalKills} kill. Total: ${this.stats.kills}, Heat: ${this.stats.heat.toFixed(1)}%`);
-        }
       }
     });
 
-    console.log('[Engine] Player spawned');
   }
 
   /**
@@ -695,33 +701,27 @@ export class Engine {
 
       // Update cop AI with damage callback (action-based damage)
       this.cops.update(dt, playerPos, this.stats.wantedStars, playerCanBeTased, (damage: number) => {
-        // Taser attacks don't deal damage (only stun)
-        if (this.stats.wantedStars === 1) {
-          console.log('[Engine] Taser attack - no damage dealt');
-          // Don't apply damage for taser attacks, but continue to apply stun effect below
-        } else {
-          // Punch (0 stars) or Shoot (2+ stars) - apply damage normally
-          this.stats.health -= damage;
-        }
+        // Check if this is a taser attack (1 star AND player can be tased right now)
+        const isTaserAttack = this.stats.wantedStars === 1 && this.player.canBeTased();
 
-        // Apply hit stun reaction (brief freeze + animation)
-        this.player.applyHitStun();
-
-        // Apply taser stun at 1 star (taser attacks)
-        // applyTaserStun() handles immunity and already-tased checks internally
-        if (this.stats.wantedStars === 1) {
+        if (isTaserAttack) {
+          // Taser attacks don't deal damage - only stun
           this.player.applyTaserStun();
+        } else {
+          // Punch, Shoot, or fallback punch at 1 star - apply damage normally
+          this.stats.health -= damage;
+          this.player.applyHitStun();
         }
 
         // Check for game over
         if (this.stats.health <= 0 && !this.isDying) {
           this.stats.health = 0;
           this.isDying = true;
-          console.log('[Engine] Player killed - playing death animation...');
+          console.log('[Engine] Player killed');
 
           // Trigger death animation, then show game over screen
           this.player.die(() => {
-            console.log('[Engine] Death animation complete - Game Over!');
+            console.log('[Engine] Game Over');
             this.state = GameState.GAME_OVER;
             if (this.callbacks.onGameOver) {
               this.callbacks.onGameOver({ ...this.stats });

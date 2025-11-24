@@ -213,16 +213,57 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 
 ---
 
+## Phase 2.5: Code Quality & Refactoring
+
+**Added:** November 24, 2024 (Code evaluation identified these improvements)
+
+### 2.5.1 Asset Loading Standardization (HIGH PRIORITY) ✅
+- [x] Fix Cop.ts to use AssetLoader cache instead of fresh GLTFLoader
+- [x] Fix Player.ts to use AssetLoader cache (add boxman.glb to preload)
+- [x] Ensure all entities use SkeletonUtils.clone() for animated models
+
+### 2.5.2 Constants Consolidation (HIGH PRIORITY) ✅
+- [x] Extract SKIN_TONES array to constants.ts
+- [x] Add ENTITY_SPEEDS (walkSpeed, sprintSpeed, chaseSpeed, etc.)
+- [x] Add ATTACK_CONFIG (ranges, damages, cooldowns for punch/taser/shoot)
+- [x] Add PHYSICS_CONFIG (gravity, jumpForce, groundCheckY)
+- [x] Update all entity files to import from constants.ts
+
+### 2.5.3 Animation System DRY (MEDIUM PRIORITY) ✅
+- [x] Create AnimationHelper utility with shared playAnimation()
+- [x] Refactor Player.ts to use AnimationHelper
+- [x] Refactor Pedestrian.ts to use AnimationHelper
+- [x] Refactor Cop.ts to use AnimationHelper
+
+### 2.5.4 Engine Refactoring (MEDIUM PRIORITY)
+- [ ] Split Engine.update() into focused methods:
+  - updatePhysics(dt)
+  - updateGameState(dt) - combo, heat, timers
+  - updateEntities(dt) - player, crowd, cops
+  - updateCamera(dt) - follow, shake
+  - updateStats() - callbacks
+- [ ] Extract performance tracking to separate method
+
+### 2.5.5 Future Improvements (LOW PRIORITY)
+- [ ] Implement object pooling for Pedestrian/Cop entities
+- [ ] Add debug flag for console.log statements
+- [ ] Create unit tests for core systems
+
+---
+
 ## Current Status
 
-**Last Updated:** November 23, 2024
+**Last Updated:** November 24, 2024
 
-**Current Phase:** Phase 2 - Player Movement Complete (2.1, 2.2 ✅) → Next: Entity Base Class (2.3)
+**Current Phase:** Phase 2.5 - Code Quality Refactoring (HIGH priority items complete)
 
 **Completed:**
 - Phase 1: Core engine, AI manager, UI system, type fixes ✅
 - Phase 2.1: Basic player movement with Sketchbook system ✅
 - Phase 2.2: Jump, sprint, and attack mechanics ✅
+- Phase 2.5.1: Asset Loading Standardization ✅
+- Phase 2.5.2: Constants Consolidation ✅
+- Phase 2.5.3: Animation System DRY ✅
 
 **Player Features Implemented:**
 - Camera-relative WASD movement for isometric view

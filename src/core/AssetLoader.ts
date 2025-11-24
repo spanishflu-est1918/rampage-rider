@@ -33,6 +33,9 @@ export class AssetLoader {
     }
 
     const assetPaths = [
+      // Player model
+      '/assets/boxman.glb',
+
       // Pedestrian models
       '/assets/pedestrians/BlueSoldier_Female.gltf',
       '/assets/pedestrians/BlueSoldier_Male.gltf',

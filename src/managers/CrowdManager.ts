@@ -155,7 +155,6 @@ export class CrowdManager {
       vehicle.steering.add(separationBehavior);
     }
 
-    console.log('[CrowdManager] Flocking behaviors added');
   }
 
   /**

@@ -3,7 +3,13 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
+import { AnimationHelper } from '../utils/AnimationHelper';
 import { AssetLoader } from '../core/AssetLoader';
+import {
+  SKIN_TONES,
+  ENTITY_SPEEDS,
+  PEDESTRIAN_CONFIG,
+} from '../constants';
 
 /**
  * Pedestrian Entity
@@ -30,9 +36,9 @@ export class Pedestrian extends THREE.Group {
 
   // State
   private isDead: boolean = false;
-  private health: number = 1; // One-shot kill
-  private walkSpeed: number = 1.5; // Normal walk speed
-  private runSpeed: number = 6.0; // Panic run speed (1.5x faster)
+  private health: number = PEDESTRIAN_CONFIG.HEALTH;
+  private walkSpeed: number = ENTITY_SPEEDS.PEDESTRIAN_WALK;
+  private runSpeed: number = ENTITY_SPEEDS.PEDESTRIAN_RUN;
   private isPanicking: boolean = false;
   private isStumbling: boolean = false;
   private stumbleTimer: number = 0;
@@ -78,7 +84,6 @@ export class Pedestrian extends THREE.Group {
     // Load character model
     this.loadModel(characterType);
 
-    console.log(`[Pedestrian] Created ${characterType} at`, position);
   }
 
   /**
@@ -102,31 +107,12 @@ export class Pedestrian extends THREE.Group {
         animations: cachedGltf.animations
       };
 
-      // European skin tone range (lighter to darker)
-      const skinTones = [
-        0xF5D0B8, // Very light peachy
-        0xE8B196, // Light peachy tan
-        0xDDA886, // Medium peachy
-        0xD5A27A, // Light tan
-        0xCCA070, // Medium tan
-      ];
+      // Setup shadows
+      AnimationHelper.setupShadows(gltf.scene);
 
-      // Pick random skin tone for this pedestrian
-      const randomSkinTone = skinTones[Math.floor(Math.random() * skinTones.length)];
-
-      // Setup shadows and fix skin material
-      gltf.scene.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-
-          // Fix black skin material with realistic skin tone
-          if (child.material && (child.material as THREE.Material).name?.startsWith('Skin')) {
-            const mat = child.material as THREE.MeshStandardMaterial;
-            mat.color.setHex(randomSkinTone);
-          }
-        }
-      });
+      // Apply random skin tone
+      const randomSkinTone = AnimationHelper.randomElement(SKIN_TONES);
+      AnimationHelper.applySkinTone(gltf.scene, randomSkinTone);
 
       (this as THREE.Group).add(gltf.scene);
 
@@ -139,7 +125,6 @@ export class Pedestrian extends THREE.Group {
 
       this.modelLoaded = true;
 
-      console.log(`[Pedestrian] Loaded ${characterType} with`, this.animations.length, 'animations');
     } catch (error) {
       console.error(`[Pedestrian] Failed to load ${characterType}:`, error);
     }
@@ -202,11 +187,11 @@ export class Pedestrian extends THREE.Group {
     // Flee from danger (flatten to 2D to prevent vertical movement)
     const flatDangerPosition = new YUKA.Vector3(dangerPosition.x, 0, dangerPosition.z);
     const fleeBehavior = new YUKA.FleeBehavior(flatDangerPosition);
-    fleeBehavior.panicDistance = 15;
+    fleeBehavior.panicDistance = PEDESTRIAN_CONFIG.PANIC_DISTANCE;
     this.yukaVehicle.steering.add(fleeBehavior);
 
-    // Play run animation
-    this.playAnimation('Run', 0.1);
+    // Play walk animation (speed will be increased in update loop)
+    this.playAnimation('Walk', 0.1);
   }
 
   /**
@@ -241,7 +226,6 @@ export class Pedestrian extends THREE.Group {
     // Play death animation
     this.playAnimation('Death', 0.1);
 
-    console.log('[Pedestrian] Died');
   }
 
   /**
@@ -299,18 +283,21 @@ export class Pedestrian extends THREE.Group {
     if (!this.isStumbling) {
       const speed = this.yukaVehicle.velocity.length();
       if (speed > 0.5) {
-        if (this.isPanicking) {
-          if (this.currentAnimation !== 'Run') {
-            this.playAnimation('Run', 0.1);
-          }
-        } else {
-          if (this.currentAnimation !== 'Walk') {
-            this.playAnimation('Walk', 0.1);
-          }
+        // Use Walk animation for both states, but speed up when panicking
+        if (this.currentAnimation !== 'Walk') {
+          this.playAnimation('Walk', 0.1);
+        }
+        // Speed up animation when panicking to simulate running
+        if (this.mixer) {
+          this.mixer.timeScale = this.isPanicking ? 2.5 : 1.0;
         }
       } else {
         if (this.currentAnimation !== 'Idle') {
           this.playAnimation('Idle', 0.2);
+        }
+        // Reset animation speed when idle
+        if (this.mixer) {
+          this.mixer.timeScale = 1.0;
         }
       }
     }
@@ -342,7 +329,7 @@ export class Pedestrian extends THREE.Group {
 
     // Set stumbling state and play RecieveHit animation
     this.isStumbling = true;
-    this.stumbleTimer = 0.8; // Stumble for 0.8 seconds
+    this.stumbleTimer = PEDESTRIAN_CONFIG.STUMBLE_DURATION;
     this.playAnimation('RecieveHit', 0.1);
   }
 
@@ -377,6 +364,5 @@ export class Pedestrian extends THREE.Group {
       });
     }, 0);
 
-    console.log('[Pedestrian] Destroyed');
   }
 }

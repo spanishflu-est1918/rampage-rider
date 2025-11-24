@@ -79,7 +79,6 @@ export class CopManager {
     this.cops.push(cop);
     this.scene.add(cop);
 
-    console.log('[CopManager] Spawned cop at', spawnPos, '- Total:', this.cops.length);
   }
 
   /**
@@ -215,5 +214,32 @@ export class CopManager {
         health: cop.getHealth(),
         maxHealth: 3
       }));
+  }
+
+  /**
+   * Apply knockback to all cops within radius (used for taser escape explosion)
+   */
+  applyKnockbackInRadius(fromPosition: THREE.Vector3, radius: number, force: number): number {
+    let affectedCount = 0;
+
+    for (const cop of this.cops) {
+      if (cop.isDeadState()) continue;
+
+      const copPos = cop.getPosition();
+      const distance = copPos.distanceTo(fromPosition);
+
+      if (distance <= radius) {
+        // Scale force by distance (closer = stronger)
+        const scaledForce = force * (1 - distance / radius);
+        cop.applyKnockback(fromPosition, scaledForce);
+        affectedCount++;
+      }
+    }
+
+    if (affectedCount > 0) {
+      console.log(`[CopManager] Knockback applied to ${affectedCount} cops`);
+    }
+
+    return affectedCount;
   }
 }

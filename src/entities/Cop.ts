@@ -1,8 +1,17 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as YUKA from 'yuka';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
+import { AnimationHelper } from '../utils/AnimationHelper';
+import { AssetLoader } from '../core/AssetLoader';
+import {
+  SKIN_TONES,
+  ENTITY_SPEEDS,
+  ATTACK_CONFIG,
+  HIT_STUN,
+  COP_CONFIG,
+} from '../constants';
 
 /**
  * Cop Entity
@@ -29,32 +38,18 @@ export class Cop extends THREE.Group {
 
   // State
   private isDead: boolean = false;
-  private health: number = 3; // Requires 3 knife hits to kill
-  private chaseSpeed: number = 9.0; // Much faster than player
-  private lastTarget: THREE.Vector3 | null = null; // Track player position for rotation
+  private health: number = COP_CONFIG.HEALTH;
+  private chaseSpeed: number = ENTITY_SPEEDS.COP_CHASE;
+  private lastTarget: THREE.Vector3 | null = null;
   private isHitStunned: boolean = false;
   private hitStunTimer: number = 0;
-  private readonly hitStunDuration: number = 0.6; // 600ms hit stun (more visible)
 
   // Attack state
   private currentWantedStars: number = 0; // 0=punch, 1=taser, 2+=shoot
-  private playerCanBeTased: boolean = true; // If false, cop punches instead of tasing at 1 star
+  private playerCanBeTased: boolean = true;
   private attackCooldown: number = 0;
   private isCurrentlyAttacking: boolean = false;
-  private onDealDamage?: (damage: number) => void; // Callback to damage player
-
-  // Attack ranges and damage based on wanted stars
-  private readonly punchRange: number = 1.5; // 0 stars: punch at very close range
-  private readonly taserRange: number = 6.0; // 1 star: taser at medium range (doubled)
-  private readonly shootRange: number = 8.0; // 2+ stars: shoot at longer range
-
-  private readonly punchDamage: number = 10;
-  private readonly taserDamage: number = 15;
-  private readonly shootDamage: number = 20;
-
-  private readonly punchCooldown: number = 1.5; // 1.5 seconds between punches
-  private readonly taserCooldown: number = 2.0; // 2 seconds between tasers
-  private readonly shootCooldown: number = 1.0; // 1 second between shots
+  private onDealDamage?: (damage: number) => void;
 
   constructor(
     position: THREE.Vector3,
@@ -70,8 +65,8 @@ export class Cop extends THREE.Group {
     this.yukaVehicle = new YUKA.Vehicle();
     this.yukaVehicle.position.copy(position);
     this.yukaVehicle.maxSpeed = this.chaseSpeed;
-    this.yukaVehicle.maxForce = 20.0; // Very high force for instant direction changes
-    this.yukaVehicle.updateOrientation = false; // We handle rotation manually for instant turning
+    this.yukaVehicle.maxForce = COP_CONFIG.MAX_FORCE;
+    this.yukaVehicle.updateOrientation = false; // We handle rotation manually
 
     // Add to Yuka entity manager
     this.yukaEntityManager.add(this.yukaVehicle);
@@ -96,90 +91,74 @@ export class Cop extends THREE.Group {
     // Load police character model
     this.loadModel();
 
-    console.log('[Cop] Created at', position);
   }
 
   /**
-   * Load cop character model
+   * Load cop character model from cache
    */
   private async loadModel(): Promise<void> {
-    const loader = new GLTFLoader();
-
     // 80% male, 20% female distribution
     const isFemale = Math.random() < 0.2;
     const maleTypes = ['BlueSoldier_Male', 'Soldier_Male'];
     const femaleTypes = ['BlueSoldier_Female', 'Soldier_Female'];
 
     const copTypes = isFemale ? femaleTypes : maleTypes;
-    const randomCop = copTypes[Math.floor(Math.random() * copTypes.length)];
+    const randomCop = AnimationHelper.randomElement(copTypes);
+    const modelPath = `/assets/pedestrians/${randomCop}.gltf`;
 
-    console.log('[Cop] Spawning', isFemale ? 'female' : 'male', 'cop:', randomCop);
 
     try {
-      const gltf = await loader.loadAsync(`/assets/pedestrians/${randomCop}.gltf`);
+      // Use cached model from AssetLoader instead of loading fresh
+      const assetLoader = AssetLoader.getInstance();
+      const cachedGltf = assetLoader.getModel(modelPath);
 
-      // European skin tone range (lighter to darker)
-      const skinTones = [
-        0xF5D0B8, // Very light peachy
-        0xE8B196, // Light peachy tan
-        0xDDA886, // Medium peachy
-        0xD5A27A, // Light tan
-        0xCCA070, // Medium tan
-      ];
+      if (!cachedGltf) {
+        console.error(`[Cop] Model not in cache: ${modelPath}`);
+        this.createFallbackMesh();
+        return;
+      }
 
-      // Pick random skin tone for this cop
-      const randomSkinTone = skinTones[Math.floor(Math.random() * skinTones.length)];
+      // Clone the cached model to avoid sharing state between instances
+      const clonedScene = SkeletonUtils.clone(cachedGltf.scene);
 
-      gltf.scene.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+      // Setup shadows
+      AnimationHelper.setupShadows(clonedScene);
 
-          if (child.material) {
-            const mat = child.material as THREE.MeshStandardMaterial;
+      // Apply random skin tone
+      const randomSkinTone = AnimationHelper.randomElement(SKIN_TONES);
+      AnimationHelper.applySkinTone(clonedScene, randomSkinTone);
 
-            // Apply skin tone
-            if (mat.name?.startsWith('Skin')) {
-              mat.color.setHex(randomSkinTone);
-            }
+      // Apply cop uniform colors
+      AnimationHelper.applyMaterialColor(clonedScene, ['Main'], COP_CONFIG.UNIFORM_COLOR);
+      AnimationHelper.applyMaterialColor(clonedScene, ['Helmet', 'Black', 'Grey'], COP_CONFIG.GEAR_COLOR);
 
-            // Tint cop uniform bright police blue
-            if (mat.name?.startsWith('Main')) {
-              mat.color.set(0x0066ff); // Bright police blue
-            }
-
-            // Tint helmet/gear dark navy
-            if (mat.name?.startsWith('Helmet') || mat.name?.startsWith('Black') || mat.name?.startsWith('Grey')) {
-              mat.color.set(0x001a4d); // Dark navy/black
-            }
-          }
-        }
-      });
-
-      (this as THREE.Group).add(gltf.scene);
+      (this as THREE.Group).add(clonedScene);
 
       // Setup animations
-      this.mixer = new THREE.AnimationMixer(gltf.scene);
+      this.mixer = new THREE.AnimationMixer(clonedScene);
       this.mixer.timeScale = 1.5;
-      this.animations = gltf.animations;
+      this.animations = cachedGltf.animations;
 
       this.playAnimation('Run', 0.3);
       this.modelLoaded = true;
 
-      console.log('[Cop] Model loaded with', this.animations.length, 'animations');
-      console.log('[Cop] Available animations:', this.animations.map(a => a.name).join(', '));
     } catch (error) {
       console.error('[Cop] Failed to load model:', error);
-
-      // Fallback: blue capsule
-      const geometry = new THREE.CapsuleGeometry(0.3, 0.6, 8, 16);
-      const material = new THREE.MeshPhongMaterial({ color: 0x0044cc });
-      const fallbackMesh = new THREE.Mesh(geometry, material);
-      fallbackMesh.castShadow = true;
-      fallbackMesh.position.y = 0.6;
-      (this as THREE.Group).add(fallbackMesh);
-      this.modelLoaded = true;
+      this.createFallbackMesh();
     }
+  }
+
+  /**
+   * Create fallback capsule mesh when model loading fails
+   */
+  private createFallbackMesh(): void {
+    const geometry = new THREE.CapsuleGeometry(0.3, 0.6, 8, 16);
+    const material = new THREE.MeshPhongMaterial({ color: 0x0044cc });
+    const fallbackMesh = new THREE.Mesh(geometry, material);
+    fallbackMesh.castShadow = true;
+    fallbackMesh.position.y = 0.6;
+    (this as THREE.Group).add(fallbackMesh);
+    this.modelLoaded = true;
   }
 
   /**
@@ -229,28 +208,13 @@ export class Cop extends THREE.Group {
   private getAttackParams(): { range: number; animation: string; damage: number; cooldown: number } {
     if (this.currentWantedStars >= 2) {
       // 2+ stars: Shoot at range
-      return {
-        range: this.shootRange,
-        animation: 'Shoot_OneHanded',
-        damage: this.shootDamage,
-        cooldown: this.shootCooldown
-      };
+      return ATTACK_CONFIG.SHOOT;
     } else if (this.currentWantedStars === 1 && this.playerCanBeTased) {
       // 1 star: Taser at medium-close range (only if player can be tased)
-      return {
-        range: this.taserRange,
-        animation: 'Punch', // Using Punch for taser effect
-        damage: this.taserDamage,
-        cooldown: this.taserCooldown
-      };
+      return ATTACK_CONFIG.TASER;
     } else {
       // 0 stars OR 1 star but player can't be tased: Punch at very close range
-      return {
-        range: this.punchRange,
-        animation: 'Punch',
-        damage: this.punchDamage,
-        cooldown: this.punchCooldown
-      };
+      return ATTACK_CONFIG.PUNCH;
     }
   }
 
@@ -295,47 +259,21 @@ export class Cop extends THREE.Group {
 
     // Trigger hit stun reaction
     this.isHitStunned = true;
-    this.hitStunTimer = this.hitStunDuration;
-    console.log(`[Cop] Hit stunned for ${this.hitStunDuration}s!`);
+    this.hitStunTimer = HIT_STUN.COP;
 
     // Visual hit reaction: flash white
-    (this as THREE.Group).traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material) {
-        const mat = child.material as THREE.MeshStandardMaterial;
-        const originalEmissive = mat.emissive.getHex();
-        const originalEmissiveIntensity = mat.emissiveIntensity;
-
-        // Flash white
-        mat.emissive.setHex(0xffffff);
-        mat.emissiveIntensity = 1.0;
-
-        // Reset after short delay
-        setTimeout(() => {
-          mat.emissive.setHex(originalEmissive);
-          mat.emissiveIntensity = originalEmissiveIntensity;
-        }, 100);
-      }
-    });
+    AnimationHelper.flashWhite(this as THREE.Group);
 
     // Try to play a hit animation if available
     if (this.mixer && this.animations.length > 0) {
       const hitAnimNames = ['RecieveHit', 'HitReact', 'Hit_Reaction', 'GetHit', 'TakeDamage', 'Damage'];
-      let hitAnim = null;
+      const hitAnim = AnimationHelper.findAnimationByNames(this.animations, hitAnimNames);
 
-      for (const name of hitAnimNames) {
-        hitAnim = THREE.AnimationClip.findByName(this.animations, name);
-        if (hitAnim) {
-          console.log(`[Cop] Playing hit animation: ${name}`);
-          const action = this.mixer.clipAction(hitAnim);
-          action.setLoop(THREE.LoopOnce, 1);
-          action.reset();
-          action.play();
-          break;
-        }
-      }
-
-      if (!hitAnim) {
-        console.log('[Cop] No hit reaction animation found, using visual flash only. Available:', this.animations.map(a => a.name).join(', '));
+      if (hitAnim) {
+        const action = this.mixer.clipAction(hitAnim);
+        action.setLoop(THREE.LoopOnce, 1);
+        action.reset();
+        action.play();
       }
     }
 
@@ -439,7 +377,6 @@ export class Cop extends THREE.Group {
       // Deal damage when attack executes
       if (this.onDealDamage) {
         this.onDealDamage(attackParams.damage);
-        console.log(`[Cop] Dealt ${attackParams.damage} damage!`);
       }
 
       // Set cooldown for next attack
@@ -525,5 +462,51 @@ export class Cop extends THREE.Group {
    */
   getHealth(): number {
     return this.health;
+  }
+
+  /**
+   * Apply knockback force (used when player escapes taser)
+   */
+  applyKnockback(fromPosition: THREE.Vector3, force: number): void {
+    if (this.isDead) return;
+
+    // Calculate direction away from the source
+    const currentPos = this.rigidBody.translation();
+    const direction = new THREE.Vector3(
+      currentPos.x - fromPosition.x,
+      0,
+      currentPos.z - fromPosition.z
+    ).normalize();
+
+    // Apply knockback to Yuka vehicle velocity
+    this.yukaVehicle.velocity.set(
+      direction.x * force,
+      0,
+      direction.z * force
+    );
+
+    // Trigger hit stun so they can't immediately chase
+    this.isHitStunned = true;
+    this.hitStunTimer = HIT_STUN.COP * 2; // Double stun duration for explosion
+
+    // Play hit animation
+    if (this.mixer && this.animations.length > 0) {
+      const hitAnimNames = ['RecieveHit', 'HitReact', 'Hit_Reaction', 'GetHit'];
+      const hitAnim = AnimationHelper.findAnimationByNames(this.animations, hitAnimNames);
+      if (hitAnim) {
+        const action = this.mixer.clipAction(hitAnim);
+        action.setLoop(THREE.LoopOnce, 1);
+        action.reset();
+        action.play();
+      }
+    }
+  }
+
+  /**
+   * Get cop position
+   */
+  getPosition(): THREE.Vector3 {
+    const pos = this.rigidBody.translation();
+    return new THREE.Vector3(pos.x, pos.y, pos.z);
   }
 }

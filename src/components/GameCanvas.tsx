@@ -164,7 +164,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
       else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') inputState.mount = isDown; // Walk (slows down from default sprint)
       else if (e.code === 'KeyF') {
         inputState.attack = isDown;
-        console.log('[GameCanvas] F key pressed, attack:', isDown);
+        // Attack input (F key)
       }
 
       engineRef.current.handleInput(inputState);
