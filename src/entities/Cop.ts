@@ -15,6 +15,7 @@ import * as YUKA from 'yuka';
 export class Cop extends THREE.Group {
   private rigidBody: RAPIER.RigidBody;
   private collider: RAPIER.Collider;
+  private characterController: RAPIER.KinematicCharacterController;
   private world: RAPIER.World;
   private mixer: THREE.AnimationMixer | null = null;
   private animations: THREE.AnimationClip[] = [];
@@ -27,8 +28,17 @@ export class Cop extends THREE.Group {
 
   // State
   private isDead: boolean = false;
-  private health: number = 1;
+  private health: number = 3; // Requires 3 knife hits to kill
   private chaseSpeed: number = 9.0; // Much faster than player
+  private lastTarget: THREE.Vector3 | null = null; // Track player position for rotation
+
+  // Attack state
+  private currentHeat: number = 0;
+
+  // Attack ranges based on heat level
+  private readonly punchRange: number = 1.5; // Low heat: punch at very close range
+  private readonly taserRange: number = 3.0; // Medium heat: taser at close range
+  private readonly shootRange: number = 6.0; // High heat: shoot at medium range
 
   constructor(
     position: THREE.Vector3,
@@ -44,8 +54,8 @@ export class Cop extends THREE.Group {
     this.yukaVehicle = new YUKA.Vehicle();
     this.yukaVehicle.position.copy(position);
     this.yukaVehicle.maxSpeed = this.chaseSpeed;
-    this.yukaVehicle.maxForce = 10.0; // High force for fast acceleration
-    this.yukaVehicle.updateOrientation = false;
+    this.yukaVehicle.maxForce = 20.0; // Very high force for instant direction changes
+    this.yukaVehicle.updateOrientation = false; // We handle rotation manually for instant turning
 
     // Add to Yuka entity manager
     this.yukaEntityManager.add(this.yukaVehicle);
@@ -67,6 +77,15 @@ export class Cop extends THREE.Group {
       .setCollisionGroups(collisionGroups)
       .setTranslation(0, 0.6, 0);
     this.collider = world.createCollider(colliderDesc, this.rigidBody);
+
+    // Create character controller for collision-aware movement
+    const controller = world.createCharacterController(0.01);
+    if (!controller) {
+      throw new Error('[Cop] Failed to create character controller');
+    }
+    this.characterController = controller;
+    this.characterController.enableAutostep(0.5, 0.2, true); // Auto-step over small obstacles
+    this.characterController.setSlideEnabled(true); // Enable sliding along walls
 
     // Load police character model
     this.loadModel();
@@ -142,6 +161,7 @@ export class Cop extends THREE.Group {
       this.modelLoaded = true;
 
       console.log('[Cop] Model loaded with', this.animations.length, 'animations');
+      console.log('[Cop] Available animations:', this.animations.map(a => a.name).join(', '));
     } catch (error) {
       console.error('[Cop] Failed to load model:', error);
 
@@ -151,7 +171,7 @@ export class Cop extends THREE.Group {
       const fallbackMesh = new THREE.Mesh(geometry, material);
       fallbackMesh.castShadow = true;
       fallbackMesh.position.y = 0.6;
-      this.add(fallbackMesh);
+      (this as THREE.Group).add(fallbackMesh);
       this.modelLoaded = true;
     }
   }
@@ -177,10 +197,36 @@ export class Cop extends THREE.Group {
   }
 
   /**
+   * Update current heat level to determine attack type
+   */
+  setHeatLevel(heat: number): void {
+    this.currentHeat = heat;
+  }
+
+  /**
+   * Get attack parameters based on current heat level
+   */
+  private getAttackParams(): { range: number; animation: string } {
+    if (this.currentHeat >= 75) {
+      // High heat: Shoot at range
+      return { range: this.shootRange, animation: 'Shoot_OneHanded' };
+    } else if (this.currentHeat >= 50) {
+      // Medium heat: Taser at medium-close range
+      return { range: this.taserRange, animation: 'Punch' }; // Using Punch for taser effect
+    } else {
+      // Low heat: Punch at very close range
+      return { range: this.punchRange, animation: 'Punch' };
+    }
+  }
+
+  /**
    * Set chase target (player position)
    */
   setChaseTarget(target: THREE.Vector3): void {
     if (this.isDead) return;
+
+    // Store target for rotation calculation
+    this.lastTarget = target;
 
     // Clear existing behaviors
     this.yukaVehicle.steering.clear();
@@ -188,19 +234,19 @@ export class Cop extends THREE.Group {
     // Flatten target to 2D to prevent vertical movement
     const flatTarget = new YUKA.Vector3(target.x, 0, target.z);
 
-    // Chase player
+    // Chase player with high priority
     const seekBehavior = new YUKA.SeekBehavior(flatTarget);
-    seekBehavior.weight = 0.8;
+    seekBehavior.weight = 2.0; // Much stronger seek
     this.yukaVehicle.steering.add(seekBehavior);
 
     // Separate from other cops to prevent overlapping
     const separationBehavior = new YUKA.SeparationBehavior();
-    separationBehavior.weight = 1.5; // Strong separation
+    separationBehavior.weight = 0.8; // Reduced to prioritize chase
     this.yukaVehicle.steering.add(separationBehavior);
 
     // Add obstacle avoidance
     const obstacleBehavior = new YUKA.ObstacleAvoidanceBehavior();
-    obstacleBehavior.weight = 0.3;
+    obstacleBehavior.weight = 0.5;
     this.yukaVehicle.steering.add(obstacleBehavior);
   }
 
@@ -231,7 +277,7 @@ export class Cop extends THREE.Group {
 
     // Fade out and remove after delay
     setTimeout(() => {
-      this.visible = false;
+      (this as THREE.Group).visible = false;
     }, 2000);
   }
 
@@ -248,54 +294,92 @@ export class Cop extends THREE.Group {
 
     if (this.isDead) return;
 
-    // Get current and desired positions
+    // Get current position
     const currentPos = this.rigidBody.translation();
-    const desiredX = this.yukaVehicle.position.x;
-    const desiredZ = this.yukaVehicle.position.z;
+    const currentPosition = new THREE.Vector3(currentPos.x, currentPos.y, currentPos.z);
 
-    // Calculate movement delta
-    const deltaX = desiredX - currentPos.x;
-    const deltaZ = desiredZ - currentPos.z;
-    const movement = { x: deltaX, y: 0.0, z: deltaZ };
-
-    // Use Rapier's collision-aware movement (character controller style)
-    // Compute corrected movement that doesn't penetrate other colliders
-    const correctedMovement = this.world.computeColliderMovement(
-      this.collider,
-      movement,
-      undefined, // Query filter groups (use collider's own)
-      undefined  // Query filter (none)
-    );
-
-    // Apply corrected movement
-    const newX = currentPos.x + correctedMovement.x;
-    const newZ = currentPos.z + correctedMovement.z;
-    const newPosition = new THREE.Vector3(newX, 0, newZ);
-
-    // Update physics body
-    this.rigidBody.setNextKinematicTranslation(newPosition);
-
-    // Sync Three.js
-    (this as THREE.Group).position.copy(newPosition);
-
-    // Update Yuka position to match actual (corrected) position
-    this.yukaVehicle.position.set(newX, 0, newZ);
-
-    // Sync rotation
-    if (this.yukaVehicle.velocity.length() > 0.1) {
-      const angle = Math.atan2(this.yukaVehicle.velocity.x, this.yukaVehicle.velocity.z);
-      (this as THREE.Group).rotation.y = angle;
+    // Check distance to target for attack logic
+    let distanceToTarget = Infinity;
+    if (this.lastTarget) {
+      distanceToTarget = currentPosition.distanceTo(this.lastTarget);
     }
 
-    // Update animation based on movement
-    const speed = this.yukaVehicle.velocity.length();
-    if (speed > 0.5) {
-      if (this.currentAnimation !== 'Run') {
-        this.playAnimation('Run', 0.1);
+    // Get attack parameters based on current heat level
+    const attackParams = this.getAttackParams();
+
+    // Attack logic: if within range, stop and play attack animation
+    if (distanceToTarget <= attackParams.range) {
+      // Stop moving
+      this.yukaVehicle.velocity.set(0, 0, 0);
+
+      // Face target
+      if (this.lastTarget) {
+        const dirX = this.lastTarget.x - currentPosition.x;
+        const dirZ = this.lastTarget.z - currentPosition.z;
+        const angle = Math.atan2(dirX, dirZ);
+        (this as THREE.Group).rotation.y = angle;
+      }
+
+      // Play attack animation based on heat level
+      if (this.currentAnimation !== attackParams.animation) {
+        this.playAnimation(attackParams.animation, 0.1);
       }
     } else {
-      if (this.currentAnimation !== 'Idle') {
-        this.playAnimation('Idle', 0.2);
+      // Chase logic: move toward target
+      // Get desired position from Yuka AI
+      const desiredX = this.yukaVehicle.position.x;
+      const desiredZ = this.yukaVehicle.position.z;
+
+      // Calculate desired movement delta
+      const deltaX = desiredX - currentPos.x;
+      const deltaZ = desiredZ - currentPos.z;
+      const desiredMovement = { x: deltaX, y: 0.0, z: deltaZ };
+
+      // Use character controller to compute collision-safe movement
+      this.characterController.computeColliderMovement(this.collider, desiredMovement);
+
+      // Get the corrected movement (accounts for collisions and sliding)
+      const correctedMovement = this.characterController.computedMovement();
+
+      // Apply corrected movement
+      const newPosition = new THREE.Vector3(
+        currentPos.x + correctedMovement.x,
+        0,
+        currentPos.z + correctedMovement.z
+      );
+
+      // Update physics body
+      this.rigidBody.setNextKinematicTranslation(newPosition);
+
+      // Sync Three.js
+      (this as THREE.Group).position.copy(newPosition);
+
+      // Update Yuka position to match actual position (feedback collision response to AI)
+      this.yukaVehicle.position.set(newPosition.x, 0, newPosition.z);
+
+      // Instant rotation to face target (no smoothing - cops snap to face player)
+      if (this.lastTarget) {
+        const dirX = this.lastTarget.x - newPosition.x;
+        const dirZ = this.lastTarget.z - newPosition.z;
+        const distSq = dirX * dirX + dirZ * dirZ;
+
+        // Only rotate if target is not too close (avoid jitter)
+        if (distSq > 0.01) {
+          const angle = Math.atan2(dirX, dirZ);
+          (this as THREE.Group).rotation.y = angle;
+        }
+      }
+
+      // Update animation based on movement
+      const speed = this.yukaVehicle.velocity.length();
+      if (speed > 0.5) {
+        if (this.currentAnimation !== 'Run') {
+          this.playAnimation('Run', 0.1);
+        }
+      } else {
+        if (this.currentAnimation !== 'Idle') {
+          this.playAnimation('Idle', 0.2);
+        }
       }
     }
   }

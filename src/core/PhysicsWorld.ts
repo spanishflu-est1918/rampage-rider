@@ -92,7 +92,7 @@ export class PhysicsWorld {
     direction: THREE.Vector3,
     maxDistance: number,
     filterGroups?: number
-  ): RAPIER.RayColliderToi | null {
+  ): RAPIER.RayColliderHit | null {
     if (!this.world) return null;
 
     const ray = new RAPIER.Ray(
@@ -116,6 +116,14 @@ export class PhysicsWorld {
    */
   getWorld(): RAPIER.World | null {
     return this.world;
+  }
+
+  /**
+   * Create a kinematic character controller
+   */
+  createCharacterController(offset: number = 0.01): RAPIER.KinematicCharacterController | null {
+    if (!this.world) return null;
+    return this.world.createCharacterController(offset);
   }
 
   /**

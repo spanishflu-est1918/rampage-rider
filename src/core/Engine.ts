@@ -392,7 +392,8 @@ export class Engine {
 
         if (copResult.kills > 0) {
           this.stats.score += copResult.kills * 50;
-          this.stats.heat = Math.max(0, this.stats.heat - (copResult.kills * 10));
+          // Killing cops adds SIGNIFICANT heat (25% per cop)
+          this.stats.heat = Math.min(100, this.stats.heat + (copResult.kills * 25));
 
           totalKills += copResult.kills;
           allKillPositions.push(...copResult.positions);
@@ -506,11 +507,17 @@ export class Engine {
       // Update cop spawns based on heat
       this.cops.updateSpawns(this.stats.heat, playerPos);
 
-      // Update cop AI
-      this.cops.update(dt, playerPos);
+      // Update cop AI (pass heat for attack behavior)
+      this.cops.update(dt, playerPos, this.stats.heat);
 
       // Handle cop contact damage (10 HP/s)
-      if (this.cops.handlePlayerCollisions(playerPos)) {
+      const attackingCop = this.cops.handlePlayerCollisions(playerPos, this.stats.heat);
+      if (attackingCop) {
+        // Apply taser stun at medium heat (50-75%)
+        if (this.stats.heat >= 50 && this.stats.heat < 75) {
+          this.player.applyTaserStun();
+        }
+
         this.stats.health -= 10 * dt;
         if (this.stats.health <= 0) {
           this.stats.health = 0;

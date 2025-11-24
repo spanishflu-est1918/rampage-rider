@@ -34,7 +34,7 @@ export class CopManager {
   updateSpawns(heat: number, playerPosition: THREE.Vector3): void {
     // Remove dead cops
     this.cops = this.cops.filter(cop => {
-      if (cop.isDeadState() && !cop.visible) {
+      if (cop.isDeadState() && !(cop as THREE.Group).visible) {
         this.scene.remove(cop);
         cop.dispose();
         return false;
@@ -85,13 +85,16 @@ export class CopManager {
   /**
    * Update all cops
    */
-  update(deltaTime: number, playerPosition: THREE.Vector3): void {
+  update(deltaTime: number, playerPosition: THREE.Vector3, heat: number): void {
     // Update Yuka entity manager
     this.entityManager.update(deltaTime);
 
     // Update all cops
     for (const cop of this.cops) {
       if (!cop.isDeadState()) {
+        // Set heat level to determine attack behavior
+        cop.setHeatLevel(heat);
+
         // Set chase target to player
         cop.setChaseTarget(playerPosition);
       }
@@ -150,9 +153,16 @@ export class CopManager {
 
   /**
    * Handle player colliding with cops (damage player)
+   * Returns the attacking cop for additional context (stun, etc.)
    */
-  handlePlayerCollisions(playerPosition: THREE.Vector3): boolean {
-    const collisionRadius = 1.0;
+  handlePlayerCollisions(playerPosition: THREE.Vector3, heat: number): Cop | null {
+    // Collision radius depends on heat level (attack type)
+    let collisionRadius = 2.0; // Punch range
+    if (heat >= 75) {
+      collisionRadius = 7.0; // Shoot range
+    } else if (heat >= 50) {
+      collisionRadius = 4.0; // Taser range
+    }
 
     for (const cop of this.cops) {
       if (cop.isDeadState()) continue;
@@ -161,11 +171,11 @@ export class CopManager {
       const distance = copPos.distanceTo(playerPosition);
 
       if (distance < collisionRadius) {
-        return true; // Cop is touching player
+        return cop; // Return the attacking cop
       }
     }
 
-    return false;
+    return null;
   }
 
   /**

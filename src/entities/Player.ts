@@ -18,6 +18,12 @@ export class Player extends THREE.Group {
   private isWalking: boolean = false; // Shift slows down instead of speeding up
   private isAttacking: boolean = false; // Locks movement during attack animation
 
+  // Taser stun state
+  private isTased: boolean = false; // Player is being tased (immobilized)
+  private taseEscapeProgress: number = 0; // 0-100, button mashing fills this
+  private readonly taseEscapeDecay: number = 20; // Progress decays 20% per second
+  private readonly taseEscapePerPress: number = 12; // Each Space press adds 12%
+
   // Jump
   private jumpForce: number = 5;
   private isGrounded: boolean = true;
@@ -253,6 +259,11 @@ export class Player extends THREE.Group {
     // Get current position before updates
     const translation = this.rigidBody.translation();
 
+    // Handle taser stun decay
+    if (this.isTased && this.taseEscapeProgress > 0) {
+      this.taseEscapeProgress = Math.max(0, this.taseEscapeProgress - (this.taseEscapeDecay * deltaTime));
+    }
+
     // Check if input changed
     const inputChanged =
       this.input.up !== this.prevInput.up ||
@@ -273,10 +284,17 @@ export class Player extends THREE.Group {
     const currentSpeed = this.isWalking ? this.walkSpeed : this.sprintSpeed;
 
     // Handle jump (Sketchbook JumpRunning: jump force 4)
-    if (this.input.jump && this.isGrounded && !this.prevInput.jump) {
-      this.verticalVelocity = this.jumpForce;
-      this.isGrounded = false;
-      console.log('[Player] Jump!');
+    // When tased, Space is used for escape instead of jump
+    if (this.input.jump && !this.prevInput.jump) {
+      if (this.isTased) {
+        // Space key = escape from taser
+        this.handleEscapePress();
+      } else if (this.isGrounded) {
+        // Normal jump
+        this.verticalVelocity = this.jumpForce;
+        this.isGrounded = false;
+        console.log('[Player] Jump!');
+      }
     }
 
     // Apply gravity
@@ -357,9 +375,9 @@ export class Player extends THREE.Group {
       this.prevInput = { ...this.input };
     }
 
-    // Apply move speed (prevent movement during attack)
+    // Apply move speed (prevent movement during attack or taser stun)
     let velocity = moveVector.multiplyScalar(currentSpeed);
-    if (this.isAttacking) {
+    if (this.isAttacking || this.isTased) {
       velocity.set(0, 0, 0);
     }
 
@@ -413,6 +431,44 @@ export class Player extends THREE.Group {
     const direction = new THREE.Vector3(0, 0, 1);
     direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), (this as THREE.Group).rotation.y);
     return direction;
+  }
+
+  /**
+   * Apply taser stun to player
+   */
+  applyTaserStun(): void {
+    if (!this.isTased) {
+      this.isTased = true;
+      this.taseEscapeProgress = 0;
+      console.log('[Player] Tased! Mash Space to escape!');
+    }
+  }
+
+  /**
+   * Handle Space key press for escaping taser
+   */
+  handleEscapePress(): void {
+    if (this.isTased) {
+      this.taseEscapeProgress = Math.min(100, this.taseEscapeProgress + this.taseEscapePerPress);
+      console.log(`[Player] Escape progress: ${this.taseEscapeProgress.toFixed(1)}%`);
+
+      // Check if escaped
+      if (this.taseEscapeProgress >= 100) {
+        this.isTased = false;
+        this.taseEscapeProgress = 0;
+        console.log('[Player] Escaped from taser!');
+      }
+    }
+  }
+
+  /**
+   * Get taser stun state (for UI display)
+   */
+  getTaserState(): { isTased: boolean; escapeProgress: number } {
+    return {
+      isTased: this.isTased,
+      escapeProgress: this.taseEscapeProgress
+    };
   }
 
   /**
