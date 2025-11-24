@@ -172,7 +172,7 @@ export class CrowdManager {
    * Damage pedestrians in radius (e.g., player attack)
    * Returns kill count and positions of killed pedestrians
    */
-  damageInRadius(position: THREE.Vector3, radius: number, damage: number): {
+  damageInRadius(position: THREE.Vector3, radius: number, damage: number, maxKills: number = Infinity): {
     kills: number;
     positions: THREE.Vector3[]
   } {
@@ -181,6 +181,7 @@ export class CrowdManager {
 
     for (const pedestrian of this.pedestrians) {
       if (pedestrian.isDeadState()) continue;
+      if (killCount >= maxKills) break;
 
       const distance = (pedestrian as THREE.Group).position.distanceTo(position);
 

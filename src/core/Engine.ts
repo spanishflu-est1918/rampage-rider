@@ -337,18 +337,17 @@ export class Engine {
     // Set attack callback to damage pedestrians
     this.player.setOnAttack((attackPosition) => {
       if (this.crowd) {
-        const attackRadius = 3.5; // 3.5 unit attack range (increased from 2.0)
-        const damage = 1; // One-shot kill
+        const attackRadius = 3.5;
+        const damage = 1;
+        const maxKills = this.stats.combo >= 10 ? Infinity : 1;
 
-        // Damage pedestrians in range
-        const result = this.crowd.damageInRadius(attackPosition, attackRadius, damage);
+        const result = this.crowd.damageInRadius(attackPosition, attackRadius, damage, maxKills);
 
         if (result.kills > 0) {
-          // Update kill stats
           this.stats.kills += result.kills;
           this.stats.score += result.kills * 10;
           this.stats.combo += result.kills;
-          this.stats.comboTimer = 5.0; // 5 second combo window
+          this.stats.comboTimer = 5.0;
 
           const playerPos = this.player.getPosition();
           for (const killPos of result.positions) {
@@ -357,13 +356,15 @@ export class Engine {
             this.particles.emitBloodSpray(killPos, direction, 20);
           }
 
-          // Make other pedestrians panic
           this.crowd.panicCrowd(attackPosition, 10);
 
-          // Screen shake on hit
-          this.shakeIntensity = 0.5 * result.kills; // Stronger shake for multiple kills
+          this.shakeIntensity = 0.5 * result.kills;
 
-          console.log(`[Engine] ${result.kills} kills! Total: ${this.stats.kills}`);
+          if (maxKills === Infinity) {
+            console.log(`[Engine] MAXED OUT! ${result.kills} kills! Total: ${this.stats.kills}`);
+          } else {
+            console.log(`[Engine] ${result.kills} kill. Total: ${this.stats.kills}`);
+          }
         }
       }
     });

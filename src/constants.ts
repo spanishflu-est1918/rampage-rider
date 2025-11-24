@@ -56,6 +56,7 @@ export const SCORE_VALUES = {
   KILL_BASE: 10,
   COP_KILL: 50,
   COMBO_MULTIPLIER: 0.1,
+  MAX_COMBO_THRESHOLD: 10, // Combo threshold for unlimited knife kills
 };
 
 export const SPAWN_RATES = {

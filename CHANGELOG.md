@@ -12,6 +12,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-24]
 
+### Maxed-Out Combo System - Kill Limitation
+
+**Added:**
+- Combo multiplier threshold system for knife attacks
+- Knife kills limited to ONE civilian at a time by default
+- Unlimited kills when combo reaches threshold (10+ combo)
+- MAX_COMBO_THRESHOLD constant (set to 10)
+
+**Combat System Changes:**
+- `CrowdManager.damageInRadius()` now accepts `maxKills` parameter (default: Infinity)
+- Attack callback checks current combo value before damaging pedestrians
+- Loop breaks after reaching maxKills limit
+- Console logging differentiates between normal and maxed-out kills
+
+**Implementation Details:**
+```typescript
+// In Engine.ts attack callback
+const maxKills = this.stats.combo >= 10 ? Infinity : 1;
+const result = this.crowd.damageInRadius(attackPosition, attackRadius, damage, maxKills);
+
+// In CrowdManager.ts
+damageInRadius(position: THREE.Vector3, radius: number, damage: number, maxKills: number = Infinity)
+```
+
+**Gameplay Flow:**
+- **Combo 0-9**: Knife kills only ONE pedestrian per attack
+- **Combo 10+**: Knife kills ALL pedestrians in attack radius (maxed out!)
+- Combo timer: 5 seconds (resets to 0 if timer expires)
+
+**Files Modified:**
+- `src/constants.ts` - Added MAX_COMBO_THRESHOLD = 10
+- `src/managers/CrowdManager.ts` - Added maxKills parameter
+- `src/core/Engine.ts` - Added combo check in attack callback
+
+---
+
 ### Blood Effects System - Particle-to-Decal Implementation
 
 **Added:**

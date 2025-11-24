@@ -142,7 +142,7 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 - [ ] Implement melee combat (foot)
 - [ ] Add vehicle ramming mechanics
 - [ ] Create projectile system
-- [ ] Add combo system with timer
+- [x] Add combo system with timer (implemented: 5s timer, maxed-out at 10+ combo for unlimited kills)
 - [ ] Implement kill streak tracking
 
 ### 5.2 Progression System
