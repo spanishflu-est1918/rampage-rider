@@ -120,9 +120,12 @@ export class Pedestrian extends THREE.Group {
 
       // OPTIMIZATION: Instead of SkeletonUtils.clone() which duplicates geometries,
       // manually clone only the skeleton and materials while sharing geometries
-      const sourceSkinnedMesh = cachedGltf.scene.children.find(
-        (child) => child instanceof THREE.SkinnedMesh
-      ) as THREE.SkinnedMesh;
+      let sourceSkinnedMesh: THREE.SkinnedMesh | null = null;
+      cachedGltf.scene.traverse((node) => {
+        if (!sourceSkinnedMesh && node instanceof THREE.SkinnedMesh) {
+          sourceSkinnedMesh = node;
+        }
+      });
 
       if (!sourceSkinnedMesh) {
         console.error(`[Pedestrian] No SkinnedMesh found in ${characterType}`);
