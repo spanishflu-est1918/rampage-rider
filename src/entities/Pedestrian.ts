@@ -43,6 +43,9 @@ export class Pedestrian extends THREE.Group {
   private isStumbling: boolean = false;
   private stumbleTimer: number = 0;
 
+  // Dead body knockback velocity (for ragdoll sliding)
+  private deadVelocity: THREE.Vector3 = new THREE.Vector3();
+
   constructor(
     position: THREE.Vector3,
     world: RAPIER.World,
@@ -239,7 +242,61 @@ export class Pedestrian extends THREE.Group {
       this.mixer.update(deltaTime);
     }
 
-    if (this.isDead) return;
+    // Dead body ragdoll physics (bounce off car, buildings, and floor)
+    if (this.isDead) {
+      const speed = this.deadVelocity.length();
+      if (speed > 0.5) {
+        const currentPos = (this as THREE.Group).position;
+
+        // Apply gravity
+        this.deadVelocity.y -= 25 * deltaTime;
+
+        // Check for building collision via raycast (horizontal)
+        if (Math.abs(this.deadVelocity.x) + Math.abs(this.deadVelocity.z) > 1) {
+          const ray = new RAPIER.Ray(
+            { x: currentPos.x, y: 0.5, z: currentPos.z },
+            { x: this.deadVelocity.x, y: 0, z: this.deadVelocity.z }
+          );
+          // Use castRayAndGetNormal to get surface normal for bounce calculation
+          const hit = this.world.castRayAndGetNormal(ray, 1.0, true);
+
+          if (hit && hit.timeOfImpact < 0.5) {
+            // Hit building! Bounce off using reflection formula
+            const normal = hit.normal;
+            const dot = this.deadVelocity.x * normal.x + this.deadVelocity.z * normal.z;
+            this.deadVelocity.x -= 2 * dot * normal.x;
+            this.deadVelocity.z -= 2 * dot * normal.z;
+            // Lose energy and add some vertical bounce
+            this.deadVelocity.x *= 0.5;
+            this.deadVelocity.z *= 0.5;
+            this.deadVelocity.y = Math.abs(this.deadVelocity.y) * 0.3 + 3;
+          }
+        }
+
+        // Apply velocity to position
+        currentPos.x += this.deadVelocity.x * deltaTime;
+        currentPos.y += this.deadVelocity.y * deltaTime;
+        currentPos.z += this.deadVelocity.z * deltaTime;
+
+        // Floor bounce
+        if (currentPos.y <= 0) {
+          currentPos.y = 0;
+          // Bounce up with energy loss
+          this.deadVelocity.y = Math.abs(this.deadVelocity.y) * 0.4;
+          // Friction on ground contact
+          this.deadVelocity.x *= 0.7;
+          this.deadVelocity.z *= 0.7;
+        }
+
+        // Air friction (less than ground)
+        this.deadVelocity.x *= 0.98;
+        this.deadVelocity.z *= 0.98;
+
+        // Sync physics body
+        this.rigidBody.setNextKinematicTranslation({ x: currentPos.x, y: currentPos.y + 0.5, z: currentPos.z });
+      }
+      return;
+    }
 
     // Update stumble timer
     if (this.isStumbling) {
@@ -329,7 +386,7 @@ export class Pedestrian extends THREE.Group {
   }
 
   /**
-   * Apply violent knockback from vehicle hit - launches them far
+   * Apply violent knockback from vehicle hit - launches them far ("salir despedido")
    */
   applyVehicleKnockback(carPosition: THREE.Vector3, carVelocity: THREE.Vector3): void {
     // Direction away from car
@@ -338,21 +395,28 @@ export class Pedestrian extends THREE.Group {
       .setY(0)
       .normalize();
 
-    // Add car's velocity direction for realistic physics
+    // Add car's velocity direction for realistic physics - bodies fly in direction car was going
+    const carSpeed = carVelocity.length();
     const knockbackDir = direction.clone()
-      .add(carVelocity.clone().normalize().multiplyScalar(0.5))
+      .add(carVelocity.clone().normalize().multiplyScalar(1.5))
       .normalize();
 
-    // Strong knockback force - velocity only, no teleporting
-    const force = 20 + Math.random() * 10; // 20-30 force (reduced from 30-50)
-    const knockbackVelocity = knockbackDir.clone().multiplyScalar(force);
+    // Strong knockback force based on car speed
+    const horizontalForce = 10 + carSpeed * 1.5 + Math.random() * 5;
+    // Launch them UP into the air!
+    const verticalForce = 8 + carSpeed * 0.5 + Math.random() * 4;
 
-    // Apply to Yuka vehicle - will naturally move over next frames
-    this.yukaVehicle.velocity.set(knockbackVelocity.x, 0, knockbackVelocity.z);
-
-    // Also update Yuka position slightly for immediate visual feedback
-    this.yukaVehicle.position.x += knockbackDir.x * 0.5;
-    this.yukaVehicle.position.z += knockbackDir.z * 0.5;
+    // For dead bodies, use deadVelocity (processed in update loop)
+    if (this.isDead) {
+      this.deadVelocity.set(
+        knockbackDir.x * horizontalForce,
+        verticalForce,
+        knockbackDir.z * horizontalForce
+      );
+    } else {
+      // For alive pedestrians, use Yuka velocity (no vertical)
+      this.yukaVehicle.velocity.set(knockbackDir.x * horizontalForce, 0, knockbackDir.z * horizontalForce);
+    }
   }
 
   /**
