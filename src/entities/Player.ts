@@ -703,9 +703,17 @@ export class Player extends THREE.Group {
 
   /**
    * Play seated animation for vehicle riding (bike/motorbike)
+   * Falls back to Idle_A if no seated animation exists
    */
   playSeatedAnimation(): void {
-    this.playAnimation('Seated_Motorbike', 0.2);
+    // Try seated animation first, fall back to idle
+    const clip = THREE.AnimationClip.findByName(this.animations, 'Seated_Motorbike');
+    if (clip) {
+      this.playAnimation('Seated_Motorbike', 0.2);
+    } else {
+      // No seated animation - use idle as fallback
+      this.playAnimation('Idle_A', 0.2);
+    }
   }
 
   /**
