@@ -60,7 +60,10 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
           {/* Current Breakdown */}
           <div className="text-gray-400 text-[10px] mb-2">
             <div className={stats.performance.physics > stats.performance.avgPhysics * 2 ? 'text-red-400 font-bold' : ''}>Phy: {stats.performance.physics.toFixed(1)}ms <span className="text-gray-600">(avg: {stats.performance.avgPhysics.toFixed(1)})</span></div>
-            <div className={stats.performance.entities > stats.performance.avgEntities * 2 ? 'text-red-400 font-bold' : ''}>Ent: {stats.performance.entities.toFixed(1)}ms <span className="text-gray-600">(avg: {stats.performance.avgEntities.toFixed(1)})</span></div>
+            <div className={stats.performance.player > stats.performance.avgPlayer * 2 ? 'text-red-400 font-bold' : ''}>Player: {stats.performance.player.toFixed(1)}ms <span className="text-gray-600">(avg: {stats.performance.avgPlayer.toFixed(1)})</span></div>
+            <div className={stats.performance.cops > stats.performance.avgCops * 2 ? 'text-red-400 font-bold' : ''}>Cops: {stats.performance.cops.toFixed(1)}ms <span className="text-gray-600">(avg: {stats.performance.avgCops.toFixed(1)})</span></div>
+            <div className={stats.performance.pedestrians > stats.performance.avgPedestrians * 2 ? 'text-red-400 font-bold' : ''}>Peds: {stats.performance.pedestrians.toFixed(1)}ms <span className="text-gray-600">(avg: {stats.performance.avgPedestrians.toFixed(1)})</span></div>
+            <div className={stats.performance.world > stats.performance.avgWorld * 2 ? 'text-red-400 font-bold' : ''}>World: {stats.performance.world.toFixed(1)}ms <span className="text-gray-600">(avg: {stats.performance.avgWorld.toFixed(1)})</span></div>
             <div className={stats.performance.rendering > stats.performance.avgRendering * 2 ? 'text-red-400 font-bold' : ''}>Rnd: {stats.performance.rendering.toFixed(1)}ms <span className="text-gray-600">(avg: {stats.performance.avgRendering.toFixed(1)})</span></div>
           </div>
 
@@ -69,6 +72,18 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
             <div>Cops:{stats.performance.counts.cops} Peds:{stats.performance.counts.pedestrians} Bldg:{stats.performance.counts.buildings}</div>
             <div>Parts:{stats.performance.counts.particles} Blood:{stats.performance.counts.bloodDecals}</div>
           </div>
+
+          {/* Three.js Renderer Stats */}
+          {stats.performance.renderer && (
+            <div className="border-t border-blue-500/30 pt-1 mt-1">
+              <div className="text-blue-400 font-bold text-[10px]">GPU STATS:</div>
+              <div className={`text-[9px] ${stats.performance.renderer.drawCalls > 200 ? 'text-red-400 font-bold' : stats.performance.renderer.drawCalls > 100 ? 'text-yellow-400' : 'text-blue-300'}`}>
+                Draw Calls: {stats.performance.renderer.drawCalls} <span className="text-gray-600">(avg: {stats.performance.avgDrawCalls?.toFixed(0) || '?'})</span>
+              </div>
+              <div className="text-[9px] text-blue-300">Triangles: {(stats.performance.renderer.triangles / 1000).toFixed(1)}k</div>
+              <div className="text-[9px] text-gray-500">Geom: {stats.performance.renderer.geometries} Tex: {stats.performance.renderer.textures}</div>
+            </div>
+          )}
 
           {/* Worst Frame Info */}
           {stats.performance.worstFrame.frameTime > 50 && (
@@ -80,13 +95,21 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
               </div>
               <div className="text-gray-500 text-[9px]">
                 P:{stats.performance.worstFrame.physics.toFixed(1)}
-                E:{stats.performance.worstFrame.entities.toFixed(1)}
+                Pl:{stats.performance.worstFrame.player.toFixed(1)}
+                C:{stats.performance.worstFrame.cops.toFixed(1)}
+                Pe:{stats.performance.worstFrame.pedestrians.toFixed(1)}
+                W:{stats.performance.worstFrame.world.toFixed(1)}
                 R:{stats.performance.worstFrame.rendering.toFixed(1)}
               </div>
               <div className="text-orange-300 text-[9px] mt-1">
                 <div>At spike: {stats.performance.worstFrame.counts.cops}cops {stats.performance.worstFrame.counts.pedestrians}peds {stats.performance.worstFrame.counts.buildings}bldg</div>
                 <div>{stats.performance.worstFrame.counts.particles}parts {stats.performance.worstFrame.counts.bloodDecals}blood</div>
               </div>
+              {stats.performance.worstFrame.renderer && (
+                <div className="text-purple-400 text-[9px] mt-1">
+                  <div>GPU: {stats.performance.worstFrame.renderer.drawCalls} draws, {(stats.performance.worstFrame.renderer.triangles / 1000).toFixed(1)}k tris</div>
+                </div>
+              )}
             </div>
           )}
         </div>

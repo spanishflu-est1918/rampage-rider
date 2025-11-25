@@ -34,6 +34,7 @@ export class CopManager {
     this.cops = this.cops.filter(cop => {
       if (cop.isDeadState() && !(cop as THREE.Group).visible) {
         this.scene.remove(cop);
+        this.scene.remove(cop.getBlobShadow());
         cop.dispose();
         return false;
       }
@@ -73,6 +74,7 @@ export class CopManager {
     cop.setParentScene(this.scene); // Enable visual effects
     this.cops.push(cop);
     this.scene.add(cop);
+    this.scene.add(cop.getBlobShadow()); // Add blob shadow to scene
 
   }
 
@@ -189,6 +191,7 @@ export class CopManager {
   clear(): void {
     for (const cop of this.cops) {
       this.scene.remove(cop);
+      this.scene.remove(cop.getBlobShadow());
       cop.dispose();
     }
     this.cops = [];

@@ -5,6 +5,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { AssetLoader } from '../core/AssetLoader';
+import { BlobShadow, createBlobShadow } from '../rendering/BlobShadow';
 import {
   SKIN_TONES,
   ENTITY_SPEEDS,
@@ -46,6 +47,9 @@ export class Pedestrian extends THREE.Group {
   // Dead body knockback velocity (for ragdoll sliding)
   private deadVelocity: THREE.Vector3 = new THREE.Vector3();
 
+  // Fake blob shadow (cheaper than real shadows)
+  private blobShadow: BlobShadow;
+
   constructor(
     position: THREE.Vector3,
     world: RAPIER.World,
@@ -84,6 +88,10 @@ export class Pedestrian extends THREE.Group {
     this.collider = collider;
     this.characterController = controller;
 
+    // Create blob shadow (fake shadow for performance)
+    this.blobShadow = createBlobShadow(0.8);
+    this.blobShadow.position.set(position.x, 0.01, position.z);
+
     // Load character model
     this.loadModel(characterType);
 
@@ -110,8 +118,8 @@ export class Pedestrian extends THREE.Group {
         animations: cachedGltf.animations
       };
 
-      // Setup shadows
-      AnimationHelper.setupShadows(gltf.scene);
+      // Disable real shadow casting (we use blob shadows instead)
+      AnimationHelper.setupShadows(gltf.scene, false, false);
 
       // Apply random skin tone
       const randomSkinTone = AnimationHelper.randomElement(SKIN_TONES);
@@ -294,6 +302,9 @@ export class Pedestrian extends THREE.Group {
 
         // Sync physics body
         this.rigidBody.setNextKinematicTranslation({ x: currentPos.x, y: currentPos.y + 0.5, z: currentPos.z });
+
+        // Update blob shadow (stays on ground even when body is airborne)
+        this.blobShadow.position.set(currentPos.x, 0.01, currentPos.z);
       }
       return;
     }
@@ -314,6 +325,9 @@ export class Pedestrian extends THREE.Group {
 
     // Sync Three.js position directly (much cheaper than character controller)
     (this as THREE.Group).position.copy(newPosition);
+
+    // Update blob shadow position (stays on ground)
+    this.blobShadow.position.set(newPosition.x, 0.01, newPosition.z);
 
     // Sync physics body position for collision detection by player
     this.rigidBody.setNextKinematicTranslation({ x: newPosition.x, y: 0.5, z: newPosition.z });
@@ -370,6 +384,13 @@ export class Pedestrian extends THREE.Group {
   }
 
   /**
+   * Get the blob shadow mesh (for adding to scene)
+   */
+  getBlobShadow(): BlobShadow {
+    return this.blobShadow;
+  }
+
+  /**
    * Apply knockback/stumble effect when colliding with player
    */
   applyKnockback(direction: THREE.Vector3, force: number): void {
@@ -417,6 +438,45 @@ export class Pedestrian extends THREE.Group {
       // For alive pedestrians, use Yuka velocity (no vertical)
       this.yukaVehicle.velocity.set(knockbackDir.x * horizontalForce, 0, knockbackDir.z * horizontalForce);
     }
+  }
+
+  /**
+   * Reset pedestrian for object pooling
+   */
+  reset(position: THREE.Vector3, characterType: string): void {
+    // Revive
+    this.isDead = false;
+    this.health = PEDESTRIAN_CONFIG.HEALTH;
+    this.isPanicking = false;
+    this.isStumbling = false;
+    this.stumbleTimer = 0;
+    this.deadVelocity.set(0, 0, 0);
+
+    // TODO: Handle character type change (requires async model loading)
+    // For now, we assume character type remains the same on reset
+
+    // Reset Yuka vehicle
+    this.yukaVehicle.position.copy(position);
+    this.yukaVehicle.velocity.set(0, 0, 0);
+    this.yukaVehicle.maxSpeed = this.walkSpeed;
+    this.yukaVehicle.steering.clear();
+    this.yukaEntityManager.add(this.yukaVehicle); // Re-register with entity manager
+
+    // Reset physics body
+    this.rigidBody.setTranslation({ x: position.x, y: 0, z: position.z }, true);
+    this.rigidBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    const numColliders = this.rigidBody.numColliders();
+    for (let i = 0; i < numColliders; i++) {
+      const collider = this.rigidBody.collider(i);
+      const collisionFilter = KinematicCharacterHelper.getPedestrianCollisionFilter();
+      collider.setCollisionGroups(collisionFilter);
+    }
+
+    // Reset blob shadow position
+    this.blobShadow.position.set(position.x, 0.01, position.z);
+
+    // Reset animation
+    this.playAnimation('Idle', 0.1);
   }
 
   /**

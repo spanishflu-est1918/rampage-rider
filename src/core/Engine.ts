@@ -39,7 +39,13 @@ export class Engine {
     fps: 0,
     frameTime: 0,
     physics: 0,
-    entities: 0,
+    entities: 0, // Total entities update time
+    player: 0,
+    cops: 0,
+    pedestrians: 0,
+    world: 0, // Buildings, lamp posts
+    particles: 0,
+    bloodDecals: 0,
     rendering: 0,
     lastFrameTime: performance.now(),
     counts: {
@@ -49,31 +55,64 @@ export class Engine {
       bloodDecals: 0,
       buildings: 0
     },
+    // Three.js renderer info (draw calls, triangles, etc.)
+    renderer: {
+      drawCalls: 0,
+      triangles: 0,
+      points: 0,
+      lines: 0,
+      geometries: 0,
+      textures: 0,
+    },
     history: {
       frameTime: [] as number[],
       physics: [] as number[],
       entities: [] as number[],
+      player: [] as number[],
+      cops: [] as number[],
+      pedestrians: [] as number[],
+      world: [] as number[],
+      particles: [] as number[],
+      bloodDecals: [] as number[],
       rendering: [] as number[],
+      drawCalls: [] as number[],
       maxSize: 120
     },
     worstFrame: {
       frameTime: 0,
       physics: 0,
       entities: 0,
+      player: 0,
+      cops: 0,
+      pedestrians: 0,
+      world: 0,
+      particles: 0,
+      bloodDecals: 0,
       rendering: 0,
-      bottleneck: 'none' as 'physics' | 'entities' | 'rendering' | 'none',
+      bottleneck: 'none' as 'physics' | 'entities' | 'rendering' | 'none' | 'player' | 'cops' | 'pedestrians' | 'world' | 'particles' | 'bloodDecals',
       counts: {
         cops: 0,
         pedestrians: 0,
         particles: 0,
         bloodDecals: 0,
         buildings: 0
+      },
+      renderer: {
+        drawCalls: 0,
+        triangles: 0,
       }
     },
     avgFrameTime: 0,
     avgPhysics: 0,
     avgEntities: 0,
-    avgRendering: 0
+    avgPlayer: 0,
+    avgCops: 0,
+    avgPedestrians: 0,
+    avgWorld: 0,
+    avgParticles: 0,
+    avgBloodDecals: 0,
+    avgRendering: 0,
+    avgDrawCalls: 0,
   };
 
   private cameraShakeIntensity: number = 0;
@@ -159,8 +198,8 @@ export class Engine {
     });
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = false;
+    // this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.setupLighting();
 
@@ -373,6 +412,7 @@ export class Engine {
   private spawnPlayer(): void {
     this.player = new Player();
     this.scene.add(this.player);
+    this.scene.add(this.player.getBlobShadow()); // Add blob shadow to scene
 
     const world = this.physics.getWorld();
     if (world) {
@@ -568,6 +608,7 @@ export class Engine {
     if ((this.player as THREE.Group).parent === this.vehicle) {
       (this.vehicle as THREE.Group).remove(this.player);
       this.scene.add(this.player);
+      this.scene.add(this.player.getBlobShadow()); // Re-add blob shadow
     }
 
     this.player.setVisible(true);
@@ -578,12 +619,15 @@ export class Engine {
 
     const world = this.physics.getWorld();
     if (world) {
+      const oldShadow = this.player.getBlobShadow();
+      this.scene.remove(oldShadow);
       this.player.dispose();
       this.scene.remove(this.player);
 
       this.player = new Player();
       this.player.createPhysicsBody(world, safePos);
       this.scene.add(this.player);
+      this.scene.add(this.player.getBlobShadow()); // Add new blob shadow
 
       this.setupPlayerCallbacks();
     }
@@ -1013,6 +1057,17 @@ export class Engine {
     this.performanceStats.fps = 1000 / (frameStart - this.performanceStats.lastFrameTime);
     this.performanceStats.lastFrameTime = frameStart;
 
+    // Capture Three.js renderer stats (draw calls, triangles, memory)
+    const info = this.renderer.info;
+    this.performanceStats.renderer = {
+      drawCalls: info.render.calls,
+      triangles: info.render.triangles,
+      points: info.render.points,
+      lines: info.render.lines,
+      geometries: info.memory.geometries,
+      textures: info.memory.textures,
+    };
+
     this.performanceStats.counts = {
       cops: this.cops?.getActiveCopCount() || 0,
       pedestrians: this.crowd?.getPedestrianCount() || 0,
@@ -1025,36 +1080,81 @@ export class Engine {
     history.frameTime.push(this.performanceStats.frameTime);
     history.physics.push(this.performanceStats.physics);
     history.entities.push(this.performanceStats.entities);
+    history.player.push(this.performanceStats.player);
+    history.cops.push(this.performanceStats.cops);
+    history.pedestrians.push(this.performanceStats.pedestrians);
+    history.world.push(this.performanceStats.world);
     history.rendering.push(this.performanceStats.rendering);
+    history.drawCalls.push(this.performanceStats.renderer.drawCalls);
 
     if (history.frameTime.length > history.maxSize) {
       history.frameTime.shift();
       history.physics.shift();
       history.entities.shift();
+      history.player.shift();
+      history.cops.shift();
+      history.pedestrians.shift();
+      history.world.shift();
       history.rendering.shift();
+      history.drawCalls.shift();
     }
 
     const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
     this.performanceStats.avgFrameTime = sum(history.frameTime) / history.frameTime.length;
     this.performanceStats.avgPhysics = sum(history.physics) / history.physics.length;
     this.performanceStats.avgEntities = sum(history.entities) / history.entities.length;
+    this.performanceStats.avgPlayer = sum(history.player) / history.player.length;
+    this.performanceStats.avgCops = sum(history.cops) / history.cops.length;
+    this.performanceStats.avgPedestrians = sum(history.pedestrians) / history.pedestrians.length;
+    this.performanceStats.avgWorld = sum(history.world) / history.world.length;
     this.performanceStats.avgRendering = sum(history.rendering) / history.rendering.length;
+    this.performanceStats.avgDrawCalls = sum(history.drawCalls) / history.drawCalls.length;
+
+    // Log performance stats every 15 frames (~0.25 seconds)
+    if (history.frameTime.length % 15 === 0) {
+      const r = this.performanceStats.renderer;
+      const p = this.performanceStats;
+      console.log(
+        `[3PERF] FPS:${p.fps.toFixed(0)} Frame:${p.avgFrameTime.toFixed(1)}ms | ` +
+        `Render:${p.avgRendering.toFixed(1)}ms | ` +
+        `DrawCalls:${r.drawCalls} Tris:${(r.triangles/1000).toFixed(1)}k | ` +
+        `Geom:${r.geometries} Tex:${r.textures} | ` +
+        `Peds:${p.counts.pedestrians} Cops:${p.counts.cops} Parts:${p.counts.particles} Blood:${p.counts.bloodDecals}`
+      );
+    }
 
     if (this.performanceStats.frameTime > this.performanceStats.worstFrame.frameTime) {
+      const { physics, entities, player, cops, pedestrians, world, rendering, renderer } = this.performanceStats;
+
+      let bottleneck: typeof this.performanceStats.worstFrame.bottleneck = 'none';
+      let maxTime = 0;
+
+      if (physics > maxTime) { maxTime = physics; bottleneck = 'physics'; }
+      if (player > maxTime) { maxTime = player; bottleneck = 'player'; }
+      if (cops > maxTime) { maxTime = cops; bottleneck = 'cops'; }
+      if (pedestrians > maxTime) { maxTime = pedestrians; bottleneck = 'pedestrians'; }
+      if (world > maxTime) { maxTime = world; bottleneck = 'world'; }
+      if (rendering > maxTime) { maxTime = rendering; bottleneck = 'rendering'; }
+
       this.performanceStats.worstFrame = {
         frameTime: this.performanceStats.frameTime,
-        physics: this.performanceStats.physics,
-        entities: this.performanceStats.entities,
-        rendering: this.performanceStats.rendering,
-        bottleneck:
-          this.performanceStats.physics > this.performanceStats.entities &&
-          this.performanceStats.physics > this.performanceStats.rendering
-            ? 'physics'
-            : this.performanceStats.entities > this.performanceStats.rendering
-            ? 'entities'
-            : 'rendering',
-        counts: { ...this.performanceStats.counts }
+        physics,
+        entities,
+        player,
+        cops,
+        pedestrians,
+        world,
+        particles: this.performanceStats.particles,
+        bloodDecals: this.performanceStats.bloodDecals,
+        rendering,
+        bottleneck,
+        counts: { ...this.performanceStats.counts },
+        renderer: {
+          drawCalls: renderer.drawCalls,
+          triangles: renderer.triangles,
+        }
       };
+
     }
   };
 
@@ -1082,8 +1182,11 @@ export class Engine {
       this.stats.heat = Math.max(0, this.stats.heat - (0.5 * dt));
     }
 
+    // --- Entity Updates ---
     const entitiesStart = performance.now();
 
+    // Player
+    const playerStart = performance.now();
     if (!this.vehicleSpawned && this.player) {
       if (this.stats.kills >= TIER_CONFIGS[Tier.SEDAN].minKills) {
         this.spawnVehicle(Tier.SEDAN);
@@ -1146,19 +1249,24 @@ export class Engine {
         this.player.updateAnimations(dt);
       }
     }
+    this.performanceStats.player = performance.now() - playerStart;
 
     const currentPos = this.isInVehicle && this.vehicle
       ? this.vehicle.getPosition()
       : this.player?.getPosition() || new THREE.Vector3();
 
+    // World elements (buildings, lampposts)
+    const worldStart = performance.now();
     if (this.buildings) {
       this.buildings.update(currentPos);
     }
-
     if (this.lampPosts) {
       this.lampPosts.update(currentPos);
     }
+    this.performanceStats.world = performance.now() - worldStart;
 
+    // Pedestrians
+    const pedestriansStart = performance.now();
     if (this.crowd) {
       this.crowd.update(dt, currentPos);
 
@@ -1189,12 +1297,15 @@ export class Engine {
 
       this.crowd.cleanup(currentPos);
     }
+    this.performanceStats.pedestrians = performance.now() - pedestriansStart;
 
     // Get player velocity for cop AI prediction
     const playerVelocity = this.isInVehicle && this.vehicle
       ? this.vehicle.getVelocity()
       : new THREE.Vector3();
 
+    // Cops (foot cops and motorbike cops)
+    const copsStart = performance.now();
     // Regular foot cops
     if (this.cops) {
       this.cops.updateSpawns(this.stats.heat, currentPos);
@@ -1269,6 +1380,7 @@ export class Engine {
         }
       });
     }
+    this.performanceStats.cops = performance.now() - copsStart;
 
     // Update inPursuit based on total cop count
     const footCopCount = this.cops?.getActiveCopCount() || 0;
@@ -1279,6 +1391,7 @@ export class Engine {
     this.particles.update(dt);
     this.bloodDecals.update();
 
+    // Total entities update time
     this.performanceStats.entities = performance.now() - entitiesStart;
 
     // Camera follow player/car (unless manual control is active)

@@ -48,11 +48,11 @@ export class LampPostManager {
     if (gltf) {
       this.modelTemplate = gltf.scene.clone();
 
-      // Setup shadows on template
+      // Disable shadows on template (shadow mapping disabled for performance)
       this.modelTemplate.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+          child.castShadow = false;
+          child.receiveShadow = false;
         }
       });
 

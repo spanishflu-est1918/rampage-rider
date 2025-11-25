@@ -13,12 +13,13 @@ import { Pedestrian } from '../entities/Pedestrian';
  */
 export class CrowdManager {
   private pedestrians: Pedestrian[] = [];
+  private pedestrianPool: Pedestrian[] = [];
   private scene: THREE.Scene;
   private world: RAPIER.World;
   private entityManager: YUKA.EntityManager;
 
   // Deferred cleanup queue (clean AFTER physics step)
-  private pedestriansToRemove: number[] = [];
+  private pedestriansToRemove: Pedestrian[] = [];
 
   // Death timers - track when pedestrians died for delayed cleanup
   private deathTimers: Map<Pedestrian, number> = new Map();
@@ -118,11 +119,18 @@ export class CrowdManager {
     // Weighted random character type
     const characterType = this.getRandomCharacterType();
 
-    // Create pedestrian
-    const pedestrian = new Pedestrian(position, this.world, characterType, this.entityManager);
+    // Get pedestrian from pool or create new one
+    let pedestrian: Pedestrian;
+    if (this.pedestrianPool.length > 0) {
+      pedestrian = this.pedestrianPool.pop()!;
+      pedestrian.reset(position, characterType);
+    } else {
+      pedestrian = new Pedestrian(position, this.world, characterType, this.entityManager);
+    }
 
     // Add to scene and list
     this.scene.add(pedestrian);
+    this.scene.add(pedestrian.getBlobShadow()); // Add blob shadow to scene
     this.pedestrians.push(pedestrian);
 
     // Set wander behavior
@@ -275,8 +283,7 @@ export class CrowdManager {
     this.entityManager.update(deltaTime);
 
     // Mark pedestrians for removal (don't remove during iteration)
-    for (let i = 0; i < this.pedestrians.length; i++) {
-      const pedestrian = this.pedestrians[i];
+    for (const pedestrian of this.pedestrians) {
       pedestrian.update(deltaTime);
 
       // Track and remove dead pedestrians after death animation
@@ -292,7 +299,7 @@ export class CrowdManager {
 
         // Remove after delay
         if (deathTime >= this.DEATH_CLEANUP_DELAY) {
-          this.pedestriansToRemove.push(i);
+          this.pedestriansToRemove.push(pedestrian);
           this.deathTimers.delete(pedestrian);
         }
       }
@@ -300,7 +307,7 @@ export class CrowdManager {
       // Mark pedestrians that wandered too far for removal
       const distance = (pedestrian as THREE.Group).position.distanceTo(playerPosition);
       if (distance > 40 && !pedestrian.isDeadState()) {
-        this.pedestriansToRemove.push(i);
+        this.pedestriansToRemove.push(pedestrian);
       }
     }
   }
@@ -309,10 +316,16 @@ export class CrowdManager {
    * Cleanup pedestrians (call AFTER physics step)
    */
   cleanup(playerPosition: THREE.Vector3): void {
-    // Remove marked pedestrians in reverse order
-    for (let i = this.pedestriansToRemove.length - 1; i >= 0; i--) {
-      const index = this.pedestriansToRemove[i];
-      this.removePedestrian(index);
+    if (this.pedestriansToRemove.length === 0) return;
+
+    // Remove marked pedestrians
+    for (const pedestrian of this.pedestriansToRemove) {
+      this.removePedestrian(pedestrian);
+    }
+
+    // Respawn to maintain population
+    const numToRespawn = this.pedestriansToRemove.length;
+    for (let i = 0; i < numToRespawn; i++) {
       this.spawnPedestrian(playerPosition);
     }
 
@@ -321,12 +334,24 @@ export class CrowdManager {
   }
 
   /**
-   * Remove pedestrian from world
+   * Remove pedestrian from world and add to pool
    */
-  private removePedestrian(index: number): void {
-    const pedestrian = this.pedestrians[index];
-    pedestrian.destroy(this.world);
-    this.pedestrians.splice(index, 1);
+  private removePedestrian(pedestrian: Pedestrian): void {
+    // Remove from active list
+    const index = this.pedestrians.indexOf(pedestrian);
+    if (index > -1) {
+      this.pedestrians.splice(index, 1);
+    }
+
+    // Remove from scene (both pedestrian and blob shadow)
+    this.scene.remove(pedestrian);
+    this.scene.remove(pedestrian.getBlobShadow());
+
+    // Remove from Yuka entity manager
+    this.entityManager.remove(pedestrian.getYukaVehicle());
+
+    // Add to pool for reuse
+    this.pedestrianPool.push(pedestrian);
   }
 
   /**
@@ -336,7 +361,13 @@ export class CrowdManager {
     for (const pedestrian of this.pedestrians) {
       pedestrian.destroy(this.world);
     }
+
+    for (const pedestrian of this.pedestrianPool) {
+      pedestrian.destroy(this.world);
+    }
+    
     this.pedestrians = [];
+    this.pedestrianPool = [];
     this.deathTimers.clear();
     this.pedestriansToRemove = [];
     this.entityManager.clear();
