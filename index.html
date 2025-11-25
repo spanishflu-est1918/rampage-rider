@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rampage Rider</title>
+    <!-- Preload Google Font to avoid FOUT -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" as="style">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+    <style>
+      /* Hide content until fonts are loaded */
+      html:not(.fonts-loaded) body {
+        visibility: hidden;
+      }
+      html.fonts-loaded body {
+        visibility: visible;
+      }
+    </style>
+    <script>
+      // Mark fonts as loaded when ready
+      document.fonts.ready.then(() => {
+        document.documentElement.classList.add('fonts-loaded');
+      });
+      // Fallback: show content after 1 second even if fonts fail
+      setTimeout(() => {
+        document.documentElement.classList.add('fonts-loaded');
+      }, 1000);
+    </script>
   </head>
   <body>
     <div id="root"></div>
