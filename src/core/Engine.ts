@@ -909,11 +909,11 @@ export class Engine {
         const vehicleHitRadius = 2.5;
         const carVelocity = this.car.getVelocity();
 
-        // Apply violent knockback BEFORE killing (for visual effect)
-        this.crowd.applyVehicleKnockback(currentPos, carVelocity, vehicleHitRadius);
-
-        // Then damage/kill them
+        // Damage/kill first, THEN knockback (so they don't move out of range)
         const result = this.crowd.damageInRadius(currentPos, vehicleHitRadius, 999, Infinity);
+
+        // Apply violent knockback to dead bodies for visual effect
+        this.crowd.applyVehicleKnockback(currentPos, carVelocity, vehicleHitRadius + 1);
 
         for (let i = 0; i < result.kills; i++) {
           this.handleVehicleKill(result.positions[i] || currentPos);

@@ -220,12 +220,11 @@ export class CrowdManager {
   }
 
   /**
-   * Apply violent knockback to pedestrians hit by vehicle
+   * Apply violent knockback to pedestrians hit by vehicle (including dead bodies)
    */
   applyVehicleKnockback(carPosition: THREE.Vector3, carVelocity: THREE.Vector3, radius: number): void {
     for (const pedestrian of this.pedestrians) {
-      if (pedestrian.isDeadState()) continue;
-
+      // Don't skip dead - we want to knock dead bodies flying too
       const pedPos = (pedestrian as THREE.Group).position;
       const distance = pedPos.distanceTo(carPosition);
 
