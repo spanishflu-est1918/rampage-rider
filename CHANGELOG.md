@@ -12,6 +12,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-25]
 
+### Performance Optimizations
+
+**Fixed:**
+- **Building shadow geometry leak** - Shadows now properly dispose geometry on reposition
+  - Previously: Shadow geometries accumulated as player moved (49→90 geometry count)
+  - Now: Old shadow geometry disposed before creating new one
+  - Location: `BuildingManager.repositionBuilding()` (line 206-212)
+
+**Added:**
+- **InstancedMesh for pedestrian blob shadows** - Reduced 40+ draw calls to 1
+  - Created `InstancedBlobShadows.ts` - Manages all shadows in single InstancedMesh
+  - Index pool system reserves/releases shadow slots efficiently
+  - Each pedestrian updates its shadow index position per frame
+  - Impact: **-40 draw calls** for typical pedestrian count
+
+**Performance Impact:**
+```
+Before:
+- Draw calls: 60-100 (1 per pedestrian shadow)
+- Geometry count: Growing from 49→90 over time
+- FPS: 115-125
+
+After:
+- Draw calls: ~20-60 (all pedestrian shadows batched)
+- Geometry count: Stable (no leak)
+- Expected FPS: 120-135
+```
+
+**Future Optimizations:**
+- Extend instanced shadows to Player/Cop entities (-2 draw calls)
+- InstancedMesh for pedestrian models (requires animation batching, -40 draw calls)
+- Share pedestrian geometries instead of SkeletonUtils.clone (-150k triangles)
+
+**Files Created:**
+- `src/rendering/InstancedBlobShadows.ts`
+
+**Files Modified:**
+- `src/managers/BuildingManager.ts` - Fixed shadow geometry disposal
+- `src/entities/Pedestrian.ts` - Uses instanced shadows instead of individual meshes
+- `src/managers/CrowdManager.ts` - Creates InstancedBlobShadows manager
+
+---
+
 ### Christmas Market World Theme
 
 **Added:**

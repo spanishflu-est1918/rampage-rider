@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
 import { Pedestrian } from '../entities/Pedestrian';
+import { InstancedBlobShadows } from '../rendering/InstancedBlobShadows';
 
 /**
  * CrowdManager
@@ -17,6 +18,7 @@ export class CrowdManager {
   private scene: THREE.Scene;
   private world: RAPIER.World;
   private entityManager: YUKA.EntityManager;
+  private shadowManager: InstancedBlobShadows;
 
   // Deferred cleanup queue (clean AFTER physics step)
   private pedestriansToRemove: Pedestrian[] = [];
@@ -70,6 +72,9 @@ export class CrowdManager {
     this.scene = scene;
     this.world = world;
     this.entityManager = new YUKA.EntityManager();
+
+    // Create instanced shadow manager (max 60 shadows for pedestrians)
+    this.shadowManager = new InstancedBlobShadows(scene, 60);
 
     this.totalWeight = this.characterPool.reduce((sum, char) => sum + char.weight, 0);
   }
@@ -125,12 +130,11 @@ export class CrowdManager {
       pedestrian = this.pedestrianPool.pop()!;
       pedestrian.reset(position, characterType);
     } else {
-      pedestrian = new Pedestrian(position, this.world, characterType, this.entityManager);
+      pedestrian = new Pedestrian(position, this.world, characterType, this.entityManager, this.shadowManager);
     }
 
     // Add to scene and list
     this.scene.add(pedestrian);
-    this.scene.add(pedestrian.getBlobShadow()); // Add blob shadow to scene
     this.pedestrians.push(pedestrian);
 
     // Set wander behavior
@@ -343,9 +347,8 @@ export class CrowdManager {
       this.pedestrians.splice(index, 1);
     }
 
-    // Remove from scene (both pedestrian and blob shadow)
+    // Remove from scene
     this.scene.remove(pedestrian);
-    this.scene.remove(pedestrian.getBlobShadow());
 
     // Remove from Yuka entity manager
     this.entityManager.remove(pedestrian.getYukaVehicle());
@@ -365,12 +368,15 @@ export class CrowdManager {
     for (const pedestrian of this.pedestrianPool) {
       pedestrian.destroy(this.world);
     }
-    
+
     this.pedestrians = [];
     this.pedestrianPool = [];
     this.deathTimers.clear();
     this.pedestriansToRemove = [];
     this.entityManager.clear();
+
+    // Dispose shadow manager
+    this.shadowManager.dispose();
   }
 
   /**

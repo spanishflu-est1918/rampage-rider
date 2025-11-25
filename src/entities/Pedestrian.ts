@@ -5,7 +5,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { AssetLoader } from '../core/AssetLoader';
-import { BlobShadow, createBlobShadow } from '../rendering/BlobShadow';
+import { InstancedBlobShadows } from '../rendering/InstancedBlobShadows';
 import {
   SKIN_TONES,
   ENTITY_SPEEDS,
@@ -47,19 +47,29 @@ export class Pedestrian extends THREE.Group {
   // Dead body knockback velocity (for ragdoll sliding)
   private deadVelocity: THREE.Vector3 = new THREE.Vector3();
 
-  // Fake blob shadow (cheaper than real shadows)
-  private blobShadow: BlobShadow;
+  // Instanced shadow system
+  private shadowManager: InstancedBlobShadows;
+  private shadowIndex: number = -1;
+  private readonly shadowRadius = 0.8;
 
   constructor(
     position: THREE.Vector3,
     world: RAPIER.World,
     characterType: string,
-    entityManager: YUKA.EntityManager
+    entityManager: YUKA.EntityManager,
+    shadowManager: InstancedBlobShadows
   ) {
     super();
 
     this.yukaEntityManager = entityManager;
     this.world = world;
+    this.shadowManager = shadowManager;
+
+    // Reserve shadow index
+    this.shadowIndex = shadowManager.reserveIndex();
+    if (this.shadowIndex >= 0) {
+      shadowManager.updateShadow(this.shadowIndex, position.x, position.z, this.shadowRadius);
+    }
 
     // Create Yuka vehicle for AI steering
     this.yukaVehicle = new YUKA.Vehicle();
@@ -87,10 +97,6 @@ export class Pedestrian extends THREE.Group {
     this.rigidBody = body;
     this.collider = collider;
     this.characterController = controller;
-
-    // Create blob shadow (fake shadow for performance)
-    this.blobShadow = createBlobShadow(0.8);
-    this.blobShadow.position.set(position.x, 0.01, position.z);
 
     // Load character model
     this.loadModel(characterType);
@@ -303,8 +309,10 @@ export class Pedestrian extends THREE.Group {
         // Sync physics body
         this.rigidBody.setNextKinematicTranslation({ x: currentPos.x, y: currentPos.y + 0.5, z: currentPos.z });
 
-        // Update blob shadow (stays on ground even when body is airborne)
-        this.blobShadow.position.set(currentPos.x, 0.01, currentPos.z);
+        // Update instanced shadow (stays on ground even when body is airborne)
+        if (this.shadowIndex >= 0) {
+          this.shadowManager.updateShadow(this.shadowIndex, currentPos.x, currentPos.z, this.shadowRadius);
+        }
       }
       return;
     }
@@ -326,8 +334,10 @@ export class Pedestrian extends THREE.Group {
     // Sync Three.js position directly (much cheaper than character controller)
     (this as THREE.Group).position.copy(newPosition);
 
-    // Update blob shadow position (stays on ground)
-    this.blobShadow.position.set(newPosition.x, 0.01, newPosition.z);
+    // Update instanced shadow position (stays on ground)
+    if (this.shadowIndex >= 0) {
+      this.shadowManager.updateShadow(this.shadowIndex, newPosition.x, newPosition.z, this.shadowRadius);
+    }
 
     // Sync physics body position for collision detection by player
     this.rigidBody.setNextKinematicTranslation({ x: newPosition.x, y: 0.5, z: newPosition.z });
@@ -384,10 +394,10 @@ export class Pedestrian extends THREE.Group {
   }
 
   /**
-   * Get the blob shadow mesh (for adding to scene)
+   * Get shadow index (for debugging)
    */
-  getBlobShadow(): BlobShadow {
-    return this.blobShadow;
+  getShadowIndex(): number {
+    return this.shadowIndex;
   }
 
   /**
@@ -472,8 +482,10 @@ export class Pedestrian extends THREE.Group {
       collider.setCollisionGroups(collisionFilter);
     }
 
-    // Reset blob shadow position
-    this.blobShadow.position.set(position.x, 0.01, position.z);
+    // Reset instanced shadow position
+    if (this.shadowIndex >= 0) {
+      this.shadowManager.updateShadow(this.shadowIndex, position.x, position.z, this.shadowRadius);
+    }
 
     // Reset animation
     this.playAnimation('Idle', 0.1);
@@ -483,6 +495,12 @@ export class Pedestrian extends THREE.Group {
    * Cleanup
    */
   destroy(world: RAPIER.World): void {
+    // Release shadow index back to pool
+    if (this.shadowIndex >= 0) {
+      this.shadowManager.releaseIndex(this.shadowIndex);
+      this.shadowIndex = -1;
+    }
+
     // Remove from Yuka
     this.yukaEntityManager.remove(this.yukaVehicle);
 

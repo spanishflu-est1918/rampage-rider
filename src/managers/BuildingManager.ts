@@ -201,8 +201,15 @@ export class BuildingManager {
     // Move light
     building.light.position.set(worldX, this.scaledHeight * 0.5, worldZ);
 
-    // Move shadow
+    // Dispose old shadow geometry and create new one at new position
+    // (Shadow geometry is position-dependent due to directional projection)
+    this.scene.remove(building.shadow);
+    building.shadow.geometry.dispose();
+
+    const lightDir = new THREE.Vector3(1, 0, 1).normalize();
+    building.shadow = createBuildingShadow(this.scaledWidth, this.scaledDepth, lightDir, 4);
     building.shadow.position.set(worldX, 0.02, worldZ);
+    this.scene.add(building.shadow);
 
     building.gridX = newGridX;
     building.gridZ = newGridZ;
