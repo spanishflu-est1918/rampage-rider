@@ -211,17 +211,17 @@ export class Engine {
     const geometry = new THREE.PlaneGeometry(groundSize, groundSize);
 
     const textureLoader = new THREE.TextureLoader();
-    const albedoMap = textureLoader.load('/assets/textures/wood-planks/color.jpg');
-    const normalMap = textureLoader.load('/assets/textures/wood-planks/normal.png');
-    const roughnessMap = textureLoader.load('/assets/textures/wood-planks/roughness.jpg');
-    const aoMap = textureLoader.load('/assets/textures/wood-planks/ao.jpg');
+    const albedoMap = textureLoader.load('/assets/textures/cobblestone/color.jpg');
+    const normalMap = textureLoader.load('/assets/textures/cobblestone/normal.jpg');
+    const roughnessMap = textureLoader.load('/assets/textures/cobblestone/roughness.jpg');
+    const aoMap = textureLoader.load('/assets/textures/cobblestone/ao.jpg');
 
     albedoMap.colorSpace = THREE.SRGBColorSpace;
 
     [albedoMap, normalMap, roughnessMap, aoMap].forEach(tex => {
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(100, 100);
+      tex.repeat.set(400, 400);
     });
 
     const material = new THREE.MeshStandardMaterial({

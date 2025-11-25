@@ -166,23 +166,14 @@ export class BuildingManager {
 
     this.scene.add(mesh);
 
-    // Find roof meshes by checking bounding box height
-    // Roof meshes have their bottom above 2.0 units (model height is 3.8)
+    // Find roof mesh (the snow on top) by name
     const roofMeshes: THREE.Mesh[] = [];
     mesh.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        // Get bounding box in local space
-        child.geometry.computeBoundingBox();
-        const bbox = child.geometry.boundingBox;
-        if (bbox) {
-          // Check if the bottom of this mesh is above 2.0 (roof level)
-          // Account for scale
-          const minY = bbox.min.y * scale;
-          if (minY > 2.0) {
-            // Clone material so we can modify opacity independently
-            child.material = (child.material as THREE.Material).clone();
-            roofMeshes.push(child);
-          }
+        // lambert1 is the snow/roof mesh
+        if (child.name.includes('lambert1')) {
+          child.material = (child.material as THREE.Material).clone();
+          roofMeshes.push(child);
         }
       }
     });
