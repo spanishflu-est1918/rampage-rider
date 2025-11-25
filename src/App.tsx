@@ -1,8 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
 import Overlay from './components/ui/Overlay';
+import KillNotifications from './components/ui/KillNotifications';
+import SnowOverlay from './components/ui/SnowOverlay';
 import { MainMenu, GameOver } from './components/ui/Menus';
-import { GameState, GameStats, Tier } from './types';
+import { GameState, GameStats, Tier, KillNotification } from './types';
 import ErrorBoundary from './components/ErrorBoundary';
 import { preloader } from './core/Preloader';
 
@@ -42,6 +44,19 @@ function App() {
     setGameState(GameState.GAME_OVER);
   }, []);
 
+  // Kill notification system
+  const addNotificationRef = useRef<((message: string, isPursuit: boolean, points: number) => void) | null>(null);
+
+  const handleKillNotification = useCallback((notification: KillNotification) => {
+    if (addNotificationRef.current) {
+      addNotificationRef.current(notification.message, notification.isPursuit, notification.points);
+    }
+  }, []);
+
+  const registerNotificationCallback = useCallback((addFn: (message: string, isPursuit: boolean, points: number) => void) => {
+    addNotificationRef.current = addFn;
+  }, []);
+
   const startGame = () => {
     setGameState(GameState.PLAYING);
   };
@@ -55,6 +70,7 @@ function App() {
           gameActive={gameState === GameState.PLAYING}
           onStatsUpdate={handleStatsUpdate}
           onGameOver={handleGameOver}
+          onKillNotification={handleKillNotification}
         />
       </ErrorBoundary>
 
@@ -64,7 +80,11 @@ function App() {
       )}
 
       {gameState === GameState.PLAYING && (
-        <Overlay stats={stats} />
+        <>
+          <SnowOverlay />
+          <Overlay stats={stats} />
+          <KillNotifications onRegister={registerNotificationCallback} />
+        </>
       )}
 
       {gameState === GameState.GAME_OVER && (

@@ -249,29 +249,17 @@ export class Pedestrian extends THREE.Group {
       }
     }
 
-    // Get current position from physics body
-    const currentPos = this.rigidBody.translation();
+    // Simple position sync from Yuka AI (no expensive character controller)
+    // Pedestrians use Yuka's separation behavior to avoid each other
+    // Buildings are avoided via flee behavior when they hit walls
+    const yukaPos = this.yukaVehicle.position;
+    const newPosition = new THREE.Vector3(yukaPos.x, 0, yukaPos.z);
 
-    // Calculate desired movement from Yuka AI
-    const desiredX = this.yukaVehicle.position.x;
-    const desiredZ = this.yukaVehicle.position.z;
-    const deltaX = desiredX - currentPos.x;
-    const deltaZ = desiredZ - currentPos.z;
-
-    // Use character controller to move with collision detection
-    const desiredMovement = { x: deltaX, y: 0, z: deltaZ };
-    const newPosition = KinematicCharacterHelper.moveCharacter(
-      this.rigidBody,
-      this.collider,
-      this.characterController,
-      desiredMovement
-    );
-
-    // Sync Three.js position
+    // Sync Three.js position directly (much cheaper than character controller)
     (this as THREE.Group).position.copy(newPosition);
 
-    // Update Yuka position to match actual collision-corrected position (feedback to AI)
-    this.yukaVehicle.position.set(newPosition.x, 0, newPosition.z);
+    // Sync physics body position for collision detection by player
+    this.rigidBody.setNextKinematicTranslation({ x: newPosition.x, y: 0.5, z: newPosition.z });
 
     // Sync rotation (Yuka handles orientation)
     if (this.yukaVehicle.velocity.length() > 0.1) {
@@ -318,6 +306,13 @@ export class Pedestrian extends THREE.Group {
   }
 
   /**
+   * Check if pedestrian is panicking (running away)
+   */
+  isPanickingState(): boolean {
+    return this.isPanicking;
+  }
+
+  /**
    * Apply knockback/stumble effect when colliding with player
    */
   applyKnockback(direction: THREE.Vector3, force: number): void {
@@ -348,15 +343,16 @@ export class Pedestrian extends THREE.Group {
       .add(carVelocity.clone().normalize().multiplyScalar(0.5))
       .normalize();
 
-    // Violent force - much stronger than normal knockback
-    const force = 30 + Math.random() * 20; // 30-50 force
+    // Strong knockback force - velocity only, no teleporting
+    const force = 20 + Math.random() * 10; // 20-30 force (reduced from 30-50)
     const knockbackVelocity = knockbackDir.clone().multiplyScalar(force);
 
-    // Apply to Yuka vehicle
-    this.yukaVehicle.velocity.set(knockbackVelocity.x, knockbackVelocity.y, knockbackVelocity.z);
+    // Apply to Yuka vehicle - will naturally move over next frames
+    this.yukaVehicle.velocity.set(knockbackVelocity.x, 0, knockbackVelocity.z);
 
-    // Move visual position immediately for dramatic effect
-    (this as THREE.Group).position.add(knockbackDir.clone().multiplyScalar(3));
+    // Also update Yuka position slightly for immediate visual feedback
+    this.yukaVehicle.position.x += knockbackDir.x * 0.5;
+    this.yukaVehicle.position.z += knockbackDir.z * 0.5;
   }
 
   /**

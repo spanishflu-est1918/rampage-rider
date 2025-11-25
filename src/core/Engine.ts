@@ -9,7 +9,7 @@ import { Player } from '../entities/Player';
 import { Car } from '../entities/Car';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
-import { GameState, Tier, InputState, GameStats } from '../types';
+import { GameState, Tier, InputState, GameStats, KillNotification } from '../types';
 import { ActionController, ActionType } from './ActionController';
 
 /**
@@ -110,6 +110,7 @@ export class Engine {
     health: 100,
     heat: 0,
     wantedStars: 0,
+    inPursuit: false,
     killHistory: [],
     copHealthBars: [],
     isTased: false,
@@ -120,6 +121,7 @@ export class Engine {
   private callbacks: {
     onStatsUpdate?: (stats: GameStats) => void;
     onGameOver?: (stats: GameStats) => void;
+    onKillNotification?: (notification: KillNotification) => void;
   } = {};
 
   // Temp ground reference
@@ -140,11 +142,19 @@ export class Engine {
   private shakeIntensity: number = 0;
   private shakeDecay: number = 0.9;
 
+  // Kill notification messages
+  private static readonly KILL_MESSAGES = ['SPLAT!', 'CRUSHED!', 'DEMOLISHED!', 'OBLITERATED!', 'TERMINATED!'];
+  private static readonly PANIC_KILL_MESSAGES = ['COWARD!', 'NO ESCAPE!', 'RUN FASTER!', 'BACKSTAB!', 'EASY PREY!'];
+  private static readonly PURSUIT_KILL_MESSAGES = ['HEAT KILL!', 'WANTED BONUS!', 'PURSUIT FRENZY!', 'HOT STREAK!', 'RAMPAGE!'];
+  private static readonly ROADKILL_MESSAGES = ['ROADKILL!', 'PANCAKED!', 'FLATTENED!', 'SPLATTER!', 'SPEED BUMP!'];
+  private static readonly COP_KILL_MESSAGES = ['BADGE DOWN!', 'OFFICER DOWN!', 'COP DROPPED!', 'BLUE DOWN!'];
+
   constructor(canvas: HTMLCanvasElement, width: number, height: number) {
     // Initialize Three.js
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1a1a1a);
-    this.scene.fog = new THREE.Fog(0x1a1a1a, 30, 80);
+    // Note: Fog disabled due to WebGL 3D texture warnings on some GPUs
+    // this.scene.fog = new THREE.Fog(0x1a1a1a, 30, 80);
 
     // Orthographic camera for isometric view
     const aspect = width / height;
@@ -310,10 +320,12 @@ export class Engine {
    */
   setCallbacks(
     onStatsUpdate: (stats: GameStats) => void,
-    onGameOver: (stats: GameStats) => void
+    onGameOver: (stats: GameStats) => void,
+    onKillNotification?: (notification: KillNotification) => void
   ): void {
     this.callbacks.onStatsUpdate = onStatsUpdate;
     this.callbacks.onGameOver = onGameOver;
+    this.callbacks.onKillNotification = onKillNotification;
   }
 
   /**
@@ -423,6 +435,7 @@ export class Engine {
       health: 100,
       heat: 0,
       wantedStars: 0,
+      inPursuit: false,
       killHistory: [],
       copHealthBars: [],
       isTased: false,
@@ -490,7 +503,10 @@ export class Engine {
     });
 
     this.carSpawned = true;
-    console.log('[Engine] Car spawned! Press SHIFT to enter.');
+    console.log('[Engine] Car spawned! Press SPACE near it to enter.');
+
+    // Notify player that car is available
+    this.triggerKillNotification('CAR UNLOCKED!', true, 0);
   }
 
   /**
@@ -670,13 +686,41 @@ export class Engine {
 
       if (pedResult.kills > 0) {
         this.stats.kills += pedResult.kills;
-        this.stats.score += pedResult.kills * 10;
+
+        // Point calculation:
+        // - Base: 10 points
+        // - Panic bonus: 2x for killing someone running away
+        // - Pursuit bonus: 2x when cops are chasing (stacks with panic)
+        const basePoints = 10;
+        const regularKills = pedResult.kills - pedResult.panicKills;
+        const panicKills = pedResult.panicKills;
+
+        // Regular kills (with pursuit bonus if applicable)
+        const regularPoints = regularKills * (this.stats.inPursuit ? basePoints * 2 : basePoints);
+        // Panic kills get 2x (or 4x if also in pursuit)
+        const panicPoints = panicKills * (this.stats.inPursuit ? basePoints * 4 : basePoints * 2);
+
+        this.stats.score += regularPoints + panicPoints;
         this.stats.combo += pedResult.kills;
         this.stats.comboTimer = 5.0;
         this.stats.heat = Math.min(100, this.stats.heat + (pedResult.kills * 10));
 
         totalKills += pedResult.kills;
         allKillPositions.push(...pedResult.positions);
+
+        // Send kill notifications - panic kills get special message and show bonus
+        for (let i = 0; i < regularKills; i++) {
+          const message = this.stats.inPursuit
+            ? Engine.randomFrom(Engine.PURSUIT_KILL_MESSAGES)
+            : Engine.randomFrom(Engine.KILL_MESSAGES);
+          const points = this.stats.inPursuit ? basePoints * 2 : basePoints;
+          this.triggerKillNotification(message, this.stats.inPursuit, points);
+        }
+        for (let i = 0; i < panicKills; i++) {
+          const message = Engine.randomFrom(Engine.PANIC_KILL_MESSAGES);
+          const points = this.stats.inPursuit ? basePoints * 4 : basePoints * 2;
+          this.triggerKillNotification(message, true, points); // Always highlight panic kills
+        }
 
         this.crowd.panicCrowd(attackPosition, 10);
       }
@@ -694,7 +738,10 @@ export class Engine {
       );
 
       if (copResult.kills > 0) {
-        this.stats.score += copResult.kills * 50;
+        // Cops always give pursuit bonus since you're definitely in pursuit
+        const basePoints = 50;
+        const pointsPerKill = basePoints * 2; // Always 2x for cop kills
+        this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
 
         if (this.stats.copKills === 0) {
@@ -709,6 +756,11 @@ export class Engine {
 
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
+
+        // Send kill notifications for cop kills
+        for (let i = 0; i < copResult.kills; i++) {
+          this.triggerKillNotification(Engine.randomFrom(Engine.COP_KILL_MESSAGES), true, pointsPerKill);
+        }
       }
     }
 
@@ -728,9 +780,19 @@ export class Engine {
   /**
    * Handle vehicle kill (pedestrian hit by car)
    */
-  private handleVehicleKill(position: THREE.Vector3): void {
+  private handleVehicleKill(position: THREE.Vector3, wasPanicking: boolean = false): void {
     this.stats.kills++;
-    this.stats.score += 10;
+
+    // Point calculation:
+    // - Base: 15 points (vehicle kills worth more)
+    // - Panic bonus: 2x for killing someone running away
+    // - Pursuit bonus: 2x when cops are chasing (stacks with panic)
+    const basePoints = 15;
+    let points = basePoints;
+    if (wasPanicking) points *= 2;
+    if (this.stats.inPursuit) points *= 2;
+
+    this.stats.score += points;
     this.stats.combo++;
     this.stats.comboTimer = 5.0;
     this.stats.heat = Math.min(100, this.stats.heat + 10);
@@ -739,6 +801,17 @@ export class Engine {
     if (this.crowd) {
       this.crowd.panicCrowd(position, 15);
     }
+
+    // Trigger kill notification - panic kills get special message
+    let message: string;
+    if (wasPanicking) {
+      message = Engine.randomFrom(Engine.PANIC_KILL_MESSAGES);
+    } else if (this.stats.inPursuit) {
+      message = Engine.randomFrom(Engine.PURSUIT_KILL_MESSAGES);
+    } else {
+      message = Engine.randomFrom(Engine.ROADKILL_MESSAGES);
+    }
+    this.triggerKillNotification(message, wasPanicking || this.stats.inPursuit, points);
 
     this.shakeIntensity = 0.3;
   }
@@ -932,18 +1005,27 @@ export class Engine {
 
       // Handle pedestrian collisions
       if (this.isInVehicle && this.car) {
-        // Vehicle contact kills - check for pedestrians near car
-        const vehicleHitRadius = 2.5;
+        // Vehicle contact kills - larger radius to catch pedestrians before physics pushes them away
+        const vehicleKillRadius = 3.5;
         const carVelocity = this.car.getVelocity();
 
-        // Damage/kill first, THEN knockback (so they don't move out of range)
-        const result = this.crowd.damageInRadius(currentPos, vehicleHitRadius, 999, Infinity);
+        // Only check when car is actually moving (speed > 1)
+        const speed = carVelocity.length();
+        if (speed > 1) {
+          // Kill pedestrians in front of car (larger radius for fast-moving vehicle)
+          const result = this.crowd.damageInRadius(currentPos, vehicleKillRadius, 999, Infinity);
 
-        // Apply violent knockback to dead bodies for visual effect
-        this.crowd.applyVehicleKnockback(currentPos, carVelocity, vehicleHitRadius + 1);
+          // Apply knockback to nearby pedestrians (both dead and alive for ragdoll effect)
+          this.crowd.applyVehicleKnockback(currentPos, carVelocity, vehicleKillRadius);
 
-        for (let i = 0; i < result.kills; i++) {
-          this.handleVehicleKill(result.positions[i] || currentPos);
+          // Handle kills with panic bonus tracking
+          const regularKills = result.kills - result.panicKills;
+          for (let i = 0; i < regularKills; i++) {
+            this.handleVehicleKill(result.positions[i] || currentPos, false);
+          }
+          for (let i = 0; i < result.panicKills; i++) {
+            this.handleVehicleKill(result.positions[regularKills + i] || currentPos, true);
+          }
         }
       } else if (this.player) {
         // Player-pedestrian collisions (knockback only)
@@ -958,6 +1040,9 @@ export class Engine {
     if (this.cops) {
       // Update cop spawns based on heat
       this.cops.updateSpawns(this.stats.heat, currentPos);
+
+      // Track pursuit state - in pursuit when any cops are active
+      this.stats.inPursuit = this.cops.getActiveCopCount() > 0;
 
       // Check if player can be tased (not immune and not already tased, and NOT in vehicle)
       const playerCanBeTased = !this.isInVehicle && this.player ? this.player.canBeTased() : false;
@@ -1107,6 +1192,22 @@ export class Engine {
    */
   private shakeCamera(intensity: number = 0.3): void {
     this.cameraShakeIntensity = Math.max(this.cameraShakeIntensity, intensity);
+  }
+
+  /**
+   * Get random element from array
+   */
+  private static randomFrom<T>(arr: readonly T[]): T {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  /**
+   * Trigger a kill notification
+   */
+  private triggerKillNotification(message: string, isPursuit: boolean, points: number): void {
+    if (this.callbacks.onKillNotification) {
+      this.callbacks.onKillNotification({ message, isPursuit, points });
+    }
   }
 
   /**

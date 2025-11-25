@@ -146,6 +146,10 @@ export class CopManager {
         if (inCone) {
           cop.takeDamage(damage);
 
+          // Always apply knockback when hit (even if not killed) - helps player escape
+          const knockbackForce = 15;
+          cop.applyKnockback(position, knockbackForce);
+
           if (cop.isDeadState()) {
             killCount++;
             killPositions.push(copPos.clone());

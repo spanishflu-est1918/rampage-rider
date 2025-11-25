@@ -263,14 +263,14 @@ export class BuildingManager {
 
     // Building collision groups:
     // Membership: 0x0040 (BUILDING group)
-    // Filter: 0x001E (can collide with PLAYER=0x0002, PEDESTRIAN=0x0004, COP=0x0008, DEBRIS=0x0010)
+    // Filter: 0x009E (PLAYER=0x0002, PEDESTRIAN=0x0004, COP=0x0008, DEBRIS=0x0010, VEHICLE=0x0080)
     // Format: (filter << 16) | membership
     const colliderDesc = RAPIER.ColliderDesc.cuboid(
       CITY_CONFIG.BUILDING_WIDTH / 2,
       height / 2,
       CITY_CONFIG.BUILDING_DEPTH / 2
     )
-      .setCollisionGroups(0x001E0040); // Filter=0x001E, Membership=0x0040
+      .setCollisionGroups(0x009E0040); // Filter=0x009E (includes VEHICLE), Membership=0x0040
 
     this.world.createCollider(colliderDesc, body);
 

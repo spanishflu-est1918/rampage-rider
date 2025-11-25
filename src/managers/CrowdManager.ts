@@ -20,6 +20,10 @@ export class CrowdManager {
   // Deferred cleanup queue (clean AFTER physics step)
   private pedestriansToRemove: number[] = [];
 
+  // Death timers - track when pedestrians died for delayed cleanup
+  private deathTimers: Map<Pedestrian, number> = new Map();
+  private readonly DEATH_CLEANUP_DELAY = 3.0; // Seconds before dead pedestrians are removed
+
   // Spawn config
   private maxPedestrians: number = 40;
   private spawnRadius: number = 25; // Max spawn distance
@@ -172,7 +176,7 @@ export class CrowdManager {
 
   /**
    * Damage pedestrians in radius (e.g., player attack)
-   * Returns kill count and positions of killed pedestrians
+   * Returns kill count, positions, and panic kill count
    */
   damageInRadius(
     position: THREE.Vector3,
@@ -183,9 +187,11 @@ export class CrowdManager {
     coneAngle: number = Math.PI / 3
   ): {
     kills: number;
+    panicKills: number;
     positions: THREE.Vector3[]
   } {
     let killCount = 0;
+    let panicKillCount = 0;
     const killPositions: THREE.Vector3[] = [];
 
     for (const pedestrian of this.pedestrians) {
@@ -206,25 +212,35 @@ export class CrowdManager {
         }
 
         if (inCone) {
+          // Check if panicking BEFORE damage (they might die)
+          const wasPanicking = pedestrian.isPanickingState();
+
           pedestrian.takeDamage(damage);
 
           if (pedestrian.isDeadState()) {
             killCount++;
             killPositions.push(pedPos.clone());
+            if (wasPanicking) {
+              panicKillCount++;
+            }
           }
         }
       }
     }
 
-    return { kills: killCount, positions: killPositions };
+    return { kills: killCount, panicKills: panicKillCount, positions: killPositions };
   }
 
   /**
-   * Apply violent knockback to pedestrians hit by vehicle (including dead bodies)
+   * Apply violent knockback to pedestrians hit by vehicle
+   * Only knocks back DEAD pedestrians - alive ones get killed by damageInRadius first
    */
   applyVehicleKnockback(carPosition: THREE.Vector3, carVelocity: THREE.Vector3, radius: number): void {
     for (const pedestrian of this.pedestrians) {
-      // Don't skip dead - we want to knock dead bodies flying too
+      // Only knock back dead pedestrians (ragdoll effect)
+      // Alive pedestrians should be killed by damageInRadius, not pushed away
+      if (!pedestrian.isDeadState()) continue;
+
       const pedPos = (pedestrian as THREE.Group).position;
       const distance = pedPos.distanceTo(carPosition);
 
@@ -269,10 +285,22 @@ export class CrowdManager {
       const pedestrian = this.pedestrians[i];
       pedestrian.update(deltaTime);
 
-      // Remove dead pedestrians after death animation (5 seconds)
+      // Track and remove dead pedestrians after death animation
       if (pedestrian.isDeadState()) {
-        // TODO: Add timer to remove after animation completes
-        // For now, keep them on screen
+        // Start death timer if not already tracking
+        if (!this.deathTimers.has(pedestrian)) {
+          this.deathTimers.set(pedestrian, 0);
+        }
+
+        // Increment death timer
+        const deathTime = this.deathTimers.get(pedestrian)! + deltaTime;
+        this.deathTimers.set(pedestrian, deathTime);
+
+        // Remove after delay
+        if (deathTime >= this.DEATH_CLEANUP_DELAY) {
+          this.pedestriansToRemove.push(i);
+          this.deathTimers.delete(pedestrian);
+        }
       }
 
       // Mark pedestrians that wandered too far for removal
@@ -315,6 +343,8 @@ export class CrowdManager {
       pedestrian.destroy(this.world);
     }
     this.pedestrians = [];
+    this.deathTimers.clear();
+    this.pedestriansToRemove = [];
     this.entityManager.clear();
 
     console.log('[CrowdManager] Cleared all pedestrians');

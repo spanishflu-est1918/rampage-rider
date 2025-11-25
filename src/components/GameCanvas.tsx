@@ -1,14 +1,15 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Engine } from '../core/Engine';
-import { GameStats, InputState } from '../types';
+import { GameStats, InputState, KillNotification } from '../types';
 
 interface GameCanvasProps {
   onStatsUpdate: (stats: GameStats) => void;
   onGameOver: (stats: GameStats) => void;
+  onKillNotification?: (notification: KillNotification) => void;
   gameActive: boolean;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, gameActive }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKillNotification, gameActive }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const [engineReady, setEngineReady] = useState(false);
@@ -52,7 +53,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, game
         return;
       }
 
-      engine.setCallbacks(onStatsUpdate, onGameOver);
+      engine.setCallbacks(onStatsUpdate, onGameOver, onKillNotification);
       engineRef.current = engine;
       initializingEngine = null;
       setEngineReady(true);

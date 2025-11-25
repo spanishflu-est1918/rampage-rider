@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
+import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
 import {
   ENTITY_SPEEDS,
   PHYSICS_CONFIG,
@@ -48,6 +49,9 @@ export class Player extends THREE.Group {
   private verticalVelocity: number = 0;
   private gravity: number = PHYSICS_CONFIG.GRAVITY;
 
+  // Movement collision filter - only collide with ground and buildings (not pedestrians/cops)
+  private movementCollisionFilter: number;
+
   // Input state
   private input = {
     up: false,
@@ -93,6 +97,12 @@ export class Player extends THREE.Group {
 
   constructor() {
     super();
+
+    // Initialize movement collision filter - only ground and buildings (walk through pedestrians/cops)
+    // Format: (filter << 16) | membership
+    const groups = KinematicCharacterHelper.getCollisionGroups();
+    const movementFilter = groups.GROUND | groups.BUILDING; // What player movement collides WITH
+    this.movementCollisionFilter = (movementFilter << 16) | groups.PLAYER;
 
     // Sketchbook structure: tiltContainer > modelContainer > model
     this.tiltContainer = new THREE.Group();
@@ -504,8 +514,13 @@ export class Player extends THREE.Group {
         z: velocity.z * deltaTime
       };
 
-      // Compute movement accounting for obstacles
-      this.characterController.computeColliderMovement(this.collider, desiredMovement);
+      // Compute movement accounting for obstacles (only collide with ground/buildings, not NPCs)
+      this.characterController.computeColliderMovement(
+        this.collider,
+        desiredMovement,
+        undefined, // filterFlags
+        this.movementCollisionFilter // only collide with ground and buildings
+      );
 
       // Get corrected movement
       const correctedMovement = this.characterController.computedMovement();
