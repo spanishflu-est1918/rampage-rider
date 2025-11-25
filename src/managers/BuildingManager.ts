@@ -143,9 +143,8 @@ export class BuildingManager {
     // Position the model
     mesh.position.set(worldX, 0, worldZ);
 
-    // Random rotation (0, 90, 180, or 270 degrees) for variety
-    const rotations = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
-    mesh.rotation.y = rotations[Math.floor(Math.random() * rotations.length)];
+    // Rotate 90 degrees to face the street
+    mesh.rotation.y = Math.PI / 2;
 
     this.scene.add(mesh);
 
