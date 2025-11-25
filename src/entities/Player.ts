@@ -707,9 +707,9 @@ export class Player extends THREE.Group {
    */
   playSeatedAnimation(): void {
     // Try seated animation first, fall back to idle
-    const clip = THREE.AnimationClip.findByName(this.animations, 'Seated_Motorbike');
+    const clip = THREE.AnimationClip.findByName(this.animations, 'Seated_Bike');
     if (clip) {
-      this.playAnimation('Seated_Motorbike', 0.2);
+      this.playAnimation('Seated_Bike', 0.2);
     } else {
       // No seated animation - use idle as fallback
       this.playAnimation('Idle_A', 0.2);

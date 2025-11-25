@@ -232,7 +232,7 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     modelScale: 0.018,   // Model is ~98 units tall, need ~1.8 units (1.5x larger)
     modelRotationY: 0,   // GLTF Y-forward becomes Three.js -Z (default forward)
     modelOffsetY: 0,
-    riderOffsetY: 0.8,   // Seated on bicycle
+    riderOffsetY: 0.3,   // Lowered to sit butt on seat (legs bent in animation)
     riderOffsetZ: 0,     // Centered
     hideRider: false,    // Show rider on bicycle
     killRadius: 1.5,     // Small kill zone
@@ -251,7 +251,7 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     modelScale: 0.0045,  // Model is ~462 units tall, need ~2.1 units (1.5x larger)
     modelRotationY: 0,   // GLTF Y-forward becomes Three.js -Z (default forward)
     modelOffsetY: 0.3,   // Raise model to sit on ground properly
-    riderOffsetY: 1.0,   // Seated on motorbike
+    riderOffsetY: 0.5,   // Lowered to sit butt on seat (legs bent in animation)
     riderOffsetZ: 0,     // Centered
     hideRider: false,    // Show rider on motorbike
     killRadius: 2.0,

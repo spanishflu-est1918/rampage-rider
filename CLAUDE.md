@@ -236,7 +236,7 @@ Available animations in the player model:
 - **Melee Unarmed**: `Melee_Unarmed_Attack_Kick`, `Melee_Unarmed_Attack_Punch_A`, `Melee_Unarmed_Idle`
 - **Melee Dualwield**: `Melee_Dualwield_Attack_Chop`, `Melee_Dualwield_Attack_Slice`, `Melee_Dualwield_Attack_Stab`
 - **Block**: `Melee_Block`, `Melee_Block_Attack`, `Melee_Block_Hit`, `Melee_Blocking`
-- **Vehicle**: `Seated_Motorbike` (single-frame seated pose for bikes)
+- **Vehicle**: `Seated_Bike` (single-frame seated pose with arms forward for handlebars)
 - **Other**: `Interact`, `PickUp`, `Spawn_Air`, `Spawn_Ground`, `Throw`, `Use_Item`, `T-Pose`
 
 ## Critical Implementation Notes
