@@ -35,8 +35,13 @@ export class Vehicle extends THREE.Group {
   // State
   private health: number;
   private maxHealth: number;
-  private speed: number;
+  private maxSpeed: number;
+  private currentSpeed: number = 0; // Current velocity for acceleration
   private isDestroyed: boolean = false;
+
+  // Acceleration config
+  private readonly acceleration: number = 15; // Units per second squared
+  private readonly deceleration: number = 20; // Braking/friction when not accelerating
 
   // Movement collision filter (collide with GROUND and BUILDING, pass through cops/peds)
   private movementCollisionFilter: number =
@@ -60,7 +65,7 @@ export class Vehicle extends THREE.Group {
     this.config = config;
     this.health = config.maxHealth;
     this.maxHealth = config.maxHealth;
-    this.speed = config.speed;
+    this.maxSpeed = config.speed;
 
     // Model container
     this.modelContainer = new THREE.Group();
@@ -274,8 +279,23 @@ export class Vehicle extends THREE.Group {
     const moveVector = this.getMovementDirection();
     const isMoving = moveVector.length() > 0;
 
-    // Calculate velocity
-    const velocity = moveVector.clone().multiplyScalar(this.speed);
+    // Accelerate or decelerate
+    if (isMoving) {
+      // Accelerate towards max speed
+      this.currentSpeed = Math.min(
+        this.maxSpeed,
+        this.currentSpeed + this.acceleration * deltaTime
+      );
+    } else {
+      // Decelerate (friction/braking)
+      this.currentSpeed = Math.max(
+        0,
+        this.currentSpeed - this.deceleration * deltaTime
+      );
+    }
+
+    // Calculate velocity using current speed
+    const velocity = moveVector.clone().multiplyScalar(this.currentSpeed);
 
     // Rotate vehicle to face movement direction (smooth rotation)
     if (isMoving) {
@@ -416,7 +436,7 @@ export class Vehicle extends THREE.Group {
    */
   getVelocity(): THREE.Vector3 {
     const moveDir = this.getMovementDirection();
-    return moveDir.multiplyScalar(this.speed);
+    return moveDir.multiplyScalar(this.currentSpeed);
   }
 
   /**
