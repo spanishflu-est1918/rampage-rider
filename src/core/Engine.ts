@@ -986,8 +986,8 @@ export class Engine {
     // Measure entity updates
     const entitiesStart = performance.now();
 
-    // Tier progression: 0 kills = spawn car immediately (for testing)
-    if (this.stats.kills >= 0 && !this.carSpawned && this.player) {
+    // Tier progression: spawn car at 10 kills
+    if (this.stats.kills >= 10 && !this.carSpawned && this.player) {
       this.spawnCar();
     }
 

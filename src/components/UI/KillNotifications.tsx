@@ -47,16 +47,26 @@ const KillNotifications: React.FC<KillNotificationsProps> = ({ onRegister }) => 
         >
           <div className={`text-center ${notification.isPursuit ? 'scale-110' : ''}`}>
             <div
-              className={`font-black retro drop-shadow-lg ${
+              className={`font-black retro ${
                 notification.isPursuit ? 'text-3xl text-orange-400' : 'text-2xl text-red-500'
               }`}
+              style={{
+                textShadow: notification.isPursuit
+                  ? '0 0 10px #f97316, 0 0 20px #f97316, 0 0 40px #ea580c, 0 0 80px #ea580c'
+                  : '0 0 10px #ef4444, 0 0 20px #ef4444, 0 0 40px #dc2626'
+              }}
             >
               {notification.message}
             </div>
             <div
-              className={`font-bold retro drop-shadow-md ${
+              className={`font-bold retro ${
                 notification.isPursuit ? 'text-lg text-yellow-300' : 'text-base text-white'
               }`}
+              style={{
+                textShadow: notification.isPursuit
+                  ? '0 0 8px #fde047, 0 0 16px #facc15'
+                  : '0 0 8px #fff, 0 0 16px #fff'
+              }}
             >
               +{notification.points}
             </div>
