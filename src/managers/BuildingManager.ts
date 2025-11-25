@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { CITY_CONFIG } from '../constants';
 import { AssetLoader } from '../core/AssetLoader';
-import { ChristmasLights, LightColorPreset } from '../rendering/ChristmasLights';
+import { ChristmasLights } from '../rendering/ChristmasLights';
 
 /**
  * BuildingManager
@@ -209,14 +209,106 @@ export class BuildingManager {
 
     this.world.createCollider(colliderDesc, body);
 
+    // Create Christmas lights around the stall roof
+    const scaledHeight = this.MODEL_HEIGHT * scale;
+    const scaledWidth = this.MODEL_DEPTH * scale;  // Swapped due to rotation
+    const scaledDepth = this.MODEL_WIDTH * scale;  // Swapped due to rotation
+
+    const lightsStrands = this.christmasLights.createPerimeterLights(
+      new THREE.Vector3(worldX, 0, worldZ),
+      scaledWidth,
+      scaledDepth,
+      scaledHeight * 0.85, // Slightly below roof peak
+      {
+        bulbCount: 8,
+        colorPreset: 'warm-white',
+        bulbSize: 0.06,
+        sag: 0.15,
+        pointLightInterval: 0, // No point lights - WebGL limit is ~12
+      }
+    );
+
+    // Create string lights across streets - connect each corner to its counterpart
+    // on the neighboring building in both X and Z directions
+    const roofHeight = scaledHeight * 0.9;
+    const halfW = scaledWidth / 2;
+    const halfD = scaledDepth / 2;
+
+    // Four corners of this building's roof
+    const corners = [
+      { x: worldX - halfW, z: worldZ - halfD, name: 'nw' }, // Northwest
+      { x: worldX + halfW, z: worldZ - halfD, name: 'ne' }, // Northeast
+      { x: worldX + halfW, z: worldZ + halfD, name: 'se' }, // Southeast
+      { x: worldX - halfW, z: worldZ + halfD, name: 'sw' }, // Southwest
+    ];
+
+    const streetConfig = {
+      bulbCount: 10,
+      colorPreset: 'warm-white' as const,
+      bulbSize: 0.05,
+      sag: 0.35,
+      pointLightInterval: 0,
+    };
+
+    // Connect to neighbor in +X direction (corners ne->nw, se->sw)
+    const neighborXWorldX = (gridX + 2) * this.cellWidth;
+    const streetKeyX = `street_x_${key}`;
+    if (!this.lightsPerBuilding.has(streetKeyX)) {
+      const strands: ReturnType<ChristmasLights['createStrand']>[] = [];
+      // NE corner -> neighbor's NW corner
+      strands.push(this.christmasLights.createStrand(
+        new THREE.Vector3(corners[1].x, roofHeight, corners[1].z),
+        new THREE.Vector3(neighborXWorldX - halfW, roofHeight, worldZ - halfD),
+        streetConfig
+      ));
+      // SE corner -> neighbor's SW corner
+      strands.push(this.christmasLights.createStrand(
+        new THREE.Vector3(corners[2].x, roofHeight, corners[2].z),
+        new THREE.Vector3(neighborXWorldX - halfW, roofHeight, worldZ + halfD),
+        streetConfig
+      ));
+      this.lightsPerBuilding.set(streetKeyX, strands);
+    }
+
+    // Connect to neighbor in +Z direction (corners sw->nw, se->ne)
+    const neighborZWorldZ = (gridZ + 2) * this.cellDepth;
+    const streetKeyZ = `street_z_${key}`;
+    if (!this.lightsPerBuilding.has(streetKeyZ)) {
+      const strands: ReturnType<ChristmasLights['createStrand']>[] = [];
+      // SW corner -> neighbor's NW corner
+      strands.push(this.christmasLights.createStrand(
+        new THREE.Vector3(corners[3].x, roofHeight, corners[3].z),
+        new THREE.Vector3(worldX - halfW, roofHeight, neighborZWorldZ - halfD),
+        streetConfig
+      ));
+      // SE corner -> neighbor's NE corner
+      strands.push(this.christmasLights.createStrand(
+        new THREE.Vector3(corners[2].x, roofHeight, corners[2].z),
+        new THREE.Vector3(worldX + halfW, roofHeight, neighborZWorldZ - halfD),
+        streetConfig
+      ));
+      this.lightsPerBuilding.set(streetKeyZ, strands);
+    }
+
+    this.lightsPerBuilding.set(key, lightsStrands);
+
     // Store building with roof meshes
-    this.buildings.set(key, { mesh, body, roofMeshes });
+    this.buildings.set(key, { mesh, body, roofMeshes, lightsKey: key });
   }
 
   /**
    * Remove a building
    */
-  private removeBuilding(key: string, building: { mesh: THREE.Group; body: RAPIER.RigidBody; roofMeshes: THREE.Mesh[] }): void {
+  private removeBuilding(key: string, building: { mesh: THREE.Group; body: RAPIER.RigidBody; roofMeshes: THREE.Mesh[]; lightsKey: string }): void {
+    // Remove Christmas lights for this building
+    const strands = this.lightsPerBuilding.get(key);
+    if (strands) {
+      for (const strand of strands) {
+        this.christmasLights.removeStrand(strand);
+      }
+      this.lightsPerBuilding.delete(key);
+    }
+
     // Remove from scene
     this.scene.remove(building.mesh);
 

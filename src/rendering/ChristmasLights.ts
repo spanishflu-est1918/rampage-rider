@@ -128,13 +128,9 @@ export class ChristmasLights {
       const point = curvePoints[i];
       const color = colors[i % colors.length];
 
-      // Create emissive bulb material
-      const bulbMaterial = new THREE.MeshStandardMaterial({
+      // Create simple glowing bulb material (MeshBasicMaterial avoids shader complexity)
+      const bulbMaterial = new THREE.MeshBasicMaterial({
         color: color,
-        emissive: color,
-        emissiveIntensity: 2,
-        roughness: 0.3,
-        metalness: 0.1,
       });
 
       const bulbMesh = new THREE.Mesh(this.bulbGeometry, bulbMaterial);
@@ -254,12 +250,12 @@ export class ChristmasLights {
         // Calculate twinkle factor (0.7 to 1.0 range for subtle effect)
         const twinkleFactor = 0.85 + 0.15 * Math.sin(bulb.twinklePhase);
 
-        // Update emissive intensity
-        const material = bulb.mesh.material as THREE.MeshStandardMaterial;
-        material.emissiveIntensity = bulb.baseIntensity * twinkleFactor;
+        // Update color brightness by multiplying base color
+        const material = bulb.mesh.material as THREE.MeshBasicMaterial;
+        material.color.copy(bulb.baseColor).multiplyScalar(twinkleFactor);
       }
 
-      // Update point light intensities to match
+      // Update point light intensities to match (if any)
       for (let i = 0; i < strand.pointLights.length; i++) {
         const bulbIndex = i * (DEFAULT_CONFIG.pointLightInterval || 4);
         if (bulbIndex < strand.bulbs.length) {

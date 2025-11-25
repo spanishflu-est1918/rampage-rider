@@ -1,4 +1,5 @@
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 /**
@@ -9,11 +10,17 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 export class AssetLoader {
   private static instance: AssetLoader;
   private loader: GLTFLoader;
+  private dracoLoader: DRACOLoader;
   private cache: Map<string, GLTF> = new Map();
   private isLoaded: boolean = false;
 
   private constructor() {
     this.loader = new GLTFLoader();
+
+    // Setup Draco decoder for compressed models
+    this.dracoLoader = new DRACOLoader();
+    this.dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+    this.loader.setDRACOLoader(this.dracoLoader);
   }
 
   static getInstance(): AssetLoader {
