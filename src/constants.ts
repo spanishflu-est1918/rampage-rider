@@ -229,10 +229,10 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     colliderWidth: 0.3,
     colliderHeight: 0.5,
     colliderLength: 0.8,
-    modelScale: 0.018,   // Model is ~98 units tall, need ~1.8 units (1.5x larger)
-    modelRotationY: 0,   // GLTF Y-forward becomes Three.js -Z (default forward)
-    modelOffsetY: 0,
-    riderOffsetY: 0.0,   // Low position for Melee_Blocking seated pose
+    modelScale: 0.18,    // 80% of 0.224
+    modelRotationY: -Math.PI / 2,  // Rotate 90 degrees left
+    modelOffsetY: 0.25,
+    riderOffsetY: 0.5,
     riderOffsetZ: -0.6,  // Move back to sit on seat
     hideRider: false,    // Show rider on bicycle
     killRadius: 1.5,     // Small kill zone

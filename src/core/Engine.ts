@@ -515,7 +515,7 @@ export class Engine {
 
     // Debug: verify positions match
     const vehiclePos = this.vehicle.getPosition();
-    console.log(`[VEHICLE] Spawned ${vehicleConfig.name} at (${spawnPos.x.toFixed(1)}, ${spawnPos.z.toFixed(1)}), player at (${playerPos.x.toFixed(1)}, ${playerPos.z.toFixed(1)}), distance=${playerPos.distanceTo(vehiclePos).toFixed(1)}`);
+    console.log(`[VEHICLE] Spawned ${vehicleConfig.name} at (${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)}), player at (${playerPos.x.toFixed(1)}, ${playerPos.y.toFixed(1)}, ${playerPos.z.toFixed(1)}), distance=${playerPos.distanceTo(vehiclePos).toFixed(1)}, type=${vehicleType}`);
 
     // Notify player that vehicle is available
     const tierConfig = TIER_CONFIGS[tier];

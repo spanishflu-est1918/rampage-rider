@@ -122,10 +122,20 @@ export class Vehicle extends THREE.Group {
       // Setup shadows
       AnimationHelper.setupShadows(model);
 
-      // Apply config transforms
+      // Apply scale first (needed for accurate bounding box)
       model.scale.setScalar(this.config.modelScale);
       model.rotation.y = this.config.modelRotationY;
+
+      // Auto-center the model based on bounding box
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+
+      // Offset to center on X and Z, use config offset for Y
+      model.position.x = -center.x;
+      model.position.z = -center.z;
       model.position.y = this.config.modelOffsetY;
+
+      console.log(`[Vehicle] ${this.config.name} auto-centered from (${center.x.toFixed(2)}, ${center.z.toFixed(2)})`);
 
       this.modelContainer.add(model);
       this.modelLoaded = true;
