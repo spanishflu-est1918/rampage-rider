@@ -15,7 +15,7 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({ onSelect, currentVehi
   ];
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex gap-2 bg-black/60 p-2 rounded-lg border border-white/20">
+    <>
       {vehicles.map((v) => (
         <button
           key={v.label}
@@ -30,7 +30,7 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({ onSelect, currentVehi
           {v.icon}
         </button>
       ))}
-    </div>
+    </>
   );
 };
 

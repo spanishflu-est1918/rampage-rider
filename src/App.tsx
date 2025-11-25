@@ -4,11 +4,19 @@ import Overlay from './components/ui/Overlay';
 import NotificationSystem, { NotificationController } from './components/ui/NotificationSystem';
 import SnowOverlay from './components/ui/SnowOverlay';
 import VehicleSelector from './components/ui/VehicleSelector';
+import AnimationSelector from './components/ui/AnimationSelector';
 import { MainMenu, GameOver } from './components/ui/Menus';
 import { GameState, GameStats, Tier, KillNotification } from './types';
 import { VehicleType } from './constants';
 import ErrorBoundary from './components/ErrorBoundary';
 import { preloader } from './core/Preloader';
+
+interface EngineControls {
+  spawnVehicle: (type: VehicleType | null) => void;
+  getAnimations: () => string[];
+  playAnimation: (name: string) => void;
+  playAnimationOnce: (name: string) => void;
+}
 
 function App() {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
@@ -65,17 +73,49 @@ function App() {
   };
 
   // Debug vehicle spawning
-  const spawnVehicleRef = useRef<((type: VehicleType | null) => void) | null>(null);
+  const engineControlsRef = useRef<EngineControls | null>(null);
   const [currentVehicle, setCurrentVehicle] = useState<VehicleType | null>(null);
+  const [currentAnimation, setCurrentAnimation] = useState<string>('Idle_A');
 
-  const handleEngineReady = useCallback((spawnFn: (type: VehicleType | null) => void) => {
-    spawnVehicleRef.current = spawnFn;
+  // Hardcoded animation list (async loading makes dynamic list unreliable)
+  const animations = [
+    'Death_A', 'Death_A_Pose', 'Death_B', 'Death_B_Pose',
+    'Hit_A', 'Hit_B', 'Idle_A', 'Idle_B', 'Interact',
+    'Jump_Full_Long', 'Jump_Full_Short', 'Jump_Idle', 'Jump_Land', 'Jump_Start',
+    'Melee_1H_Attack_Chop', 'Melee_1H_Attack_Jump_Chop', 'Melee_1H_Attack_Slice_Diagonal',
+    'Melee_1H_Attack_Slice_Horizontal', 'Melee_1H_Attack_Stab',
+    'Melee_2H_Attack_Chop', 'Melee_2H_Attack_Slice', 'Melee_2H_Attack_Spin',
+    'Melee_2H_Attack_Spinning', 'Melee_2H_Attack_Stab', 'Melee_2H_Idle',
+    'Melee_Block', 'Melee_Block_Attack', 'Melee_Block_Hit', 'Melee_Blocking',
+    'Melee_Dualwield_Attack_Chop', 'Melee_Dualwield_Attack_Slice', 'Melee_Dualwield_Attack_Stab',
+    'Melee_Unarmed_Attack_Kick', 'Melee_Unarmed_Attack_Punch_A', 'Melee_Unarmed_Idle',
+    'PickUp', 'Running_A', 'Running_B', 'Spawn_Air', 'Spawn_Ground',
+    'T-Pose', 'Throw', 'Use_Item', 'Walking_A', 'Walking_B', 'Walking_C', 'Seated_Bike'
+  ];
+
+  const handleEngineReady = useCallback((controls: EngineControls) => {
+    engineControlsRef.current = controls;
   }, []);
 
   const handleVehicleSelect = useCallback((vehicleType: VehicleType | null) => {
-    if (spawnVehicleRef.current) {
-      spawnVehicleRef.current(vehicleType);
+    if (engineControlsRef.current) {
+      engineControlsRef.current.spawnVehicle(vehicleType);
       setCurrentVehicle(vehicleType);
+    }
+  }, []);
+
+  const handleAnimationSelect = useCallback((name: string) => {
+    console.log(`[ANIM] App: ${name}, controls=${!!engineControlsRef.current}`);
+    if (engineControlsRef.current) {
+      engineControlsRef.current.playAnimation(name);
+      setCurrentAnimation(name);
+    }
+  }, []);
+
+  const handleAnimationPlayOnce = useCallback((name: string) => {
+    console.log(`[ANIM] App playOnce: ${name}`);
+    if (engineControlsRef.current) {
+      engineControlsRef.current.playAnimationOnce(name);
     }
   }, []);
 
@@ -107,7 +147,15 @@ function App() {
             showEnterPrompt={stats.isNearCar && !stats.isInVehicle}
             showTasedAlert={stats.isTased}
           />
-          <VehicleSelector onSelect={handleVehicleSelect} currentVehicle={currentVehicle} />
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex gap-2 bg-black/60 p-2 rounded-lg border border-white/20">
+            <VehicleSelector onSelect={handleVehicleSelect} currentVehicle={currentVehicle} />
+            <AnimationSelector
+              animations={animations}
+              onSelect={handleAnimationSelect}
+              onPlayOnce={handleAnimationPlayOnce}
+              currentAnimation={currentAnimation}
+            />
+          </div>
         </>
       )}
 

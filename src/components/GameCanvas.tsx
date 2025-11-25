@@ -3,12 +3,19 @@ import { Engine } from '../core/Engine';
 import { GameStats, InputState, KillNotification } from '../types';
 import { VehicleType } from '../constants';
 
+interface EngineControls {
+  spawnVehicle: (type: VehicleType | null) => void;
+  getAnimations: () => string[];
+  playAnimation: (name: string) => void;
+  playAnimationOnce: (name: string) => void;
+}
+
 interface GameCanvasProps {
   onStatsUpdate: (stats: GameStats) => void;
   onGameOver: (stats: GameStats) => void;
   onKillNotification?: (notification: KillNotification) => void;
   gameActive: boolean;
-  onEngineReady?: (spawnVehicle: (type: VehicleType | null) => void) => void;
+  onEngineReady?: (controls: EngineControls) => void;
 }
 
 const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKillNotification, gameActive, onEngineReady }) => {
@@ -60,9 +67,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
       initializingEngine = null;
       setEngineReady(true);
 
-      // Expose debug spawn function to parent
+      // Expose engine controls to parent
       if (onEngineReady) {
-        onEngineReady((vehicleType) => engine.debugSpawnVehicle(vehicleType));
+        onEngineReady({
+          spawnVehicle: (vehicleType) => engine.debugSpawnVehicle(vehicleType),
+          getAnimations: () => engine.getAnimationNames(),
+          playAnimation: (name) => engine.debugPlayAnimation(name),
+          playAnimationOnce: (name) => engine.debugPlayAnimationOnce(name),
+        });
       }
 
       console.log('[GameCanvas] Engine ready!');

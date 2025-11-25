@@ -25,6 +25,9 @@
     "yuka": "^0.7.1"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.2.1",
+    "@gltf-transform/extensions": "^4.2.1",
+    "@gltf-transform/functions": "^4.2.1",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "sharp-cli": "^5.2.0",
