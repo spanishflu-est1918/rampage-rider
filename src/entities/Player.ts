@@ -369,17 +369,10 @@ export class Player extends THREE.Group {
       this.jumpCooldown -= deltaTime;
     }
 
-    // Handle jump (Sketchbook JumpRunning: jump force 4)
-    // When tased, Space is used for escape instead of jump
-    if (this.input.jump && !this.prevInput.jump) {
-      if (this.isTased) {
-        // Space key = escape from taser
-        this.handleEscapePress();
-      } else if (this.isGrounded && this.jumpCooldown <= 0) {
-        // Normal jump (blocked during cooldown)
-        this.verticalVelocity = this.jumpForce;
-        this.isGrounded = false;
-      }
+    // Handle taser escape with SPACE (attack input)
+    // When tased, SPACE is used for escape instead of attack
+    if (this.isTased && this.input.attack && !this.prevInput.attack) {
+      this.handleEscapePress();
     }
 
     // Apply gravity

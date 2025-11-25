@@ -56,12 +56,16 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
               80% { transform: translate(0px, 2px); }
               90% { transform: translate(-2px, 2px); }
             }
+            @keyframes flash {
+              0%, 50% { opacity: 1; }
+              25%, 75% { opacity: 0.3; }
+            }
           `}</style>
           <div className="text-center">
-            <div className="text-3xl font-black text-yellow-400 retro mb-1" style={{ textShadow: '2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>
+            <div className="text-3xl font-black text-yellow-400 retro mb-1" style={{ textShadow: '2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000', animation: 'flash 0.3s infinite' }}>
               ⚡ TASED! ⚡
             </div>
-            <div className="text-xl font-bold text-white retro" style={{ textShadow: '2px 2px 0 #000' }}>
+            <div className="text-xl font-bold text-white retro" style={{ textShadow: '2px 2px 0 #000', animation: 'flash 0.3s infinite' }}>
               MASH SPACE!
             </div>
           </div>
