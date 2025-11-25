@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 /**
  * ParticleEmitter - Manages blood splatter particle effects with ground collision
- * Particles fall with physics and trigger decals when they hit the ground
+ * OPTIMIZED: Uses shared textures and materials, pools sprites
  */
 export class ParticleEmitter {
   private scene: THREE.Scene;
@@ -12,13 +12,89 @@ export class ParticleEmitter {
     life: number;
     maxLife: number;
     hasCollided: boolean;
+    size: number;
   }> = [];
+
+  // Shared resources (created once, reused)
+  private sharedTexture: THREE.Texture;
+  private sharedMaterial: THREE.SpriteMaterial;
+
+  // Object pool for sprites
+  private spritePool: THREE.Sprite[] = [];
+  private readonly MAX_POOL_SIZE = 200;
 
   private onGroundHitCallback: ((position: THREE.Vector3, size: number) => void) | null = null;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
-    console.log('[ParticleEmitter] Created');
+
+    // Create shared blood texture ONCE
+    this.sharedTexture = this.createBloodTexture();
+
+    // Create shared material ONCE
+    this.sharedMaterial = new THREE.SpriteMaterial({
+      map: this.sharedTexture,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+    });
+
+    console.log('[ParticleEmitter] Created with shared texture/material');
+  }
+
+  /**
+   * Create a single shared blood texture
+   */
+  private createBloodTexture(): THREE.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d')!;
+
+    const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gradient.addColorStop(0, 'rgba(80, 0, 0, 1)');
+    gradient.addColorStop(0.5, 'rgba(50, 0, 0, 0.9)');
+    gradient.addColorStop(1, 'rgba(30, 0, 0, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(16, 16, 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+  }
+
+  /**
+   * Get a sprite from pool or create new one
+   */
+  private getSprite(): THREE.Sprite {
+    if (this.spritePool.length > 0) {
+      const sprite = this.spritePool.pop()!;
+      sprite.visible = true;
+      sprite.material.opacity = 1;
+      return sprite;
+    }
+
+    // Create new sprite with CLONED material (so opacity can vary per particle)
+    const material = this.sharedMaterial.clone();
+    return new THREE.Sprite(material);
+  }
+
+  /**
+   * Return sprite to pool
+   */
+  private returnSprite(sprite: THREE.Sprite): void {
+    sprite.visible = false;
+    this.scene.remove(sprite);
+
+    if (this.spritePool.length < this.MAX_POOL_SIZE) {
+      this.spritePool.push(sprite);
+    } else {
+      // Pool full, dispose
+      sprite.material.dispose();
+    }
   }
 
   /**
@@ -32,32 +108,11 @@ export class ParticleEmitter {
    * Emit blood particles at a position
    */
   emitBlood(position: THREE.Vector3, count: number = 20): void {
-    for (let i = 0; i < count; i++) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 32;
-      canvas.height = 32;
-      const ctx = canvas.getContext('2d')!;
+    // Cap particle count for performance
+    const actualCount = Math.min(count, 15);
 
-      const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-      gradient.addColorStop(0, 'rgba(80, 0, 0, 1)');
-      gradient.addColorStop(0.5, 'rgba(50, 0, 0, 0.9)');
-      gradient.addColorStop(1, 'rgba(30, 0, 0, 0)');
-
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(16, 16, 14, 0, Math.PI * 2);
-      ctx.fill();
-
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 1,
-        depthWrite: false,
-        blending: THREE.NormalBlending,
-      });
-
-      const sprite = new THREE.Sprite(material);
+    for (let i = 0; i < actualCount; i++) {
+      const sprite = this.getSprite();
       const size = 0.1 + Math.random() * 0.2;
       sprite.scale.set(size, size, 1);
 
@@ -66,8 +121,6 @@ export class ParticleEmitter {
         position.y + 0.8 + Math.random() * 0.4,
         position.z + (Math.random() - 0.5) * 0.5
       );
-
-      sprite.userData.size = size * 8;
 
       this.scene.add(sprite);
 
@@ -79,7 +132,7 @@ export class ParticleEmitter {
         Math.sin(angle) * speed
       );
 
-      const maxLife = 3.0;
+      const maxLife = 2.0; // Reduced from 3.0
 
       this.particles.push({
         sprite,
@@ -87,6 +140,7 @@ export class ParticleEmitter {
         life: maxLife,
         maxLife,
         hasCollided: false,
+        size: size * 8,
       });
     }
   }
@@ -95,32 +149,11 @@ export class ParticleEmitter {
    * Emit blood spray (directional, for when player hits pedestrian while moving)
    */
   emitBloodSpray(position: THREE.Vector3, direction: THREE.Vector3, count: number = 15): void {
-    for (let i = 0; i < count; i++) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 32;
-      canvas.height = 32;
-      const ctx = canvas.getContext('2d')!;
+    // Cap particle count for performance
+    const actualCount = Math.min(count, 10);
 
-      const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-      gradient.addColorStop(0, 'rgba(90, 0, 0, 1)');
-      gradient.addColorStop(0.7, 'rgba(60, 0, 0, 0.8)');
-      gradient.addColorStop(1, 'rgba(30, 0, 0, 0)');
-
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(16, 16, 12, 0, Math.PI * 2);
-      ctx.fill();
-
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 1,
-        depthWrite: false,
-        blending: THREE.NormalBlending,
-      });
-
-      const sprite = new THREE.Sprite(material);
+    for (let i = 0; i < actualCount; i++) {
+      const sprite = this.getSprite();
       const size = 0.08 + Math.random() * 0.15;
       sprite.scale.set(size, size, 1);
 
@@ -130,8 +163,6 @@ export class ParticleEmitter {
         position.z
       );
 
-      // Store size for decal
-      sprite.userData.size = size * 6;
       this.scene.add(sprite);
 
       const spread = 0.5;
@@ -140,7 +171,7 @@ export class ParticleEmitter {
       velocity.y = 0.5 + Math.random() * 1.5;
       velocity.z += (Math.random() - 0.5) * spread;
 
-      const maxLife = 3.0;
+      const maxLife = 2.0; // Reduced from 3.0
 
       this.particles.push({
         sprite,
@@ -148,6 +179,7 @@ export class ParticleEmitter {
         life: maxLife,
         maxLife,
         hasCollided: false,
+        size: size * 6,
       });
     }
   }
@@ -166,9 +198,7 @@ export class ParticleEmitter {
       particle.life -= deltaTime;
 
       if (particle.life <= 0) {
-        this.scene.remove(particle.sprite);
-        particle.sprite.material.dispose();
-        (particle.sprite.material.map as THREE.Texture)?.dispose();
+        this.returnSprite(particle.sprite);
         this.particles.splice(i, 1);
         continue;
       }
@@ -184,18 +214,15 @@ export class ParticleEmitter {
         if (this.onGroundHitCallback) {
           const hitPosition = particle.sprite.position.clone();
           hitPosition.y = 0.01;
-          const decalSize = particle.sprite.userData.size || 1.0;
-          this.onGroundHitCallback(hitPosition, decalSize);
+          this.onGroundHitCallback(hitPosition, particle.size);
         }
-        this.scene.remove(particle.sprite);
-        particle.sprite.material.dispose();
-        (particle.sprite.material.map as THREE.Texture)?.dispose();
+        this.returnSprite(particle.sprite);
         this.particles.splice(i, 1);
         continue;
       }
 
       const lifePercent = particle.life / particle.maxLife;
-      particle.sprite.material.opacity = lifePercent;
+      (particle.sprite.material as THREE.SpriteMaterial).opacity = lifePercent;
     }
   }
 
@@ -204,9 +231,7 @@ export class ParticleEmitter {
    */
   clear(): void {
     for (const particle of this.particles) {
-      this.scene.remove(particle.sprite);
-      particle.sprite.material.dispose();
-      (particle.sprite.material.map as THREE.Texture)?.dispose();
+      this.returnSprite(particle.sprite);
     }
     this.particles = [];
   }
