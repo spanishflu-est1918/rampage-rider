@@ -10,696 +10,311 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2024-11-25]
+
+### Christmas Market World Theme
+
+**Added:**
+- **Christmas market stalls** replace procedural buildings
+  - Imported German Christmas Market GLB model (optimized from 54MB to 11MB)
+  - 512x512 texture compression for web performance
+  - Stalls arranged in grid pattern with 90° rotation to face streets
+  - Physics colliders adjusted for rotated model dimensions
+
+- **Roof transparency effect** - Roofs fade as player approaches
+  - Fade from opaque at 12 units to transparent at 5 units
+  - Targets `lambert1` mesh (snow on roof) by name
+  - Cloned materials for independent opacity per building
+  - Proper disposal of cloned materials on building removal
+
+- **Cobblestone ground texture** (Polyhaven `cobblestone_floor_04`)
+  - Color, normal, roughness, and AO maps
+  - Tiled 50x50 across the ground plane
+
+- **Christmas lights rendering system** (`ChristmasLights.ts`)
+- **Lamp post decorations** (`LampPostManager.ts`)
+
+- **Camera tilt** - Z-axis rotation (-0.15 rad) for better building visibility
+
+**Fixed:**
+- Roof mesh detection - uses name matching instead of bounding box height
+- Building collider dimensions swapped to match 90° rotation
+- Uniform grid spacing (both axes same) for consistent layout
+- Google Fonts @import moved to top of CSS (PostCSS error fix)
+
+**Files Created:**
+- `src/rendering/ChristmasLights.ts`
+- `src/managers/LampPostManager.ts`
+- `public/assets/props/christmas-market.glb`
+- `public/assets/textures/cobblestone/` (color, normal, roughness, ao)
+
+**Files Modified:**
+- `src/managers/BuildingManager.ts` - Complete rewrite for GLB models
+- `src/core/Engine.ts` - Camera tilt, lighting adjustments
+- `src/index.css` - Font import order fix
+
+---
+
+### Vehicle Attack System
+
+**Added:**
+- **Bicycle melee attack** (`handleBicycleAttack()`)
+  - 270° wide attack arc (hits both sides)
+  - 3.0 unit radius, can hit 2 targets (unlimited at 10+ combo)
+  - Custom messages: "BIKE SLASH!", "CYCLE SLAUGHTER!"
+  - 12 base points per kill
+  - Uses horizontal slice animation, returns to seated pose
+
+- **Motorbike drive-by shooting** (`handleMotorbikeShoot()`)
+  - Hitscan attack with 10 unit range, 60° forward cone
+  - 15 base points per kill (+ pursuit bonus)
+  - 75 points for cop kills (COP KILLER!)
+  - Custom messages: "DRIVE-BY!", "DRIVE-BY TERROR!"
+  - Larger panic radius (15 units) for gunshots
+  - Screen shake feedback on all shots
+  - Uses Throw animation
+
+- **Sedan** has no attack - just running over pedestrians
+
+**Fixed:**
+- **Space bar not working in vehicles** - ActionController was returning NONE when `isInVehicle=true`, blocking all vehicle attacks. Now returns ATTACK regardless of vehicle state.
+- **Bicycle excluded from collision kills** - Only melee attack works for bicycle
+- **Bicycle speed increased** from 10 to 14 (2x sprint speed)
+
+**Files Modified:**
+- `src/core/Engine.ts` - Added vehicle attack handlers, routing logic
+- `src/core/ActionController.ts` - Fixed ATTACK routing for vehicles
+- `src/entities/Player.ts` - Added `playBicycleAttack()`, `playMotorbikeShoot()`
+- `src/entities/Vehicle.ts` - Added `getRotationY()` method
+- `src/constants.ts` - Increased bicycle speed
+
+---
+
+### Vehicle Physics Improvements
+
+**Added:**
+- **Acceleration/deceleration physics**
+  - Vehicles gradually accelerate to max speed (15 units/s²)
+  - Decelerate with friction when not accelerating (20 units/s²)
+  - Renamed `speed` → `maxSpeed` for clarity
+  - `getVelocity()` returns actual current velocity
+
+- **Wheel rotation animation** for bicycle
+  - Finds wheel parts (tire, spokes) when loading model
+  - Rotates wheels around Y axis based on velocity
+  - Rotation speed calculated from distance/wheelRadius
+
+- **Model optimizations**
+  - Bicycle compressed from 3.8MB to 2.1MB with quantization
+  - Auto-centering based on bounding box
+
+**Files Modified:**
+- `src/entities/Vehicle.ts` - Acceleration physics, wheel rotation, velocity tracking
+
+---
+
+### Player Animation System
+
+**Added:**
+- **Spawn_Air animation** on game start
+  - Player drops from sky (Y=12) with gravity physics
+  - `playSpawnAnimation()` with physics-based drop
+  - `playAnimationWithCallback()` for one-shot animations
+
+- **Seated pose for bikes/motorbikes**
+  - Uses `Melee_Blocking` animation (arms forward like handlebars)
+  - `updateAnimations()` method updates mixer while in vehicle
+  - Adjusted rider offsets: bicycle Z=-0.6, motorbike Z=-0.5
+
+**Fixed:**
+- Animation not playing in vehicle (mixer wasn't updating)
+- Restored working boxman.glb from commit 662dbb2 after Blender export corrupted animation data
+
+**Files Modified:**
+- `src/entities/Player.ts` - Spawn animation, seated pose, vehicle animation updates
+
+---
+
+### Multi-Vehicle System
+
+**Added:**
+- **Three vehicle tiers**: Bicycle (0 kills) → Motorbike (10 kills) → Sedan (25 kills)
+- **Vehicle spawning** at configurable kill milestones
+- **Notification system** unified for vehicle unlocks
+- **SHIFT to enter vehicles** (prevents accidental entry)
+- **Vehicle selector** for testing different vehicles
+
+**Fixed:**
+- Vehicle entry now works correctly
+- Prevent spawn while already driving
+- Car spawns at correct position relative to player
+
+**Files Modified:**
+- `src/core/Engine.ts` - Multi-vehicle support, spawn logic
+- `src/constants.ts` - Vehicle configurations and milestones
+- `src/components/UI/VehicleSelector.tsx` - Debug UI
+
+---
+
 ## [2024-11-24]
 
-### Phase 2.5: Code Quality & Refactoring
+### Combat System Overhaul
 
 **Added:**
-- `src/utils/AnimationHelper.ts` - Shared animation utilities for all entities
-- `src/constants.ts` - Expanded with entity configuration constants:
-  - `SKIN_TONES` - European skin tone palette for humanoid entities
-  - `ENTITY_SPEEDS` - Movement speeds for Player, Pedestrian, Cop
-  - `PHYSICS_CONFIG` - Gravity, jump force, ground check values
-  - `ATTACK_CONFIG` - Cop attack ranges, damages, cooldowns
-  - `HIT_STUN` - Stun durations for Player and Cop
-  - `COP_CONFIG` - Cop health, steering force, uniform colors
-  - `PEDESTRIAN_CONFIG` - Health, panic distance, stumble duration
-  - `TASER_CONFIG` - Escape decay, per-press progress, immunity duration
-
-**Changed:**
-- **Cop.ts**: Now uses AssetLoader cache instead of fresh GLTFLoader
-  - Uses `SkeletonUtils.clone()` for proper animated model cloning
-  - References constants instead of hardcoded magic numbers
-  - Uses `AnimationHelper` for visual effects (flash, shadows, skin tones)
-  - Removed 12 hardcoded values → imported from constants
-
-- **Player.ts**: Now uses AssetLoader cache instead of fresh GLTFLoader
-  - References `ENTITY_SPEEDS`, `PHYSICS_CONFIG`, `TASER_CONFIG`
-  - Uses `AnimationHelper.setupShadows()` for model setup
-  - Removed 8 hardcoded values → imported from constants
-
-- **Pedestrian.ts**: Updated to use constants and AnimationHelper
-  - References `ENTITY_SPEEDS`, `PEDESTRIAN_CONFIG`, `SKIN_TONES`
-  - Uses `AnimationHelper` for shadows, skin tones
-  - Removed duplicate skin tone array
-
-- **AssetLoader.ts**: Added boxman.glb to preload list
-
-**Performance Impact:**
-- Cop spawning no longer triggers network requests (uses cache)
-- Player model loading uses cache instead of fresh load
-- Reduced memory churn from repeated GLTFLoader instantiation
-
-**Code Quality Impact:**
-- All gameplay-affecting values now in single location (`constants.ts`)
-- Balance tuning requires editing one file instead of hunting through entities
-- Duplicate code eliminated across 3 entity files
-- AnimationHelper provides consistent patterns for all entities
-
-**Files Created:**
-- `src/utils/AnimationHelper.ts` (170 lines)
-
-**Files Modified:**
-- `src/constants.ts` (+100 lines of entity configuration)
-- `src/core/AssetLoader.ts` (+2 lines - boxman.glb preload)
-- `src/entities/Cop.ts` (refactored loadModel, constants imports)
-- `src/entities/Player.ts` (refactored loadModel, constants imports)
-- `src/entities/Pedestrian.ts` (constants imports, AnimationHelper usage)
-
----
-
-### Attack Lock and Pedestrian Physics Bug Fixes
+- **Directional cone-based attacks** - 90° forward arc, must face victims
+- **Attack movement lock** - Player stops during attack animations
+- **Maxed-out combo system** - One kill at a time normally, unlimited at 10+ combo
+- **Particle-to-decal blood system** - Ultrakill-inspired blood splatter
+  - 30 burst + 20 directional spray particles per kill
+  - DecalGeometry for persistent floor blood
+  - 5 procedural blood texture variations
+  - Dark blood aesthetic (almost black)
 
 **Fixed:**
-- Player no longer gets stuck unable to move after stabbing attacks
-- Pedestrians no longer sink through floor during panic/run-away behavior
-- Attack animation state properly resets after each attack
-- Dead pedestrian bodies no longer physically block player movement
+- Player attack lock bug - Timer-based completion instead of event listener
+- Pedestrians sinking through floor - Y-axis constrained to 0
+- Dead body collision - Colliders disabled on death
 
-**Root Causes Resolved:**
-
-1. **Attack Animation Lock Bug**
-   - Global AnimationMixer event listener was firing for ANY animation completion
-   - Multiple event listeners accumulated on repeated attacks
-   - `clampWhenFinished` kept actions "running" indefinitely
-   - Attack state could get stuck permanently
-
-2. **Pedestrian Floor-Sinking Bug**
-   - Yuka steering behaviors operated in 3D space with Y-axis movement
-   - FleeBehavior calculated vertical movement when fleeing from danger
-   - No Y-axis constraint existed during position synchronization
-   - Pedestrians gradually drifted downward and disappeared
-
-3. **Dead Body Collision Bug**
-   - Dead pedestrians kept active Rapier colliders
-   - Kinematic-kinematic collisions created physical blockage
-   - Player couldn't push through corpses
-
-**Implementation Details:**
-
-```typescript
-// Player.ts - Timer-based attack completion
-private attackTimer: number = 0;
-
-// Replace buggy event listener with explicit checks
-if (attackTime >= attackDuration || this.attackTimer <= 0) {
-  this.isAttacking = false;
-  this.attackAction.stop();
-  this.attackAction = null;
-  this.attackTimer = 0;
-}
-
-// Pedestrian.ts - Y-axis constraint during position sync
-(this as THREE.Group).position.set(
-  this.yukaVehicle.position.x,
-  0, // Keep pedestrians locked to ground level
-  this.yukaVehicle.position.z
-);
-
-// Pedestrian.ts - Flatten danger position to 2D
-const flatDangerPosition = new YUKA.Vec3(dangerPosition.x, 0, dangerPosition.z);
-const fleeBehavior = new YUKA.FleeBehavior(flatDangerPosition);
-
-// Pedestrian.ts - Disable colliders on death
-const numColliders = this.rigidBody.numColliders();
-for (let i = 0; i < numColliders; i++) {
-  const collider = this.rigidBody.collider(i);
-  collider.setCollisionGroups(0); // Disable all collisions
-}
-```
-
-**Files Modified:**
-- `src/entities/Player.ts` - Fixed animation state management, added timeout safety
-- `src/entities/Pedestrian.ts` - Constrained Y-axis, disabled dead body colliders
-
-**Gameplay Impact:**
-- Smooth, reliable attack system without lock-ups
-- Can spam attacks without getting stuck
-- Pedestrians stay properly grounded during all behaviors
-- Can walk through dead bodies without obstruction
-- More fluid combat experience
+**Files Created:**
+- `src/rendering/ParticleSystem.ts`
+- `src/rendering/BloodDecalSystem.ts`
 
 ---
 
-### Directional Cone-Based Attack System
+### Police & Heat System
 
 **Added:**
-- Cone-based directional attack system (90° forward arc)
-- Player must face victims to attack them
-- Attack radius reduced from 3.5 to 2.0 units
-- `getFacingDirection()` method on Player class
-- Dot product angle check for cone validation
+- **Police chase system** with Yuka pursuit AI
+- **Heat mechanics** - Escalating police response
+- **Cop attacks**: Taser stun + bullet damage
+- **Taser escape mechanic** - Mash SPACE to break free (flashing UI)
+- **Taser beam visual effect** - Bright yellow line to player
+- **Bullet projectile visuals**
 
-**Implementation Details:**
-```typescript
-// In Player.ts
-getFacingDirection(): THREE.Vector3 {
-  const direction = new THREE.Vector3(0, 0, 1);
-  direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
-  return direction;
-}
-
-// In CrowdManager.ts
-const toPedestrian = new THREE.Vector3().subVectors(pedPos, position).normalize();
-const dotProduct = direction.dot(toPedestrian);
-const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
-inCone = angle <= coneAngle / 2;
-```
-
-**Attack Parameters:**
-- **Radius**: 2.0 units (reduced from 3.5)
-- **Cone Angle**: 90° (π/2 radians) forward arc
-- **Direction**: Player's facing direction from rotation
-
-**Gameplay Impact:**
-- More precise attacks requiring aim
-- Can't hit enemies behind or beside you
-- Must face victims to kill them
-- Reduces accidental kills
-- More skill-based combat
-
-**Files Modified:**
-- `src/entities/Player.ts` - Added getFacingDirection() method
-- `src/managers/CrowdManager.ts` - Added direction and coneAngle parameters
-- `src/core/Engine.ts` - Passes facing direction to attack
+**Files Created:**
+- `src/entities/Cop.ts`
+- `src/managers/CopManager.ts`
+- `src/rendering/TaserBeam.ts`
 
 ---
 
-### Attack Movement Lock - Player Stops When Stabbing
+### Driveable Car System
 
 **Added:**
-- Player movement completely stops during attack animations
-- Character becomes vulnerable while attacking
-- Movement and rotation lock when `isAttacking` flag is true
-- Attack animation finished listener automatically unlocks movement
+- **Car unlocked at 10 kills** (later changed to multi-vehicle)
+- **Monster truck model** replaced sedan
+- **Car kills pedestrians on contact** then knocks bodies flying
+- **Ragdoll physics** for dead pedestrians
+- **SPACE as universal action button** (attack/enter vehicle/escape taser)
 
-**Implementation Details:**
-```typescript
-// In Player.ts
-private isAttacking: boolean = false;
-
-// When attack starts
-this.isAttacking = true;
-const onFinished = () => {
-  this.isAttacking = false;
-  mixer.removeEventListener('finished', onFinished);
-};
-mixer.addEventListener('finished', onFinished);
-
-// In update() - prevent movement
-if (this.isAttacking) {
-  velocity.set(0, 0, 0);
-}
-if (isMoving && !this.isAttacking) {
-  // Apply rotation
-}
-```
-
-**Gameplay Impact:**
-- Tactical combat: Must commit to attacks
-- Vulnerability window: Can't run away while stabbing
-- Risk/reward: Killing slows you down
-- Police counter: Easier to get caught when attacking multiple enemies
+**Fixed:**
+- Car direction and facing
+- Building collision with vehicles
+- Knockback physics for hit pedestrians
 
 **Files Modified:**
-- `src/entities/Player.ts` - Added isAttacking flag, movement lock, animation listener
+- `src/core/Engine.ts` - Car system integration
+- `src/entities/Vehicle.ts` - Created vehicle class
 
 ---
 
-### Maxed-Out Combo System - Kill Limitation
+### UI & Visual Polish
 
 **Added:**
-- Combo multiplier threshold system for knife attacks
-- Knife kills limited to ONE civilian at a time by default
-- Unlimited kills when combo reaches threshold (10+ combo)
-- MAX_COMBO_THRESHOLD constant (set to 10)
+- **2D snow overlay** effect
+- **Dead body cleanup** system (despawn after time)
+- **Panic kill bonus** - Extra points for killing panicked pedestrians
+- **Neon glow** on kill notifications
+- **Full-screen backgrounds** on menu and game over
+- **Wider BUSTED card** for game over
 
-**Combat System Changes:**
-- `CrowdManager.damageInRadius()` now accepts `maxKills` parameter (default: Infinity)
-- Attack callback checks current combo value before damaging pedestrians
-- Loop breaks after reaching maxKills limit
-- Console logging differentiates between normal and maxed-out kills
+**Fixed:**
+- Font flash (FOUT) by preloading Google Font
+- Loading overlay removed from GameCanvas
 
-**Implementation Details:**
-```typescript
-// In Engine.ts attack callback
-const maxKills = this.stats.combo >= 10 ? Infinity : 1;
-const result = this.crowd.damageInRadius(attackPosition, attackRadius, damage, maxKills);
-
-// In CrowdManager.ts
-damageInRadius(position: THREE.Vector3, radius: number, damage: number, maxKills: number = Infinity)
-```
-
-**Gameplay Flow:**
-- **Combo 0-9**: Knife kills only ONE pedestrian per attack
-- **Combo 10+**: Knife kills ALL pedestrians in attack radius (maxed out!)
-- Combo timer: 5 seconds (resets to 0 if timer expires)
-
-**Files Modified:**
-- `src/constants.ts` - Added MAX_COMBO_THRESHOLD = 10
-- `src/managers/CrowdManager.ts` - Added maxKills parameter
-- `src/core/Engine.ts` - Added combo check in attack callback
+**Performance:**
+- Optimized particle and blood decal systems
+- Optimized KillNotifications component
+- Fixed pedestrian memory leaks with AssetLoader and shared textures
 
 ---
 
-### Blood Effects System - Particle-to-Decal Implementation
+### Code Quality & Refactoring
 
 **Added:**
-- Particle-to-decal blood system inspired by Ultrakill
-- Three.js DecalGeometry for persistent floor blood splatters
-- Physics-driven blood particle simulation with gravity
-- Ground collision detection for particles
-- Dark blood aesthetic (very dark red/almost black)
+- `src/utils/AnimationHelper.ts` - Shared animation utilities
+- `src/core/ActionController.ts` - Context-based input routing
+- `src/core/Preloader.ts` - Asset and physics preloading
 
-**Particle System (`src/rendering/ParticleSystem.ts`):**
-- Blood particles spray from character torso height (0.8-1.2 units)
-- 30 burst particles + 20 directional spray particles per kill
-- Real physics: initial velocity + gravity (-9.8 m/s²)
-- Ground collision detection at y <= 0.05
-- Particles removed after spawning decal
-- Normal blending (not additive) for dark appearance
-- 3 second lifetime to allow particles to fall
-
-**Decal System (`src/rendering/BloodDecalSystem.ts`):**
-- Procedurally generated blood textures (5 variations)
-- Organic splatter shapes with droplets and streaks
-- Dark color palette: rgba(50-80, 0-15, 0-15)
-- DecalGeometry projects onto ground mesh
-- Proper z-fighting prevention (polygonOffsetFactor: -4)
-- Random rotation and sizing for variation
-- Max 100 decals for performance (oldest removed when limit reached)
-
-**Integration:**
-- Particle ground hit callback triggers decal creation
-- Decal size based on particle size
-- Blood accumulates on floor as kills increase
-- Screen shake (0.5 intensity per kill)
-- Pedestrian panic and stumble system
-
-**Visual Flow:**
-```
-Character → Blood Spray → Particles Fall with Physics → Hit Ground → Decal Spawned → Blood Stays Forever
-```
-
-**Files Added:**
-- `src/rendering/ParticleSystem.ts` - Particle emitter with collision detection
-- `src/rendering/BloodDecalSystem.ts` - DecalGeometry blood splatters
+**Changed:**
+- **AssetLoader standardization** - All entities use cache, not fresh GLTFLoader
+- **Constants consolidation** - All magic numbers moved to `constants.ts`:
+  - `SKIN_TONES`, `ENTITY_SPEEDS`, `PHYSICS_CONFIG`
+  - `ATTACK_CONFIG`, `HIT_STUN`, `COP_CONFIG`
+  - `PEDESTRIAN_CONFIG`, `TASER_CONFIG`
+- **Animation DRY** - All entities use AnimationHelper
 
 **Files Modified:**
-- `src/core/Engine.ts` - Integrated particle and decal systems
-- `src/managers/CrowdManager.ts` - Returns kill positions for blood spawning
+- `src/entities/Cop.ts` - Uses AssetLoader, constants, AnimationHelper
+- `src/entities/Player.ts` - Uses AssetLoader, constants
+- `src/entities/Pedestrian.ts` - Uses constants, AnimationHelper
 
 ---
 
 ## [2024-11-23]
 
-### Phase 2.2 - Jump, Sprint, and Attack Mechanics
+### Phase 2.2 - Jump, Sprint, Attack Mechanics
 
 **Added:**
-- Jump mechanic with gravity physics
-- Inverted sprint system (sprint by default, Shift to walk slowly)
-- Attack input system (placeholder implementation)
-- Full input key bindings for all movement actions
-
-**Jump System:**
-- Jump force: 5 units/second
-- Gravity: -15 units/second²
-- Ground detection at Y <= 0.57
-- Prevents mid-air jumps with grounded check
-- Jump animation: `jump_running` with 0.1s fade
-
-**Movement System (Inverted Sprint):**
-- Default sprint speed: 7 units/second (character naturally sprints)
-- Walk speed: 4 units/second (activated by holding Shift)
-- Shift key slows down instead of speeding up
-- Sprint animation plays by default when moving
-- Walk/run animation plays when Shift held
-- Debug logging shows walk state
-
-**Attack System:**
-- F key binding for attack input
-- Placeholder console logging
-- Animation priority: highest (attack > jump > sprint > run > idle)
-- Ready for future combat implementation
-
-**Input Bindings:**
-- WASD / Arrow Keys: Movement (default = sprint)
-- Space: Jump
-- Shift (Left/Right): Walk (slows down from sprint)
-- F: Attack
+- Jump with gravity physics (force: 5, gravity: -15)
+- Inverted sprint (sprint default, Shift to walk)
+- Attack input system (F key → later SPACE)
 
 **Animation State Machine:**
-Priority-based animation system ensures correct animation plays:
-1. Attack (highest priority)
-2. Jump (jump_running)
-3. Sprint (default movement, no Shift)
+1. Attack (highest)
+2. Jump
+3. Sprint (default movement)
 4. Run/Walk (Shift held)
-5. Idle (lowest priority)
-
-**Vertical Physics:**
-```typescript
-// Jump trigger
-if (this.input.jump && this.isGrounded && !this.prevInput.jump) {
-  this.verticalVelocity = this.jumpForce;
-  this.isGrounded = false;
-}
-
-// Gravity application
-if (!this.isGrounded) {
-  this.verticalVelocity += this.gravity * deltaTime;
-}
-
-// Ground check
-if (translation.y <= 0.57 && this.verticalVelocity <= 0) {
-  this.isGrounded = true;
-  this.verticalVelocity = 0;
-}
-
-// Apply to rigid body
-this.rigidBody.setLinvel(
-  { x: velocity.x, y: this.verticalVelocity, z: velocity.z },
-  true
-);
-```
-
-**Files Modified:**
-- `src/entities/Player.ts` - Added jump, sprint, attack mechanics
-- `src/core/Engine.ts` - Updated input forwarding for all actions
-- `src/components/GameCanvas.tsx` - Added attack key binding (F key)
-- `src/types.ts` - Added `attack?: boolean` to InputState
-
-**Technical Details:**
-- Vertical velocity tracked independently from horizontal movement
-- Ground check uses Y position threshold
-- Previous input state prevents repeated jump triggers
-- Inverted sprint: character naturally fast, Shift slows down to walk speed
-- Walk mode only activates when moving (prevents standing walk state)
-- Change detection for debug logging (only logs on input changes)
+5. Idle (lowest)
 
 ---
 
-## [2024-11-23]
-
-### Phase 2.1 - Basic Player Movement System
+### Phase 2.1 - Basic Player Movement
 
 **Added:**
-- Created `src/entities/Player.ts` - Complete character controller with Sketchbook movement system
-- Loaded boxman.glb character model from Sketchbook
-- Implemented camera-relative WASD movement for isometric view
-- Added idle and run animation system with smooth blending
-- Implemented smooth camera follow with lerp
-- Added ground grid for spatial reference
-- Fixed character shadow positioning
-
-**Player Movement Features:**
-- Camera-relative controls (WASD moves relative to camera angle, not world axes)
-- Ported Sketchbook movement functions:
-  - `getLocalMovementDirection()` - Converts WASD to local vector
-  - `getCameraRelativeMovementVector()` - Transforms to camera space
-  - `applyVectorMatrixXZ()` - Rotation matrix for XZ plane
-- Kinematic Rapier physics body at Y=0 for proper ground contact
-- Move speed: 4 units/second
-
-**Animation System:**
-- THREE.AnimationMixer integration
-- Idle animation when standing still
-- Run animation when moving (any direction)
-- Smooth 0.1s fade transitions between animations
-- Animations update every frame via mixer.update(deltaTime)
-
-**Camera System:**
-- Isometric position: (2.5, 6.25, 2.5) - close view
-- Frustum size: 7.5 for tight framing
-- Smooth follow with 0.1 lerp factor
-- Maintains isometric offset while following player
-- Always looks at player position
-
-**Visual Improvements:**
-- Character spawns at Y=0 for shadow at feet
-- Model container offset: Y=-0.57 (Sketchbook structure)
-- Ground grid: 50x50 with gray lines (0x444444, 0x333333)
-- Grid positioned at Y=0.01 to prevent z-fighting
-
-**Input System:**
-- Persistent input state prevents diagonal movement bug
-- Per-key state tracking (not replaced on each event)
-- Debug logging on input state changes only
-
-**Files Created:**
-- `src/entities/Player.ts` - Complete player class with animations
-- `public/assets/boxman.glb` - Character model from Sketchbook
-
-**Files Modified:**
-- `src/core/Engine.ts` - Added camera follow, closer camera, ground grid
-- `src/components/GameCanvas.tsx` - Fixed input handling for diagonals
-- `tsconfig.json` - Excluded sketchbook-ref from type checking
-- `src/components/ui/8bit/badge.tsx` - Fixed className prop type
-- `src/components/ui/8bit/card.tsx` - Fixed className prop type
-
-**Technical Implementation:**
-```typescript
-// Camera-relative movement (Player.ts:178-202)
-private getCameraRelativeMovementVector(): THREE.Vector3 {
-  const localDirection = this.getLocalMovementDirection();
-  const flatViewVector = new THREE.Vector3(
-    this.cameraDirection.x,
-    0,
-    this.cameraDirection.z
-  ).normalize();
-  return this.applyVectorMatrixXZ(flatViewVector, localDirection);
-}
-
-// Animation switching (Player.ts:227-232)
-if (isMoving && this.currentAnimation !== 'run') {
-  this.playAnimation('run', 0.1);
-} else if (!isMoving && this.currentAnimation !== 'idle') {
-  this.playAnimation('idle', 0.1);
-}
-
-// Camera follow (Engine.ts:343-357)
-const targetCameraPos = new THREE.Vector3(
-  playerPos.x + 2.5,
-  playerPos.y + 6.25,
-  playerPos.z + 2.5
-);
-this.camera.position.lerp(targetCameraPos, 0.1);
-this.camera.lookAt(playerPos.x, playerPos.y, playerPos.z);
-```
-
-**Bug Fixes:**
-- Fixed diagonal movement - input state now persistent per key
-- Fixed shadow gap - character spawns at Y=0, not Y=2
-- Fixed TypeScript errors with THREE.Group inheritance using type assertions
+- `src/entities/Player.ts` with Sketchbook movement system
+- Camera-relative WASD movement for isometric view
+- Boxman.glb character with animations
+- Smooth camera follow with lerp
+- Ground grid for reference
 
 ---
 
-## [2024-11-23]
-
-### Phase 1.4 - Type System Fixes
-
-**Fixed:**
-- GameStats interface - Added missing properties:
-  - `health: number` - Player health tracking
-  - `combo: number` - Kill combo counter
-  - `comboTimer: number` - Combo timeout tracking
-  - `gameTime: number` - Total elapsed game time
-- PhysicsWorld type errors - Commented out `getContactPairs()` method that used non-existent `forEachContactPair()` in Rapier 0.11.2
-- 8bitcn component type definitions - Migrated to modern React type imports
-
-**Changed:**
-- All 8bitcn components now use modern `import type { ... } from "react"` pattern instead of `import * as React`
-- button.tsx - Added explicit `onClick?: () => void` and used `Omit<ButtonHTMLAttributes, 'ref'>` to avoid conflicts
-- badge.tsx - Added modern type imports and `children?: ReactNode` prop
-- card.tsx - Added modern type imports and `children?: ReactNode` prop
-- progress.tsx - Changed from `React.ComponentProps` to `import type { ComponentProps }`
-- health-bar.tsx - Fixed import path and added modern type imports
-- mana-bar.tsx - Added modern type imports
-
-**Files Modified:**
-- `src/types.ts` - Extended GameStats interface
-- `src/core/PhysicsWorld.ts` - Commented out unsupported method
-- `src/components/ui/8bit/button.tsx` - Modern type imports + explicit onClick
-- `src/components/ui/8bit/badge.tsx` - Modern type imports
-- `src/components/ui/8bit/card.tsx` - Modern type imports
-- `src/components/ui/8bit/progress.tsx` - Modern type imports
-- `src/components/ui/8bit/health-bar.tsx` - Modern type imports + import path fix
-- `src/components/ui/8bit/mana-bar.tsx` - Modern type imports
-
-**Technical Details:**
-- Using React 19.2.0 with automatic JSX transform (no need to import React namespace)
-- All 8bitcn components now properly typed with TypeScript strict mode
-- ButtonHTMLAttributes properly inherited with explicit onClick for clarity
-- ComponentProps imported directly from "react" instead of React.ComponentProps
-- Zero TypeScript errors after fixes
-
----
-
-### Phase 1.3 - UI System with 8bitcn Components
+### Phase 1 - Core Engine Foundation
 
 **Added:**
-- Installed and configured shadcn/ui component system
-- Installed 8bitcn retro pixel-art component library from custom registry
-- Configured `@/` path aliases in tsconfig.json and vite.config.ts
-- Imported "Press Start 2P" retro font via retro.css
-
-**Changed:**
-- Converted `src/components/ui/Menus.tsx` to use 8bitcn Button, Card, and Badge components
-- Converted `src/components/ui/Overlay.tsx` to use 8bitcn HealthBar, Progress, and Badge components
-- Updated `src/index.css` to import retro.css globally
-- Renamed components directory from `UI/` to `ui/` (lowercase) for consistency
-
-**Components Installed:**
-- `@8bitcn/button` - Pixelated buttons with press animation
-- `@8bitcn/card` - Retro bordered cards
-- `@8bitcn/badge` - Pixel-art badges
-- `@8bitcn/health-bar` - Red health display bar
-- `@8bitcn/mana-bar` - Customizable stat bar (for heat meter)
-- `@8bitcn/progress` - 8-bit progress bars
-
-**Files Modified:**
-- `components.json` - Added @8bitcn registry, configured aliases
-- `tsconfig.json` - Set `@/*` path alias to `./src/*`
-- `src/index.css` - Imported retro.css
-- `src/components/ui/Menus.tsx` - Converted to 8bitcn components
-- `src/components/ui/Overlay.tsx` - Converted to 8bitcn components
-- `src/App.tsx` - Updated imports to lowercase `ui/`
-
-**Technical Details:**
-- Path aliases using `@/` work throughout codebase
-- Tailwind CSS v4 integration with Vite plugin
-- 8bitcn components wrap base shadcn components with retro styling
-- Created `src/lib/utils.ts` for `cn()` utility function
-
----
-
-### Phase 1.2 - Yuka AI Manager Integration
-
-**Added:**
-- Created `src/core/AIManager.ts` - Clean wrapper around Yuka AI library
-- Integrated EntityManager for AI entity management
-- Integrated Time system for delta time tracking
-- Added AI update loop to main game engine
-
-**Implementation Details:**
-```typescript
-// AIManager methods:
-- init(): Initialize AI system
-- update(deltaTime): Update all AI entities
-- addEntity(entity): Register entity with AI system
-- removeEntity(entity): Unregister entity
-- clear(): Remove all entities
-- getEntityCount(): Get active entity count
-```
-
-**Integration:**
-- Added `ai: AIManager` property to Engine
-- Initialize in Engine.init()
-- Update in Engine.update() game loop
-- Dispose in Engine.dispose()
-
-**Files Created:**
-- `src/core/AIManager.ts`
-
-**Files Modified:**
-- `src/core/Engine.ts` - Added AI manager integration
-
----
-
-### Phase 1.1 - Core Engine with Rapier Physics
-
-**Added:**
-- Created `src/core/PhysicsWorld.ts` - Wrapper around Rapier physics engine
-- Created `src/core/Engine.ts` - Main game orchestrator
-- Integrated Three.js for 3D rendering
-- Integrated Rapier physics with async WASM initialization
-- Set up orthographic camera for isometric view
-
-**Camera Configuration:**
-- Position: `(10, 25, 10)` - Closer isometric view than initial attempt
-- Frustum size: `25` (reduced from 35 for better perspective)
-- Orthographic projection for consistent isometric feel
-
-**Physics Configuration:**
-- Gravity: `(0, -9.81, 0)`
-- Collision groups using bit flags for selective interactions
-- Delta time clamping to prevent physics explosions
-- Raycasting support for attack hitboxes
-
-**Rendering:**
-- Scene background: `#1a1a1a` (dark gray)
-- Fog for depth: `(30, 80)` range
-- Ambient light: `0.6` intensity
-- Directional light with shadows: `0.8` intensity
-- Shadow map size: `2048x2048`
-
-**Test Ground:**
-- 50x50 plane geometry
-- Lambert material with color `#2a2a2a`
-- Receives shadows
-- Fixed physics body with cuboid collider
-
-**Files Created:**
-- `src/core/PhysicsWorld.ts`
-- `src/core/Engine.ts`
-
-**Files Modified:**
-- `src/components/GameCanvas.tsx` - Integrated new Engine
-
-**Technical Details:**
-- Async initialization required for Rapier WASM loading
-- Physics-rendering synchronization
-- Proper cleanup in dispose()
-- Collision group system for selective interactions
+- `src/core/Engine.ts` - Three.js + Rapier integration
+- `src/core/PhysicsWorld.ts` - Rapier wrapper
+- `src/core/AIManager.ts` - Yuka AI wrapper
+- Orthographic camera at (10, 25, 10)
+- Collision groups system
+- 8bitcn retro UI components
 
 ---
 
 ## Project Setup - [2024-11-23]
 
-**Added:**
-- Initialized fresh Vite + React + TypeScript project
-- Installed Three.js v0.181.2 for 3D rendering
-- Installed Rapier v0.11.2 for physics simulation
-- Installed Yuka v0.7.1 for AI steering behaviors
-- Installed Tailwind CSS v4 (no config file approach)
-- Configured Git repository
-- Created project documentation
-
-**Configuration Files:**
-- `vite.config.ts` - Vite configuration with Tailwind v4 plugin
-- `tsconfig.json` - TypeScript configuration
-- `components.json` - shadcn/ui configuration
-- `.gitignore` - Proper exclusions
-- `CLAUDE.md` - Project context documentation
-- `docs/8bitcn-components.md` - Component library reference
-
-**Dependencies Installed:**
-```json
-{
-  "@dimforge/rapier3d-compat": "^0.11.2",
-  "@tailwindcss/vite": "^4.1.17",
-  "class-variance-authority": "^0.7.1",
-  "clsx": "^2.1.1",
-  "lucide-react": "^0.554.0",
-  "react": "^19.2.0",
-  "react-dom": "^19.2.0",
-  "tailwind-merge": "^3.4.0",
-  "tailwindcss": "^4.1.17",
-  "three": "^0.181.2",
-  "yuka": "^0.7.1"
-}
-```
-
-**Architecture:**
-- Dual-layer architecture: 3D Engine (Three.js) + React UI overlay
-- Tailwind CSS v4 with Vite plugin integration
-- Custom 8bitcn component registry for retro UI
-- Path aliases using `@/` for clean imports
+- Vite + React + TypeScript
+- Three.js v0.181.2
+- Rapier v0.11.2
+- Yuka v0.7.1
+- Tailwind CSS v4
+- shadcn/ui + 8bitcn registry
 
 ---
 
 ## Notes
 
-- This changelog follows the implementation plan (IMPLEMENTATION_PLAN.md)
-- Each phase completion is documented with technical details
-- Breaking changes and migration notes are included when applicable
-- All file modifications are tracked for transparency
+- This changelog tracks all implementation details
+- Each feature includes files created/modified
+- Breaking changes noted when applicable
