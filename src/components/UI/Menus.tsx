@@ -12,8 +12,8 @@ interface MainMenuProps {
 
 export const MainMenu: React.FC<MainMenuProps> = ({ onStart, isLoading = false }) => {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50" style={{ transform: 'scale(0.75)', transformOrigin: 'center center' }}>
-      <div className="text-center p-10">
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50">
+      <div className="text-center p-10 scale-75 origin-center">
         <h1 className="text-7xl font-bold mb-5 text-destructive retro">
           RAMPAGE RIDER
         </h1>
@@ -44,8 +44,8 @@ export const GameOver: React.FC<GameOverProps> = ({ stats, onRestart }) => {
   const config = TIER_CONFIGS[stats.tier];
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/90 z-50" style={{ transform: 'scale(0.75)', transformOrigin: 'center center' }}>
-      <Card className="w-96 bg-card border-4 border-foreground">
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/90 z-50">
+      <Card className="w-[480px] bg-card border-4 border-foreground scale-75 origin-center">
         <CardHeader className="text-center">
           <CardTitle className="text-6xl text-destructive retro">
             BUSTED!
