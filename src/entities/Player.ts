@@ -869,6 +869,45 @@ export class Player extends THREE.Group {
   }
 
   /**
+   * Play motorbike shooting animation (drive-by)
+   * Plays one-handed shooting then returns to seated pose
+   */
+  playMotorbikeShoot(): void {
+    if (!this.mixer || this.animations.length === 0) return;
+
+    // Use one-handed shooting for drive-by
+    const shootClip = THREE.AnimationClip.findByName(this.animations, 'Throw');
+    const seatedClip = THREE.AnimationClip.findByName(this.animations, 'Melee_Blocking');
+
+    if (!shootClip || !seatedClip) {
+      console.warn('[Player] Missing animation clips for motorbike shoot');
+      return;
+    }
+
+    // Stop current animation and play shooting
+    this.mixer.stopAllAction();
+    const shootAction = this.mixer.clipAction(shootClip);
+    shootAction.setLoop(THREE.LoopOnce, 1);
+    shootAction.clampWhenFinished = false;
+    shootAction.timeScale = 3.0; // Very fast - rapid fire feel
+    shootAction.reset();
+    shootAction.play();
+
+    // Return to seated pose after animation completes
+    const duration = shootClip.duration * 1000 / shootAction.timeScale;
+    setTimeout(() => {
+      if (this.mixer) {
+        this.mixer.stopAllAction();
+        const seatedAction = this.mixer.clipAction(seatedClip);
+        seatedAction.setLoop(THREE.LoopRepeat, Infinity);
+        seatedAction.reset();
+        seatedAction.play();
+        this.currentAnimation = 'Melee_Blocking';
+      }
+    }, duration);
+  }
+
+  /**
    * Play spawn animation (Spawn_Air) when game starts
    * Starts player high in the air and drops them to ground
    */

@@ -1087,6 +1087,106 @@ export class Engine {
   }
 
   /**
+   * Handle motorbike shooting attack (drive-by style)
+   * Hitscan attack with narrow forward cone, long range
+   */
+  private handleMotorbikeShoot(): void {
+    if (!this.vehicle || !this.player) return;
+
+    const attackPosition = this.vehicle.getPosition();
+    const attackDirection = new THREE.Vector3(0, 0, 1)
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.vehicle.getRotationY());
+
+    // Motorbike shooting: long range, narrow cone
+    const attackRadius = 10.0; // Long range
+    const damage = 1;
+    const maxKills = 1; // One shot at a time
+    const coneAngle = Math.PI / 3; // 60 degree cone (forward facing)
+
+    let totalKills = 0;
+    const allKillPositions: THREE.Vector3[] = [];
+
+    // Shoot pedestrians
+    if (this.crowd) {
+      const pedResult = this.crowd.damageInRadius(
+        attackPosition,
+        attackRadius,
+        damage,
+        maxKills,
+        attackDirection,
+        coneAngle
+      );
+
+      if (pedResult.kills > 0) {
+        const basePoints = 15; // Drive-by bonus
+        const points = this.stats.inPursuit ? basePoints * 2 : basePoints;
+
+        this.stats.score += points * pedResult.kills;
+        this.stats.kills += pedResult.kills;
+        this.stats.combo += pedResult.kills;
+        this.stats.comboTimer = 5.0;
+        this.stats.heat = Math.min(100, this.stats.heat + (pedResult.kills * 15));
+
+        totalKills += pedResult.kills;
+        allKillPositions.push(...pedResult.positions);
+
+        // Notifications
+        const message = pedResult.panicKills > 0 ? 'DRIVE-BY TERROR!' : 'DRIVE-BY!';
+        this.triggerKillNotification(message, true, points);
+
+        this.crowd.panicCrowd(attackPosition, 15); // Larger panic radius for gunshots
+      }
+    }
+
+    // Shoot cops
+    if (this.cops) {
+      const copResult = this.cops.damageInRadius(
+        attackPosition,
+        attackRadius,
+        damage,
+        maxKills,
+        attackDirection,
+        coneAngle
+      );
+
+      if (copResult.kills > 0) {
+        const basePoints = 75; // Extra for shooting cops
+        const pointsPerKill = basePoints * 2;
+        this.stats.score += copResult.kills * pointsPerKill;
+        this.stats.copKills += copResult.kills;
+
+        if (this.stats.copKills >= 1 && this.stats.copKills <= 3) {
+          this.stats.wantedStars = 1;
+        } else if (this.stats.copKills > 3) {
+          this.stats.wantedStars = 2;
+        }
+
+        this.stats.heat = Math.min(100, this.stats.heat + (copResult.kills * 30));
+        totalKills += copResult.kills;
+        allKillPositions.push(...copResult.positions);
+
+        this.triggerKillNotification('COP KILLER!', true, pointsPerKill);
+      }
+    }
+
+    // Blood effects and muzzle flash
+    if (totalKills > 0) {
+      const vehiclePos = this.vehicle.getPosition();
+      for (const killPos of allKillPositions) {
+        const direction = new THREE.Vector3().subVectors(killPos, vehiclePos).normalize();
+        this.particles.emitBlood(killPos, 40);
+        this.particles.emitBloodSpray(killPos, direction, 30);
+      }
+      this.shakeIntensity = 0.8; // More shake for gunshots
+    }
+
+    // Screen shake even on miss (shows gun fired)
+    if (totalKills === 0) {
+      this.shakeIntensity = 0.3;
+    }
+  }
+
+  /**
    * Handle vehicle kill (pedestrian hit by car)
    */
   private handleVehicleKill(position: THREE.Vector3, wasPanicking: boolean = false): void {
@@ -1297,10 +1397,13 @@ export class Engine {
             } else if (this.getCurrentVehicleType() === VehicleType.BICYCLE) {
               // Bicycle melee attack
               this.handleBicycleAttack();
-              // Play attack animation on player
               this.player.playBicycleAttack();
+            } else if (this.getCurrentVehicleType() === VehicleType.MOTORBIKE) {
+              // Motorbike drive-by shooting
+              this.handleMotorbikeShoot();
+              this.player.playMotorbikeShoot();
             }
-            // Motorbike shooting will be handled separately
+            // Sedan has no attack (just run people over)
           }
           break;
       }
