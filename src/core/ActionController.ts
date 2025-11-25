@@ -60,14 +60,9 @@ export class ActionController {
       return { action: ActionType.ENTER_CAR, isNewPress };
     }
 
-    // Priority 3: Attack (default)
-    if (!context.isInVehicle) {
-      if (isNewPress) console.log(`[ACTION] → ATTACK (not near car: isNearCar=${context.isNearCar})`);
-      return { action: ActionType.ATTACK, isNewPress };
-    }
-
-    if (isNewPress) console.log('[ACTION] → NONE (in vehicle, no action)');
-    return { action: ActionType.NONE, isNewPress: false };
+    // Priority 3: Attack (works on foot AND in vehicle - Engine handles vehicle attacks)
+    if (isNewPress) console.log(`[ACTION] → ATTACK (isInVehicle=${context.isInVehicle})`);
+    return { action: ActionType.ATTACK, isNewPress };
   }
 
   /**
