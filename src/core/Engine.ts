@@ -333,8 +333,8 @@ export class Engine {
         left: input.left,
         right: input.right,
         sprint: input.mount, // Shift key (walk mode - slows down)
-        jump: input.action, // Space key
-        attack: input.attack || false // F key
+        jump: false, // Jump disabled - SPACE is now attack
+        attack: input.attack || false // SPACE key
       });
     }
   }
