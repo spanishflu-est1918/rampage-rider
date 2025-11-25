@@ -145,6 +145,7 @@ export class Engine {
 
     this.camera.position.set(5, 12.5, 5);
     this.camera.lookAt(0, 0, 0);
+    this.camera.rotation.z = -0.15; // Tilt to see building sides better
     this.cameraBasePosition.copy(this.camera.position);
 
     this.renderer = new THREE.WebGLRenderer({
@@ -284,24 +285,16 @@ export class Engine {
     }
   }
 
-  /**
-   * Start the game
-   */
   start(): void {
     if (this.state === GameState.PLAYING) return;
 
-    console.log('[Engine] Starting game...');
     this.state = GameState.PLAYING;
     this.resetGame();
     this.clock.start();
     this.animate();
   }
 
-  /**
-   * Stop the game
-   */
   stop(): void {
-    console.log('[Engine] Stopping game...');
     this.state = GameState.PAUSED;
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
@@ -309,21 +302,15 @@ export class Engine {
     }
   }
 
-  /**
-   * Reset game state
-   */
   private resetGame(): void {
-    // Reset death flag
     this.isDying = false;
 
-    // Clear existing player
     if (this.player) {
       this.player.dispose();
       this.scene.remove(this.player);
       this.player = null;
     }
 
-    // Clear existing car
     if (this.vehicle) {
       this.vehicle.dispose();
       this.scene.remove(this.vehicle);
@@ -366,72 +353,47 @@ export class Engine {
       taseEscapeProgress: 0,
     };
 
-    // Spawn player
     this.spawnPlayer();
 
-    // Spawn initial crowd around player
     if (this.crowd && this.player) {
       this.crowd.spawnInitialCrowd(this.player.getPosition());
     }
-
-    console.log('[Engine] Game reset - Player and crowd spawned');
   }
 
-  /**
-   * Spawn the player
-   */
   private spawnPlayer(): void {
     this.player = new Player();
-
-    // Add to scene
     this.scene.add(this.player);
 
-    // Create physics body
     const world = this.physics.getWorld();
     if (world) {
       this.player.createPhysicsBody(world);
     }
 
-    // Set initial camera direction
     const cameraDirection = new THREE.Vector3();
     this.camera.getWorldDirection(cameraDirection);
     this.player.setCameraDirection(cameraDirection);
 
-    // Setup all player callbacks
     this.setupPlayerCallbacks();
-
-    // Play spawn animation when game starts
     this.player.playSpawnAnimation();
   }
 
-  /**
-   * Spawn vehicle near player based on tier
-   */
   private spawnVehicle(tier: Tier): void {
     if (!this.player || this.vehicleSpawned) return;
 
-    // Get vehicle type for this tier
     const vehicleType = TIER_VEHICLE_MAP[tier];
-    if (!vehicleType) {
-      console.warn(`[Engine] No vehicle defined for tier ${tier}`);
-      return;
-    }
+    if (!vehicleType) return;
 
     const vehicleConfig = VEHICLE_CONFIGS[vehicleType];
     const world = this.physics.getWorld();
     if (!world) return;
 
     const playerPos = this.player.getPosition();
-
-    // Find a safe spawn position (not inside buildings)
     const spawnPos = this.findSafeVehicleSpawnPosition(playerPos);
 
-    // Create vehicle with config
     this.vehicle = new Vehicle(vehicleConfig);
     this.vehicle.createPhysicsBody(world, spawnPos);
     this.scene.add(this.vehicle);
 
-    // Set vehicle destruction callback
     this.vehicle.setOnDestroyed(() => {
       this.exitVehicle();
     });
@@ -439,26 +401,13 @@ export class Engine {
     this.vehicleSpawned = true;
     this.currentVehicleTier = tier;
 
-    // Debug: verify positions match
-    const vehiclePos = this.vehicle.getPosition();
-    console.log(`[VEHICLE] Spawned ${vehicleConfig.name} at (${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)}), player at (${playerPos.x.toFixed(1)}, ${playerPos.y.toFixed(1)}, ${playerPos.z.toFixed(1)}), distance=${playerPos.distanceTo(vehiclePos).toFixed(1)}, type=${vehicleType}`);
-
-    // Notify player that vehicle is available
     const tierConfig = TIER_CONFIGS[tier];
     this.triggerKillNotification(`${tierConfig.name.toUpperCase()} UNLOCKED!`, true, 0);
   }
 
-  /**
-   * Debug: Spawn a specific vehicle type (or remove vehicle if null)
-   */
   debugSpawnVehicle(vehicleType: VehicleType | null): void {
-    // Don't allow spawning while in vehicle
-    if (this.isInVehicle) {
-      console.log('[VEHICLE] Cannot spawn vehicle while driving');
-      return;
-    }
+    if (this.isInVehicle) return;
 
-    // Remove existing vehicle if any
     if (this.vehicle) {
       this.scene.remove(this.vehicle);
       this.vehicle.dispose();
@@ -467,13 +416,11 @@ export class Engine {
       this.currentVehicleTier = null;
     }
 
-    // If null, just go back to foot
     if (!vehicleType) {
       this.stats.tier = Tier.FOOT;
       return;
     }
 
-    // Find tier for this vehicle type (reverse lookup from TIER_VEHICLE_MAP)
     let targetTier: Tier | undefined;
     if (vehicleType === VehicleType.BICYCLE) targetTier = Tier.BIKE;
     else if (vehicleType === VehicleType.MOTORBIKE) targetTier = Tier.MOTO;
@@ -484,63 +431,42 @@ export class Engine {
     }
   }
 
-  /**
-   * Get current vehicle type (for UI)
-   */
   getCurrentVehicleType(): VehicleType | null {
     if (!this.vehicleSpawned || !this.currentVehicleTier) return null;
     return TIER_VEHICLE_MAP[this.currentVehicleTier] || null;
   }
 
-  /**
-   * DEBUG: Get list of all available animation names
-   */
   getAnimationNames(): string[] {
     return this.player?.getAnimationNames() || [];
   }
 
-  /**
-   * DEBUG: Play any animation by name (for testing)
-   */
   debugPlayAnimation(name: string): void {
-    console.log(`[ANIM] Engine: ${name}, player=${!!this.player}`);
     this.player?.debugPlayAnimation(name);
   }
 
-  /**
-   * DEBUG: Play animation once with callback (for testing)
-   */
   debugPlayAnimationOnce(name: string): void {
-    console.log(`[ANIM] Engine playOnce: ${name}`);
-    this.player?.playAnimationWithCallback(name, () => {
-      console.log(`[ANIM] Animation complete: ${name}`);
-    });
+    this.player?.playAnimationWithCallback(name, () => {});
   }
 
-  /**
-   * Find a safe position to spawn vehicle (not inside buildings)
-   */
   private findSafeVehicleSpawnPosition(playerPos: THREE.Vector3): THREE.Vector3 {
     const world = this.physics.getWorld();
     if (!world) return playerPos.clone().add(new THREE.Vector3(5, 0, 5));
 
-    // Collision group for buildings
     const BUILDING_GROUP = 0x0040;
     const GROUND_GROUP = 0x0001;
 
-    // Try offsets at increasing distances, preferring road areas
     const offsets = [
-      new THREE.Vector3(5, 0, 0),    // Right (along road)
-      new THREE.Vector3(-5, 0, 0),   // Left (along road)
-      new THREE.Vector3(0, 0, 5),    // Forward
-      new THREE.Vector3(0, 0, -5),   // Back
-      new THREE.Vector3(7, 0, 0),    // Further right
-      new THREE.Vector3(-7, 0, 0),   // Further left
-      new THREE.Vector3(5, 0, 5),    // Diagonal
-      new THREE.Vector3(-5, 0, -5),  // Diagonal
-      new THREE.Vector3(10, 0, 0),   // Even further
+      new THREE.Vector3(5, 0, 0),
+      new THREE.Vector3(-5, 0, 0),
+      new THREE.Vector3(0, 0, 5),
+      new THREE.Vector3(0, 0, -5),
+      new THREE.Vector3(7, 0, 0),
+      new THREE.Vector3(-7, 0, 0),
+      new THREE.Vector3(5, 0, 5),
+      new THREE.Vector3(-5, 0, -5),
+      new THREE.Vector3(10, 0, 0),
       new THREE.Vector3(-10, 0, 0),
-      new THREE.Vector3(3, 0, 0),    // Closer options
+      new THREE.Vector3(3, 0, 0),
       new THREE.Vector3(-3, 0, 0),
       new THREE.Vector3(0, 0, 3),
       new THREE.Vector3(0, 0, -3),
@@ -549,8 +475,6 @@ export class Engine {
     for (const offset of offsets) {
       const testPos = playerPos.clone().add(offset);
 
-      // First check: horizontal ray to see if we'd hit a building
-      // Cast from player position towards test position
       const dirToTest = offset.clone().normalize();
       const horizontalRay = new RAPIER.Ray(
         { x: playerPos.x, y: playerPos.y + 1, z: playerPos.z },
@@ -561,12 +485,10 @@ export class Engine {
       if (horizontalHit) {
         const hitGroups = horizontalHit.collider.collisionGroups() & 0xFFFF;
         if (hitGroups === BUILDING_GROUP) {
-          // Would hit a building, skip this offset
           continue;
         }
       }
 
-      // Second check: downward ray to ensure we have ground below
       const downRay = new RAPIER.Ray(
         { x: testPos.x, y: testPos.y + 10, z: testPos.z },
         { x: 0, y: -1, z: 0 }
@@ -575,113 +497,66 @@ export class Engine {
       const downHit = world.castRay(downRay, 15, true);
       if (downHit) {
         const hitGroups = downHit.collider.collisionGroups() & 0xFFFF;
-
-        // If we hit ground (not a building), this is a safe spot
         if (hitGroups === GROUND_GROUP) {
-          console.log(`[VEHICLE] Safe spawn found at offset (${offset.x}, ${offset.z})`);
           return testPos;
         }
       }
     }
 
-    // Fallback: spawn at player position (they can walk to it)
-    console.log('[VEHICLE] No safe spawn found, using player position');
     return playerPos.clone();
   }
 
-  /**
-   * Enter an existing spawned car
-   */
   private enterVehicle(): void {
-    console.log(`[VEHICLE] enterVehicle() called: player=${!!this.player}, vehicle=${!!this.vehicle}, isInVehicle=${this.isInVehicle}`);
+    if (!this.player || !this.vehicle || this.isInVehicle) return;
 
-    if (!this.player) {
-      console.log('[VEHICLE] enterVehicle() ABORTED: no player');
-      return;
-    }
-    if (!this.vehicle) {
-      console.log('[VEHICLE] enterVehicle() ABORTED: no vehicle');
-      return;
-    }
-    if (this.isInVehicle) {
-      console.log('[VEHICLE] enterVehicle() ABORTED: already in vehicle');
-      return;
-    }
-
-    // Get rider config from vehicle
     const riderConfig = this.vehicle.getRiderConfig();
 
-    // Hide player only for enclosed vehicles (like cars)
     if (riderConfig.hideRider) {
       this.player.setVisible(false);
     } else {
-      // Keep player visible and attach to vehicle
       this.player.setVisible(true);
-      // Add player to vehicle group so it moves with vehicle
       (this.vehicle as THREE.Group).add(this.player);
-      // Position player at rider offset (local to vehicle)
-      console.log(`[VEHICLE] Rider offset: Y=${riderConfig.offsetY}, Z=${riderConfig.offsetZ}`);
       (this.player as THREE.Group).position.set(0, riderConfig.offsetY, riderConfig.offsetZ);
-      (this.player as THREE.Group).rotation.set(0, 0, 0); // Face same direction as vehicle
-      // Play seated animation
+      (this.player as THREE.Group).rotation.set(0, 0, 0);
       this.player.playSeatedAnimation();
     }
 
     this.isInVehicle = true;
 
-    // Set tier based on current vehicle
     if (this.currentVehicleTier) {
       this.stats.tier = this.currentVehicleTier;
     }
 
-    // Screen shake for entering vehicle
     this.shakeCamera(1.0);
-
-    console.log(`[VEHICLE] SUCCESS: Entered ${this.vehicle.getTypeName()}! isInVehicle=${this.isInVehicle}, hideRider=${riderConfig.hideRider}`);
   }
 
-  /**
-   * Check if player is near the car
-   */
   private isPlayerNearVehicle(): boolean {
-    if (!this.player || !this.vehicle) {
-      return false;
-    }
+    if (!this.player || !this.vehicle) return false;
 
     const playerPos = this.player.getPosition();
     const vehiclePos = this.vehicle.getPosition();
     const distance = playerPos.distanceTo(vehiclePos);
 
-    return distance < 15.0; // Within 15 units - generous range for vehicle entry
+    return distance < 15.0;
   }
 
-  /**
-   * Exit vehicle (car exploded)
-   */
   private exitVehicle(): void {
     if (!this.vehicle || !this.player) return;
 
     const vehiclePos = this.vehicle.getPosition();
-
-    // Find safe spawn position (try multiple offsets to avoid buildings)
     const safePos = this.findSafeExitPosition(vehiclePos);
 
-    // Detach player from vehicle before disposing
-    // Check if player is a child of vehicle (for bikes/motorcycles)
     if ((this.player as THREE.Group).parent === this.vehicle) {
       (this.vehicle as THREE.Group).remove(this.player);
       this.scene.add(this.player);
     }
 
-    // Make player visible again
     this.player.setVisible(true);
 
-    // Remove and dispose vehicle
     this.scene.remove(this.vehicle);
     this.vehicle.dispose();
     this.vehicle = null;
 
-    // Recreate player physics at safe position
     const world = this.physics.getWorld();
     if (world) {
       this.player.dispose();
@@ -691,7 +566,6 @@ export class Engine {
       this.player.createPhysicsBody(world, safePos);
       this.scene.add(this.player);
 
-      // Re-setup callbacks
       this.setupPlayerCallbacks();
     }
 
@@ -699,74 +573,55 @@ export class Engine {
     this.vehicleSpawned = false;
     this.stats.tier = Tier.FOOT;
 
-    // Explosion effects
     this.shakeCamera(2.0);
     this.particles.emitBlood(vehiclePos, 100);
-
-    console.log('[VEHICLE] Exited vehicle (destroyed)');
   }
 
-  /**
-   * Find a safe position to spawn player when exiting vehicle
-   */
   private findSafeExitPosition(vehiclePos: THREE.Vector3): THREE.Vector3 {
-    // Try offsets in different directions
     const offsets = [
-      new THREE.Vector3(3, 0, 0),   // Right
-      new THREE.Vector3(-3, 0, 0),  // Left
-      new THREE.Vector3(0, 0, 3),   // Forward
-      new THREE.Vector3(0, 0, -3),  // Back
-      new THREE.Vector3(3, 0, 3),   // Diagonal
-      new THREE.Vector3(-3, 0, -3), // Diagonal
-      new THREE.Vector3(3, 0, -3),  // Diagonal
-      new THREE.Vector3(-3, 0, 3),  // Diagonal
+      new THREE.Vector3(3, 0, 0),
+      new THREE.Vector3(-3, 0, 0),
+      new THREE.Vector3(0, 0, 3),
+      new THREE.Vector3(0, 0, -3),
+      new THREE.Vector3(3, 0, 3),
+      new THREE.Vector3(-3, 0, -3),
+      new THREE.Vector3(3, 0, -3),
+      new THREE.Vector3(-3, 0, 3),
     ];
 
     const world = this.physics.getWorld();
     if (!world) return vehiclePos;
 
-    // Try each offset and check if position is clear of buildings
     for (const offset of offsets) {
       const testPos = vehiclePos.clone().add(offset);
 
-      // Cast ray downward to check for ground
       const ray = new RAPIER.Ray(
         { x: testPos.x, y: testPos.y + 5, z: testPos.z },
         { x: 0, y: -1, z: 0 }
       );
 
-      // Check if we hit ground (not building)
       const hit = world.castRay(ray, 10, true);
       if (hit) {
         const hitCollider = hit.collider;
         const groups = hitCollider.collisionGroups();
         const membership = groups & 0xFFFF;
 
-        // If we hit ground (0x0001), this is a safe spot
         if (membership === 0x0001) {
-          console.log(`[VEHICLE] Safe exit found at offset (${offset.x}, ${offset.z})`);
           return testPos;
         }
       }
     }
 
-    // Fallback: just use vehicle position
-    console.log('[VEHICLE] No safe exit found, using vehicle position');
     return vehiclePos;
   }
 
-  /**
-   * Setup player callbacks (factored out for reuse)
-   */
   private setupPlayerCallbacks(): void {
     if (!this.player) return;
 
-    // Set taser escape callback for screen shake
     this.player.setOnEscapePress(() => {
       this.shakeCamera(0.3);
     });
 
-    // Set taser escape explosion callback for knockback
     this.player.setOnTaserEscape((position, radius, force) => {
       this.shakeCamera(1.5);
       if (this.cops) {
@@ -778,18 +633,14 @@ export class Engine {
       }
     });
 
-    // Set attack callback
     this.player.setOnAttack((attackPosition) => {
       this.handlePlayerAttack(attackPosition);
     });
   }
 
-  /**
-   * Handle player attack (factored out for reuse)
-   */
   private handlePlayerAttack(attackPosition: THREE.Vector3): void {
-    const pedAttackRadius = 2.5; // Shorter range for pedestrians
-    const copAttackRadius = 4.5; // Longer range for cops (escape tool)
+    const pedAttackRadius = 2.5;
+    const copAttackRadius = 4.5;
     const damage = 1;
     const maxKills = this.stats.combo >= 10 ? Infinity : 1;
     const attackDirection = this.player!.getFacingDirection();
@@ -798,7 +649,6 @@ export class Engine {
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
 
-    // Attack pedestrians (shorter range)
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -812,17 +662,11 @@ export class Engine {
       if (pedResult.kills > 0) {
         this.stats.kills += pedResult.kills;
 
-        // Point calculation:
-        // - Base: 10 points
-        // - Panic bonus: 2x for killing someone running away
-        // - Pursuit bonus: 2x when cops are chasing (stacks with panic)
         const basePoints = 10;
         const regularKills = pedResult.kills - pedResult.panicKills;
         const panicKills = pedResult.panicKills;
 
-        // Regular kills (with pursuit bonus if applicable)
         const regularPoints = regularKills * (this.stats.inPursuit ? basePoints * 2 : basePoints);
-        // Panic kills get 2x (or 4x if also in pursuit)
         const panicPoints = panicKills * (this.stats.inPursuit ? basePoints * 4 : basePoints * 2);
 
         this.stats.score += regularPoints + panicPoints;
@@ -833,7 +677,6 @@ export class Engine {
         totalKills += pedResult.kills;
         allKillPositions.push(...pedResult.positions);
 
-        // Send kill notifications - panic kills get special message and show bonus
         for (let i = 0; i < regularKills; i++) {
           const message = this.stats.inPursuit
             ? Engine.randomFrom(Engine.PURSUIT_KILL_MESSAGES)
@@ -844,14 +687,13 @@ export class Engine {
         for (let i = 0; i < panicKills; i++) {
           const message = Engine.randomFrom(Engine.PANIC_KILL_MESSAGES);
           const points = this.stats.inPursuit ? basePoints * 4 : basePoints * 2;
-          this.triggerKillNotification(message, true, points); // Always highlight panic kills
+          this.triggerKillNotification(message, true, points);
         }
 
         this.crowd.panicCrowd(attackPosition, 10);
       }
     }
 
-    // Attack cops (longer range for escape)
     if (this.cops) {
       const copResult = this.cops.damageInRadius(
         attackPosition,
@@ -863,9 +705,8 @@ export class Engine {
       );
 
       if (copResult.kills > 0) {
-        // Cops always give pursuit bonus since you're definitely in pursuit
         const basePoints = 50;
-        const pointsPerKill = basePoints * 2; // Always 2x for cop kills
+        const pointsPerKill = basePoints * 2;
         this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
 
@@ -882,14 +723,12 @@ export class Engine {
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
 
-        // Send kill notifications for cop kills
         for (let i = 0; i < copResult.kills; i++) {
           this.triggerKillNotification(Engine.randomFrom(Engine.COP_KILL_MESSAGES), true, pointsPerKill);
         }
       }
     }
 
-    // Spawn blood for all kills
     if (totalKills > 0) {
       const playerPos = this.player!.getPosition();
       for (const killPos of allKillPositions) {
@@ -902,10 +741,6 @@ export class Engine {
     }
   }
 
-  /**
-   * Handle bicycle melee attack (kick or slash from bike)
-   * Has wider arc and uses vehicle position/direction
-   */
   private handleBicycleAttack(): void {
     if (!this.vehicle || !this.player) return;
 
@@ -913,16 +748,14 @@ export class Engine {
     const attackDirection = new THREE.Vector3(0, 0, 1)
       .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.vehicle.getRotationY());
 
-    // Bicycle attack has wider radius but only on sides (kick range)
     const attackRadius = 3.0;
     const damage = 1;
-    const maxKills = this.stats.combo >= 10 ? Infinity : 2; // Can hit 2 targets at once
-    const coneAngle = Math.PI * 1.5; // Wide arc (270 degrees - both sides)
+    const maxKills = this.stats.combo >= 10 ? Infinity : 2;
+    const coneAngle = Math.PI * 1.5;
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
 
-    // Attack pedestrians
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -934,7 +767,7 @@ export class Engine {
       );
 
       if (pedResult.kills > 0) {
-        const basePoints = 12; // Slightly more than foot knife
+        const basePoints = 12;
         const regularKills = pedResult.kills - pedResult.panicKills;
         const panicKills = pedResult.panicKills;
 
@@ -950,7 +783,6 @@ export class Engine {
         totalKills += pedResult.kills;
         allKillPositions.push(...pedResult.positions);
 
-        // Notifications
         for (let i = 0; i < regularKills; i++) {
           const message = this.stats.inPursuit
             ? Engine.randomFrom(Engine.PURSUIT_KILL_MESSAGES)
@@ -967,11 +799,10 @@ export class Engine {
       }
     }
 
-    // Attack cops
     if (this.cops) {
       const copResult = this.cops.damageInRadius(
         attackPosition,
-        attackRadius + 1, // Slightly longer reach for cops
+        attackRadius + 1,
         damage,
         maxKills,
         attackDirection,
@@ -1000,7 +831,6 @@ export class Engine {
       }
     }
 
-    // Blood effects
     if (totalKills > 0) {
       const vehiclePos = this.vehicle.getPosition();
       for (const killPos of allKillPositions) {
@@ -1012,10 +842,6 @@ export class Engine {
     }
   }
 
-  /**
-   * Handle motorbike shooting attack (drive-by style)
-   * Hitscan attack with narrow forward cone, long range
-   */
   private handleMotorbikeShoot(): void {
     if (!this.vehicle || !this.player) return;
 
@@ -1023,16 +849,14 @@ export class Engine {
     const attackDirection = new THREE.Vector3(0, 0, 1)
       .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.vehicle.getRotationY());
 
-    // Motorbike shooting: long range, narrow cone
-    const attackRadius = 10.0; // Long range
+    const attackRadius = 10.0;
     const damage = 1;
-    const maxKills = 1; // One shot at a time
-    const coneAngle = Math.PI / 3; // 60 degree cone (forward facing)
+    const maxKills = 1;
+    const coneAngle = Math.PI / 3;
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
 
-    // Shoot pedestrians
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -1044,7 +868,7 @@ export class Engine {
       );
 
       if (pedResult.kills > 0) {
-        const basePoints = 15; // Drive-by bonus
+        const basePoints = 15;
         const points = this.stats.inPursuit ? basePoints * 2 : basePoints;
 
         this.stats.score += points * pedResult.kills;
@@ -1056,15 +880,13 @@ export class Engine {
         totalKills += pedResult.kills;
         allKillPositions.push(...pedResult.positions);
 
-        // Notifications
         const message = pedResult.panicKills > 0 ? 'DRIVE-BY TERROR!' : 'DRIVE-BY!';
         this.triggerKillNotification(message, true, points);
 
-        this.crowd.panicCrowd(attackPosition, 15); // Larger panic radius for gunshots
+        this.crowd.panicCrowd(attackPosition, 15);
       }
     }
 
-    // Shoot cops
     if (this.cops) {
       const copResult = this.cops.damageInRadius(
         attackPosition,
@@ -1076,7 +898,7 @@ export class Engine {
       );
 
       if (copResult.kills > 0) {
-        const basePoints = 75; // Extra for shooting cops
+        const basePoints = 75;
         const pointsPerKill = basePoints * 2;
         this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
