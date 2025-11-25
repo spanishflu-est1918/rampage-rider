@@ -637,7 +637,8 @@ export class Engine {
    * Handle player attack (factored out for reuse)
    */
   private handlePlayerAttack(attackPosition: THREE.Vector3): void {
-    const attackRadius = 4.5;
+    const pedAttackRadius = 2.5; // Shorter range for pedestrians
+    const copAttackRadius = 4.5; // Longer range for cops (escape tool)
     const damage = 1;
     const maxKills = this.stats.combo >= 10 ? Infinity : 1;
     const attackDirection = this.player!.getFacingDirection();
@@ -646,11 +647,11 @@ export class Engine {
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
 
-    // Attack pedestrians
+    // Attack pedestrians (shorter range)
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
-        attackRadius,
+        pedAttackRadius,
         damage,
         maxKills,
         attackDirection,
@@ -671,11 +672,11 @@ export class Engine {
       }
     }
 
-    // Attack cops
+    // Attack cops (longer range for escape)
     if (this.cops) {
       const copResult = this.cops.damageInRadius(
         attackPosition,
-        attackRadius,
+        copAttackRadius,
         damage,
         maxKills,
         attackDirection,
