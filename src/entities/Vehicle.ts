@@ -94,7 +94,8 @@ export class Vehicle extends THREE.Group {
       const model = cachedGltf.scene.clone();
 
       // Setup shadows
-      AnimationHelper.setupShadows(model);
+      // Disable real shadows (shadow mapping disabled for performance)
+      AnimationHelper.setupShadows(model, false, false);
 
       // Apply scale first (needed for accurate bounding box)
       model.scale.setScalar(this.config.modelScale);
@@ -140,7 +141,7 @@ export class Vehicle extends THREE.Group {
     );
     const material = new THREE.MeshPhongMaterial({ color: 0xff0000 });
     const fallbackMesh = new THREE.Mesh(geometry, material);
-    fallbackMesh.castShadow = true;
+    fallbackMesh.castShadow = false; // Shadow mapping disabled
     fallbackMesh.position.y = this.config.colliderHeight;
     this.modelContainer.add(fallbackMesh);
     this.modelLoaded = true;

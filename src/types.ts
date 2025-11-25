@@ -72,11 +72,24 @@ export interface GameStats {
     frameTime: number;
     physics: number;
     entities: number;
+    player: number;
+    cops: number;
+    pedestrians: number;
+    world: number;
+    particles: number;
+    bloodDecals: number;
     rendering: number;
     avgFrameTime: number;
     avgPhysics: number;
     avgEntities: number;
+    avgPlayer: number;
+    avgCops: number;
+    avgPedestrians: number;
+    avgWorld: number;
+    avgParticles: number;
+    avgBloodDecals: number;
     avgRendering: number;
+    avgDrawCalls: number;
     counts: {
       cops: number;
       pedestrians: number;
@@ -84,18 +97,37 @@ export interface GameStats {
       bloodDecals: number;
       buildings: number;
     };
+    // Three.js renderer stats
+    renderer: {
+      drawCalls: number;
+      triangles: number;
+      points: number;
+      lines: number;
+      geometries: number;
+      textures: number;
+    };
     worstFrame: {
       frameTime: number;
       physics: number;
       entities: number;
+      player: number;
+      cops: number;
+      pedestrians: number;
+      world: number;
+      particles: number;
+      bloodDecals: number;
       rendering: number;
-      bottleneck: 'physics' | 'entities' | 'rendering' | 'none';
+      bottleneck: 'physics' | 'entities' | 'rendering' | 'none' | 'player' | 'cops' | 'pedestrians' | 'world' | 'particles' | 'bloodDecals';
       counts: {
         cops: number;
         pedestrians: number;
         particles: number;
         bloodDecals: number;
         buildings: number;
+      };
+      renderer: {
+        drawCalls: number;
+        triangles: number;
       };
     };
   };

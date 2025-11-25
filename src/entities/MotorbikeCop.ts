@@ -3,6 +3,7 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
+import { BlobShadow, createBlobShadow } from '../rendering/BlobShadow';
 import { COP_BIKE_CONFIG, MOTORBIKE_COP_CONFIG } from '../constants';
 
 /**
@@ -81,6 +82,9 @@ export class MotorbikeCop extends THREE.Group {
   // Callbacks
   private onDealDamage?: (damage: number, isRam: boolean) => void;
 
+  // Fake blob shadow (cheaper than real shadows)
+  private blobShadow: BlobShadow;
+
   // Collision groups
   private static readonly COLLISION_GROUPS = {
     GROUND: 0x0001,
@@ -124,6 +128,10 @@ export class MotorbikeCop extends THREE.Group {
     this.rigidBody = body;
     this.collider = collider;
     this.characterController = controller;
+
+    // Create blob shadow (larger for motorbike)
+    this.blobShadow = createBlobShadow(1.6);
+    this.blobShadow.position.set(position.x, 0.01, position.z);
 
     // Load model
     this.loadModel();
@@ -181,7 +189,8 @@ export class MotorbikeCop extends THREE.Group {
       }
 
       const model = cachedGltf.scene.clone();
-      AnimationHelper.setupShadows(model);
+      // Disable real shadow casting (we use blob shadows instead)
+      AnimationHelper.setupShadows(model, false, false);
 
       // Apply scale and rotation
       model.scale.setScalar(COP_BIKE_CONFIG.modelScale);
@@ -228,7 +237,7 @@ export class MotorbikeCop extends THREE.Group {
     const geometry = new THREE.BoxGeometry(0.8, 0.8, 1.6);
     const material = new THREE.MeshPhongMaterial({ color: 0x0044ff });
     const fallbackMesh = new THREE.Mesh(geometry, material);
-    fallbackMesh.castShadow = true;
+    fallbackMesh.castShadow = false; // Use blob shadow instead
     fallbackMesh.position.y = 0.5;
     this.modelContainer.add(fallbackMesh);
     this.modelLoaded = true;
@@ -523,6 +532,9 @@ export class MotorbikeCop extends THREE.Group {
     this.rigidBody.setNextKinematicTranslation(newPosition);
     (this as THREE.Group).position.set(newPosition.x, newPosition.y, newPosition.z);
 
+    // Update blob shadow position (stays on ground)
+    this.blobShadow.position.set(newPosition.x, 0.01, newPosition.z);
+
     // Update Yuka position
     this.yukaVehicle.position.set(newPosition.x, 0, newPosition.z);
 
@@ -721,6 +733,13 @@ export class MotorbikeCop extends THREE.Group {
    */
   getYukaVehicle(): YUKA.Vehicle {
     return this.yukaVehicle;
+  }
+
+  /**
+   * Get the blob shadow mesh (for adding to scene)
+   */
+  getBlobShadow(): BlobShadow {
+    return this.blobShadow;
   }
 
   /**

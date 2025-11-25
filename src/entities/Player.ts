@@ -3,6 +3,7 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
+import { BlobShadow, createBlobShadow } from '../rendering/BlobShadow';
 import {
   ENTITY_SPEEDS,
   PHYSICS_CONFIG,
@@ -96,6 +97,9 @@ export class Player extends THREE.Group {
   // Taser escape explosion callback (knockback nearby cops)
   private onTaserEscapeCallback: ((position: THREE.Vector3, radius: number, force: number) => void) | null = null;
 
+  // Fake blob shadow (cheaper than real shadows)
+  private blobShadow: BlobShadow;
+
   constructor() {
     super();
 
@@ -113,6 +117,10 @@ export class Player extends THREE.Group {
     this.modelContainer = new THREE.Group();
     this.modelContainer.position.y = PHYSICS_CONFIG.MODEL_CONTAINER_Y;
     this.tiltContainer.add(this.modelContainer);
+
+    // Create blob shadow (fake shadow for performance)
+    this.blobShadow = createBlobShadow(1.0);
+    this.blobShadow.position.set(0, 0.01, 0);
 
     // Load boxman model asynchronously
     this.loadModel();
@@ -137,8 +145,8 @@ export class Player extends THREE.Group {
       }
 
       // Player uses the model directly (single instance)
-      // Setup shadows
-      AnimationHelper.setupShadows(cachedGltf.scene);
+      // Disable real shadow casting (we use blob shadows instead)
+      AnimationHelper.setupShadows(cachedGltf.scene, false, false);
 
       // Add to model container
       this.modelContainer.add(cachedGltf.scene);
@@ -166,7 +174,7 @@ export class Player extends THREE.Group {
     const geometry = new THREE.CapsuleGeometry(0.25, 0.5, 8, 16);
     const material = new THREE.MeshPhongMaterial({ color: 0x4444ff });
     const fallbackMesh = new THREE.Mesh(geometry, material);
-    fallbackMesh.castShadow = true;
+    fallbackMesh.castShadow = false; // Use blob shadow instead
     this.modelContainer.add(fallbackMesh);
     this.modelLoaded = true;
   }
@@ -579,6 +587,9 @@ export class Player extends THREE.Group {
 
       // Sync visual position
       (this as THREE.Group).position.set(newPosition.x, newPosition.y, newPosition.z);
+
+      // Update blob shadow position (stays on ground)
+      this.blobShadow.position.set(newPosition.x, 0.01, newPosition.z);
     }
 
     // Update animation mixer
@@ -592,6 +603,13 @@ export class Player extends THREE.Group {
    */
   getPosition(): THREE.Vector3 {
     return (this as THREE.Group).position.clone();
+  }
+
+  /**
+   * Get the blob shadow mesh (for adding to scene)
+   */
+  getBlobShadow(): BlobShadow {
+    return this.blobShadow;
   }
 
   /**

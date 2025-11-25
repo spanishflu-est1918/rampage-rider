@@ -5,6 +5,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { AssetLoader } from '../core/AssetLoader';
+import { BlobShadow, createBlobShadow } from '../rendering/BlobShadow';
 import {
   SKIN_TONES,
   ENTITY_SPEEDS,
@@ -59,6 +60,9 @@ export class Cop extends THREE.Group {
   private bulletSpeed: number = 40; // units per second
   private parentScene: THREE.Scene | null = null;
 
+  // Fake blob shadow (cheaper than real shadows)
+  private blobShadow: BlobShadow;
+
   constructor(
     position: THREE.Vector3,
     world: RAPIER.World,
@@ -96,6 +100,10 @@ export class Cop extends THREE.Group {
     this.collider = collider;
     this.characterController = controller;
 
+    // Create blob shadow (fake shadow for performance)
+    this.blobShadow = createBlobShadow(0.9);
+    this.blobShadow.position.set(position.x, 0.01, position.z);
+
     // Load police character model
     this.loadModel();
 
@@ -129,8 +137,8 @@ export class Cop extends THREE.Group {
       // Clone the cached model to avoid sharing state between instances
       const clonedScene = SkeletonUtils.clone(cachedGltf.scene);
 
-      // Setup shadows
-      AnimationHelper.setupShadows(clonedScene);
+      // Disable real shadow casting (we use blob shadows instead)
+      AnimationHelper.setupShadows(clonedScene, false, false);
 
       // Apply random skin tone
       const randomSkinTone = AnimationHelper.randomElement(SKIN_TONES);
@@ -163,7 +171,7 @@ export class Cop extends THREE.Group {
     const geometry = new THREE.CapsuleGeometry(0.3, 0.6, 8, 16);
     const material = new THREE.MeshPhongMaterial({ color: 0x0044cc });
     const fallbackMesh = new THREE.Mesh(geometry, material);
-    fallbackMesh.castShadow = true;
+    fallbackMesh.castShadow = false; // Use blob shadow instead
     fallbackMesh.position.y = 0.6;
     (this as THREE.Group).add(fallbackMesh);
     this.modelLoaded = true;
@@ -431,6 +439,9 @@ export class Cop extends THREE.Group {
       // Sync Three.js
       (this as THREE.Group).position.copy(newPosition);
 
+      // Update blob shadow position (stays on ground)
+      this.blobShadow.position.set(newPosition.x, 0.01, newPosition.z);
+
       // Update Yuka position to match actual position (feedback collision response to AI)
       this.yukaVehicle.position.set(newPosition.x, 0, newPosition.z);
 
@@ -470,6 +481,7 @@ export class Cop extends THREE.Group {
     this.yukaEntityManager.remove(this.yukaVehicle);
     this.removeTaserBeam();
     this.removeBulletProjectile();
+    // Note: blob shadow is removed by CopManager when it removes from scene
   }
 
   /**
@@ -477,6 +489,13 @@ export class Cop extends THREE.Group {
    */
   isDeadState(): boolean {
     return this.isDead;
+  }
+
+  /**
+   * Get the blob shadow mesh (for adding to scene)
+   */
+  getBlobShadow(): BlobShadow {
+    return this.blobShadow;
   }
 
   /**
