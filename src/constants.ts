@@ -232,8 +232,8 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     modelScale: 0.018,   // Model is ~98 units tall, need ~1.8 units (1.5x larger)
     modelRotationY: 0,   // GLTF Y-forward becomes Three.js -Z (default forward)
     modelOffsetY: 0,
-    riderOffsetY: 0.3,   // Lowered to sit butt on seat (legs bent in animation)
-    riderOffsetZ: 0,     // Centered
+    riderOffsetY: 0.0,   // Low position for Melee_Blocking seated pose
+    riderOffsetZ: -0.6,  // Move back to sit on seat
     hideRider: false,    // Show rider on bicycle
     killRadius: 1.5,     // Small kill zone
     causesRagdoll: false, // Too light to send bodies flying
@@ -251,8 +251,8 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     modelScale: 0.0045,  // Model is ~462 units tall, need ~2.1 units (1.5x larger)
     modelRotationY: 0,   // GLTF Y-forward becomes Three.js -Z (default forward)
     modelOffsetY: 0.3,   // Raise model to sit on ground properly
-    riderOffsetY: 0.5,   // Lowered to sit butt on seat (legs bent in animation)
-    riderOffsetZ: 0,     // Centered
+    riderOffsetY: 0.2,   // Height for motorbike seat
+    riderOffsetZ: -0.5,  // Move back to sit on seat
     hideRider: false,    // Show rider on motorbike
     killRadius: 2.0,
     causesRagdoll: false, // Too light to send bodies flying

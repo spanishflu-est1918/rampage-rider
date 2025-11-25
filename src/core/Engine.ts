@@ -694,6 +694,7 @@ export class Engine {
       // Add player to vehicle group so it moves with vehicle
       (this.vehicle as THREE.Group).add(this.player);
       // Position player at rider offset (local to vehicle)
+      console.log(`[VEHICLE] Rider offset: Y=${riderConfig.offsetY}, Z=${riderConfig.offsetZ}`);
       (this.player as THREE.Group).position.set(0, riderConfig.offsetY, riderConfig.offsetZ);
       (this.player as THREE.Group).rotation.set(0, 0, 0); // Face same direction as vehicle
       // Play seated animation
@@ -1194,20 +1195,26 @@ export class Engine {
       // Car sits idle when player not inside
     }
 
-    // Update player (only if not in vehicle)
-    if (this.player && !this.isInVehicle) {
-      // Update camera direction for camera-relative movement
-      // Use camera position as the view vector (for isometric, this works better)
-      const cameraDirection = this.camera.position.clone().normalize();
-      this.player.setCameraDirection(cameraDirection);
+    // Update player
+    if (this.player) {
+      if (!this.isInVehicle) {
+        // Full update when on foot
+        // Update camera direction for camera-relative movement
+        // Use camera position as the view vector (for isometric, this works better)
+        const cameraDirection = this.camera.position.clone().normalize();
+        this.player.setCameraDirection(cameraDirection);
 
-      // Update player movement
-      this.player.update(dt);
+        // Update player movement
+        this.player.update(dt);
 
-      // Update taser state in stats
-      const taserState = this.player.getTaserState();
-      this.stats.isTased = taserState.isTased;
-      this.stats.taseEscapeProgress = taserState.escapeProgress;
+        // Update taser state in stats
+        const taserState = this.player.getTaserState();
+        this.stats.isTased = taserState.isTased;
+        this.stats.taseEscapeProgress = taserState.escapeProgress;
+      } else {
+        // Just update animations when in vehicle
+        this.player.updateAnimations(dt);
+      }
     }
 
     // Get current position (car or player)

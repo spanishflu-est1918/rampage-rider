@@ -176,14 +176,25 @@ export class Player extends THREE.Group {
    * Play animation by name (matching Sketchbook setAnimation - line 499)
    */
   private playAnimation(clipName: string, fadeIn: number, force: boolean = false): void {
-    if (!this.mixer || this.animations.length === 0) return;
+    if (!this.mixer || this.animations.length === 0) {
+      console.log(`[ANIM] playAnimation SKIP: no mixer or animations`);
+      return;
+    }
 
     // Skip if debug animation is locked (unless forced)
-    if (this.debugAnimationLock && !force) return;
+    if (this.debugAnimationLock && !force) {
+      console.log(`[ANIM] playAnimation SKIP: locked, clip=${clipName}`);
+      return;
+    }
 
     // Find animation clip
     const clip = THREE.AnimationClip.findByName(this.animations, clipName);
-    if (!clip) return;
+    if (!clip) {
+      console.log(`[ANIM] playAnimation SKIP: clip not found: ${clipName}`);
+      return;
+    }
+
+    console.log(`[ANIM] playAnimation: ${clipName}, duration=${clip.duration.toFixed(2)}s`);
 
     // Stop all current actions and play new one
     this.mixer.stopAllAction();
@@ -746,24 +757,76 @@ export class Player extends THREE.Group {
 
   /**
    * Play seated animation for vehicle riding (bike/motorbike)
-   * Falls back to Idle_A if no seated animation exists
+   * Uses Melee_Blocking which has arms forward like holding handlebars
    */
   playSeatedAnimation(): void {
-    // Try seated animation first, fall back to idle
-    const clip = THREE.AnimationClip.findByName(this.animations, 'Seated_Bike');
-    if (clip) {
-      this.playAnimation('Seated_Bike', 0.2);
-    } else {
-      // No seated animation - use idle as fallback
-      this.playAnimation('Idle_A', 0.2);
+    console.log(`[ANIM] playSeatedAnimation called, mixer=${!!this.mixer}, anims=${this.animations.length}`);
+    if (!this.mixer) return;
+
+    // Lock to prevent movement overrides
+    this.debugAnimationLock = true;
+
+    // Debug: list all animation names
+    console.log(`[ANIM] Available animations:`, this.animations.map(a => a.name));
+
+    const clip = THREE.AnimationClip.findByName(this.animations, 'Melee_Blocking');
+    if (!clip) {
+      console.log(`[ANIM] Melee_Blocking not found!`);
+      return;
     }
+
+    // Debug: check clip details
+    console.log(`[ANIM] Melee_Blocking clip details:`, {
+      name: clip.name,
+      duration: clip.duration,
+      tracks: clip.tracks.length,
+      trackNames: clip.tracks.map(t => t.name).slice(0, 5), // First 5 track names
+    });
+
+    // Stop all and play looping
+    this.mixer.stopAllAction();
+    const action = this.mixer.clipAction(clip);
+    action.setLoop(THREE.LoopRepeat, Infinity);
+    action.reset();
+    action.play();
+
+    // Debug: check action state
+    console.log(`[ANIM] Action state:`, {
+      isRunning: action.isRunning(),
+      enabled: action.enabled,
+      weight: action.weight,
+      timeScale: action.timeScale,
+      time: action.time,
+    });
+
+    this.currentAnimation = 'Melee_Blocking';
+
+    // Debug: check action again after a frame
+    setTimeout(() => {
+      console.log(`[ANIM] Action state after 100ms:`, {
+        isRunning: action.isRunning(),
+        enabled: action.enabled,
+        weight: action.weight,
+        time: action.time,
+      });
+    }, 100);
   }
 
   /**
    * Resume normal animations after exiting vehicle
    */
   resumeNormalAnimations(): void {
+    this.debugAnimationLock = false; // Unlock so movement can control animations
     this.playAnimation('Idle_A', 0.1);
+  }
+
+  /**
+   * Update only animations (used when player is in vehicle)
+   */
+  updateAnimations(deltaTime: number): void {
+    if (this.mixer) {
+      this.mixer.update(deltaTime);
+    }
   }
 
   /**
