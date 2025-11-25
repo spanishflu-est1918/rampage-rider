@@ -333,8 +333,8 @@ export class Engine {
         left: input.left,
         right: input.right,
         sprint: input.mount, // Shift key (walk mode - slows down)
-        jump: false, // Jump disabled - SPACE is now attack
-        attack: input.attack || false // SPACE key
+        jump: false, // Jump disabled
+        attack: input.action || false // SPACE = universal action (attack when on foot)
       });
     }
   }
@@ -860,8 +860,8 @@ export class Engine {
       this.spawnCar();
     }
 
-    // Check SHIFT to enter car when near it (and not already in vehicle)
-    if (this.carSpawned && !this.isInVehicle && this.input.mount && this.isPlayerNearCar()) {
+    // Check SPACE to enter car when near it (and not already in vehicle)
+    if (this.carSpawned && !this.isInVehicle && this.input.action && this.isPlayerNearCar()) {
       this.enterVehicle();
     }
 
