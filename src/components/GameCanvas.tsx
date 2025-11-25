@@ -214,17 +214,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
   }, [gameActive, engineReady]);
 
   return (
-    <>
-      <canvas
-        ref={canvasRef}
-        className="absolute top-0 left-0 w-full h-full block z-0 bg-neutral-900"
-      />
-      {!engineReady && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xl">
-          Loading Physics Engine...
-        </div>
-      )}
-    </>
+    <canvas
+      ref={canvasRef}
+      className="absolute top-0 left-0 w-full h-full block z-0 bg-neutral-900"
+    />
   );
 };
 
