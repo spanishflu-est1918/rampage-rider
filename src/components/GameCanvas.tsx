@@ -1,15 +1,17 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Engine } from '../core/Engine';
 import { GameStats, InputState, KillNotification } from '../types';
+import { VehicleType } from '../constants';
 
 interface GameCanvasProps {
   onStatsUpdate: (stats: GameStats) => void;
   onGameOver: (stats: GameStats) => void;
   onKillNotification?: (notification: KillNotification) => void;
   gameActive: boolean;
+  onEngineReady?: (spawnVehicle: (type: VehicleType | null) => void) => void;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKillNotification, gameActive }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKillNotification, gameActive, onEngineReady }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const [engineReady, setEngineReady] = useState(false);
@@ -57,6 +59,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
       engineRef.current = engine;
       initializingEngine = null;
       setEngineReady(true);
+
+      // Expose debug spawn function to parent
+      if (onEngineReady) {
+        onEngineReady((vehicleType) => engine.debugSpawnVehicle(vehicleType));
+      }
 
       console.log('[GameCanvas] Engine ready!');
     };

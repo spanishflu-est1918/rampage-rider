@@ -241,6 +241,40 @@ export class Player extends THREE.Group {
   }
 
   /**
+   * Perform an attack (called by ActionController)
+   * Directly triggers the attack, bypassing input edge detection
+   */
+  performAttack(): void {
+    if (this.isDead || this.isAttacking) return;
+
+    // Randomize attack animation
+    const attackAnimations = [
+      'Melee_1H_Attack_Stab',
+      'Melee_1H_Attack_Chop',
+      'Melee_1H_Attack_Jump_Chop'
+    ];
+    const randomAttack = attackAnimations[Math.floor(Math.random() * attackAnimations.length)];
+
+    const clip = THREE.AnimationClip.findByName(this.animations, randomAttack);
+    if (clip && this.mixer) {
+      this.attackAction = this.mixer.clipAction(clip);
+      this.attackAction.setLoop(THREE.LoopOnce, 1);
+      this.attackAction.clampWhenFinished = false;
+      this.attackAction.timeScale = 2.0;
+      this.attackAction.reset();
+      this.attackAction.play();
+
+      this.isAttacking = true;
+      this.attackTimer = 0.5; // 500ms max attack duration
+
+      // Trigger attack callback
+      if (this.onAttackCallback) {
+        this.onAttackCallback((this as THREE.Group).position.clone());
+      }
+    }
+  }
+
+  /**
    * Set camera direction for camera-relative movement
    */
   setCameraDirection(direction: THREE.Vector3): void {
@@ -419,37 +453,8 @@ export class Player extends THREE.Group {
       }
     }
 
-    // Attack as overlay (plays on top of base animation)
-    if (this.input.attack && !this.prevInput.attack && !this.isDead) {
-      // Only start if not already attacking
-      if (!this.isAttacking) {
-        // Randomize attack animation
-        const attackAnimations = [
-          'Melee_1H_Attack_Stab',
-          'Melee_1H_Attack_Chop',
-          'Melee_1H_Attack_Jump_Chop'
-        ];
-        const randomAttack = attackAnimations[Math.floor(Math.random() * attackAnimations.length)];
-
-        const clip = THREE.AnimationClip.findByName(this.animations, randomAttack);
-        if (clip) {
-          this.attackAction = this.mixer!.clipAction(clip);
-          this.attackAction.setLoop(THREE.LoopOnce, 1);
-          this.attackAction.clampWhenFinished = false; // Don't clamp - let it finish cleanly
-          this.attackAction.timeScale = 2.0;
-          this.attackAction.reset();
-          this.attackAction.play();
-
-          this.isAttacking = true;
-          // Set max attack duration (500ms) as safety timeout
-          this.attackTimer = 0.5;
-
-          if (this.onAttackCallback) {
-            this.onAttackCallback((this as THREE.Group).position.clone());
-          }
-        }
-      }
-    }
+    // NOTE: Attacks are now triggered via performAttack() from ActionController
+    // This ensures ActionController is the single source of truth for SPACE key actions
 
     // Update attack timer and reset state when animation completes
     if (this.isAttacking && this.attackAction) {

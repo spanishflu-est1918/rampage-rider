@@ -2,32 +2,25 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
+import { VehicleConfig } from '../constants';
 
 /**
- * Car config constants
+ * Collision groups for vehicles
  */
-const CAR_CONFIG = {
-  SPEED: 15, // Much faster than player sprint (7)
-  MAX_HEALTH: 100,
-  TURN_SPEED: 5, // Radians per second for rotation
-  // Collider dimensions (half-extents) - sized for monster truck at 75% scale
-  COLLIDER_WIDTH: 0.9,
-  COLLIDER_HEIGHT: 0.6,
-  COLLIDER_LENGTH: 1.7,
-  // Collision groups
-  COLLISION_GROUPS: {
-    GROUND: 0x0001,
-    BUILDING: 0x0040,
-    VEHICLE: 0x0080,
-  },
+const COLLISION_GROUPS = {
+  GROUND: 0x0001,
+  BUILDING: 0x0040,
+  VEHICLE: 0x0080,
 } as const;
 
 /**
- * Car - Driveable vehicle entity
- * Unlocked at 10 kills, instantly kills pedestrians on contact
- * Only damaged by cop gunfire, explodes when health reaches 0
+ * Vehicle - Generic driveable vehicle entity
+ * Configured via VehicleConfig for different vehicle types (bicycle, motorbike, sedan)
  */
-export class Car extends THREE.Group {
+export class Vehicle extends THREE.Group {
+  // Config
+  private config: VehicleConfig;
+
   // Physics
   private rigidBody: RAPIER.RigidBody | null = null;
   private world: RAPIER.World | null = null;
@@ -39,16 +32,15 @@ export class Car extends THREE.Group {
   private modelLoaded: boolean = false;
 
   // State
-  private health: number = CAR_CONFIG.MAX_HEALTH;
-  private maxHealth: number = CAR_CONFIG.MAX_HEALTH;
-  private speed: number = CAR_CONFIG.SPEED;
+  private health: number;
+  private maxHealth: number;
+  private speed: number;
   private isDestroyed: boolean = false;
 
   // Movement collision filter (collide with GROUND and BUILDING, pass through cops/peds)
-  // Format: (filter << 16) | membership
   private movementCollisionFilter: number =
-    ((CAR_CONFIG.COLLISION_GROUPS.GROUND | CAR_CONFIG.COLLISION_GROUPS.BUILDING) << 16) |
-    CAR_CONFIG.COLLISION_GROUPS.VEHICLE;
+    ((COLLISION_GROUPS.GROUND | COLLISION_GROUPS.BUILDING) << 16) |
+    COLLISION_GROUPS.VEHICLE;
 
   // Input state
   private input = {
@@ -61,30 +53,54 @@ export class Car extends THREE.Group {
   // Callbacks
   private onDestroyedCallback: (() => void) | null = null;
 
-  constructor() {
+  constructor(config: VehicleConfig) {
     super();
+
+    this.config = config;
+    this.health = config.maxHealth;
+    this.maxHealth = config.maxHealth;
+    this.speed = config.speed;
 
     // Model container
     this.modelContainer = new THREE.Group();
-    this.modelContainer.position.y = 0; // Car sits on ground
+    this.modelContainer.position.y = 0;
     (this as THREE.Group).add(this.modelContainer);
 
-    // Load car model
+    // Load vehicle model
     this.loadModel();
   }
 
   /**
-   * Load the car GLTF model from cache
+   * Get vehicle type name
+   */
+  getTypeName(): string {
+    return this.config.name;
+  }
+
+  /**
+   * Get kill radius for pedestrian collision detection
+   */
+  getKillRadius(): number {
+    return this.config.killRadius;
+  }
+
+  /**
+   * Check if this vehicle causes ragdoll physics on kill
+   */
+  causesRagdoll(): boolean {
+    return this.config.causesRagdoll;
+  }
+
+  /**
+   * Load the vehicle GLTF model from cache
    */
   private async loadModel(): Promise<void> {
-    const modelPath = '/assets/vehicles/car.glb';
-
     try {
       const assetLoader = AssetLoader.getInstance();
-      const cachedGltf = assetLoader.getModel(modelPath);
+      const cachedGltf = assetLoader.getModel(this.config.modelPath);
 
       if (!cachedGltf) {
-        console.error(`[Car] Model not in cache: ${modelPath}`);
+        console.error(`[Vehicle] Model not in cache: ${this.config.modelPath}`);
         this.createFallbackMesh();
         return;
       }
@@ -95,20 +111,17 @@ export class Car extends THREE.Group {
       // Setup shadows
       AnimationHelper.setupShadows(model);
 
-      // Scale and position the model appropriately
-      // Monster truck model is ~284 units long, scale to ~3.4 game units (75% of original)
-      model.scale.set(0.012, 0.012, 0.012);
-      // Rotate -90° so model's +X (front) faces game's -Z (forward)
-      model.rotation.y = -Math.PI / 2;
-      // Offset Y to sit on ground properly
-      model.position.y = -0.2;
+      // Apply config transforms
+      model.scale.setScalar(this.config.modelScale);
+      model.rotation.y = this.config.modelRotationY;
+      model.position.y = this.config.modelOffsetY;
 
       this.modelContainer.add(model);
       this.modelLoaded = true;
 
-      console.log('[Car] Model loaded successfully');
+      console.log(`[Vehicle] ${this.config.name} model loaded successfully`);
     } catch (error) {
-      console.error('[Car] Failed to load car model:', error);
+      console.error(`[Vehicle] Failed to load ${this.config.name} model:`, error);
       this.createFallbackMesh();
     }
   }
@@ -118,17 +131,17 @@ export class Car extends THREE.Group {
    */
   private createFallbackMesh(): void {
     const geometry = new THREE.BoxGeometry(
-      CAR_CONFIG.COLLIDER_WIDTH * 2,
-      CAR_CONFIG.COLLIDER_HEIGHT * 2,
-      CAR_CONFIG.COLLIDER_LENGTH * 2
+      this.config.colliderWidth * 2,
+      this.config.colliderHeight * 2,
+      this.config.colliderLength * 2
     );
     const material = new THREE.MeshPhongMaterial({ color: 0xff0000 });
     const fallbackMesh = new THREE.Mesh(geometry, material);
     fallbackMesh.castShadow = true;
-    fallbackMesh.position.y = CAR_CONFIG.COLLIDER_HEIGHT;
+    fallbackMesh.position.y = this.config.colliderHeight;
     this.modelContainer.add(fallbackMesh);
     this.modelLoaded = true;
-    console.log('[Car] Using fallback mesh');
+    console.log(`[Vehicle] ${this.config.name} using fallback mesh`);
   }
 
   /**
@@ -137,20 +150,20 @@ export class Car extends THREE.Group {
   createPhysicsBody(world: RAPIER.World, position: THREE.Vector3): void {
     this.world = world;
 
-    // Create kinematic position-based body (same as Player)
+    // Create kinematic position-based body
     const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
       .setTranslation(position.x, position.y, position.z);
 
     this.rigidBody = world.createRigidBody(bodyDesc);
 
-    // Create box collider for car
+    // Create box collider with config dimensions
     // Membership: 0x0080 (VEHICLE group)
     // Filter: 0x0045 (can collide with GROUND=0x0001, PEDESTRIAN=0x0004, BUILDING=0x0040)
     const colliderDesc = RAPIER.ColliderDesc.cuboid(
-      CAR_CONFIG.COLLIDER_WIDTH,
-      CAR_CONFIG.COLLIDER_HEIGHT,
-      CAR_CONFIG.COLLIDER_LENGTH
-    ).setCollisionGroups(0x00450080); // Filter=0x0045, Membership=0x0080
+      this.config.colliderWidth,
+      this.config.colliderHeight,
+      this.config.colliderLength
+    ).setCollisionGroups(0x00450080);
 
     this.collider = world.createCollider(colliderDesc, this.rigidBody);
 
@@ -162,11 +175,11 @@ export class Car extends THREE.Group {
     // Sync visual position
     (this as THREE.Group).position.copy(position);
 
-    console.log('[Car] Physics body created at', position);
+    console.log(`[Vehicle] ${this.config.name} physics body created at`, position);
   }
 
   /**
-   * Spawn car at position
+   * Spawn vehicle at position
    */
   spawn(position: THREE.Vector3): void {
     if (this.rigidBody) {
@@ -178,6 +191,7 @@ export class Car extends THREE.Group {
     (this as THREE.Group).position.copy(position);
     this.health = this.maxHealth;
     this.isDestroyed = false;
+    this.modelContainer.visible = true;
   }
 
   /**
@@ -192,7 +206,6 @@ export class Car extends THREE.Group {
     jump?: boolean;
     attack?: boolean;
   }): void {
-    // Only care about movement keys, ignore sprint/jump/attack
     this.input.up = inputState.up;
     this.input.down = inputState.down;
     this.input.left = inputState.left;
@@ -200,7 +213,7 @@ export class Car extends THREE.Group {
   }
 
   /**
-   * Get movement direction (camera-relative, same as Player)
+   * Get movement direction (camera-relative)
    */
   private getMovementDirection(): THREE.Vector3 {
     let x = 0;
@@ -216,7 +229,7 @@ export class Car extends THREE.Group {
   }
 
   /**
-   * Update car movement
+   * Update vehicle movement
    */
   update(deltaTime: number): void {
     if (!this.rigidBody || this.isDestroyed) return;
@@ -228,11 +241,11 @@ export class Car extends THREE.Group {
     // Calculate velocity
     const velocity = moveVector.clone().multiplyScalar(this.speed);
 
-    // Rotate car to face movement direction (smooth rotation)
+    // Rotate vehicle to face movement direction (smooth rotation)
     if (isMoving) {
       const targetAngle = Math.atan2(moveVector.x, moveVector.z);
       const currentRotation = (this as THREE.Group).rotation.y;
-      const maxRotation = CAR_CONFIG.TURN_SPEED * deltaTime;
+      const maxRotation = this.config.turnSpeed * deltaTime;
 
       // Calculate shortest rotation direction
       let angleDiff = targetAngle - currentRotation;
@@ -248,31 +261,26 @@ export class Car extends THREE.Group {
     if (this.characterController && this.collider) {
       const desiredMovement = {
         x: velocity.x * deltaTime,
-        y: -0.1 * deltaTime, // Small downward force to stay grounded
+        y: -0.1 * deltaTime,
         z: velocity.z * deltaTime,
       };
 
-      // Compute movement accounting for obstacles (only GROUND and BUILDING, pass through cops/peds)
       this.characterController.computeColliderMovement(
         this.collider,
         desiredMovement,
-        undefined, // filterFlags
-        this.movementCollisionFilter // Only collide with ground and buildings
+        undefined,
+        this.movementCollisionFilter
       );
 
-      // Get corrected movement
       const correctedMovement = this.characterController.computedMovement();
 
-      // Apply to rigid body
       const newPosition = {
         x: translation.x + correctedMovement.x,
-        y: Math.max(0.5, translation.y + correctedMovement.y), // Keep above ground
+        y: Math.max(0.5, translation.y + correctedMovement.y),
         z: translation.z + correctedMovement.z,
       };
 
       this.rigidBody.setNextKinematicTranslation(newPosition);
-
-      // Sync visual position
       (this as THREE.Group).position.set(newPosition.x, newPosition.y, newPosition.z);
     }
   }
@@ -284,12 +292,10 @@ export class Car extends THREE.Group {
     if (this.isDestroyed) return;
 
     this.health = Math.max(0, this.health - amount);
-    console.log(`[Car] Took ${amount} damage, health: ${this.health}/${this.maxHealth}`);
+    console.log(`[Vehicle] ${this.config.name} took ${amount} damage, health: ${this.health}/${this.maxHealth}`);
 
-    // Flash red when hit
     this.flashDamage();
 
-    // Check for destruction
     if (this.health <= 0) {
       this.explode();
     }
@@ -302,42 +308,42 @@ export class Car extends THREE.Group {
     this.modelContainer.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
         const mat = child.material as THREE.MeshStandardMaterial;
-        const originalEmissive = mat.emissive.getHex();
-        mat.emissive.setHex(0xff0000);
-        mat.emissiveIntensity = 0.8;
+        const originalEmissive = mat.emissive?.getHex() || 0;
+        if (mat.emissive) {
+          mat.emissive.setHex(0xff0000);
+          mat.emissiveIntensity = 0.8;
 
-        // Reset after 100ms
-        setTimeout(() => {
-          mat.emissive.setHex(originalEmissive);
-          mat.emissiveIntensity = 0;
-        }, 100);
+          setTimeout(() => {
+            mat.emissive.setHex(originalEmissive);
+            mat.emissiveIntensity = 0;
+          }, 100);
+        }
       }
     });
   }
 
   /**
-   * Explode the car
+   * Explode the vehicle
    */
   private explode(): void {
     if (this.isDestroyed) return;
 
     this.isDestroyed = true;
-    console.log('[Car] EXPLODED!');
+    console.log(`[Vehicle] ${this.config.name} EXPLODED!`);
 
-    // Visual explosion effect - scale up briefly then hide
     const originalScale = this.modelContainer.scale.clone();
     this.modelContainer.scale.multiplyScalar(1.5);
 
-    // Flash white
     this.modelContainer.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
         const mat = child.material as THREE.MeshStandardMaterial;
-        mat.emissive.setHex(0xffff00);
-        mat.emissiveIntensity = 2;
+        if (mat.emissive) {
+          mat.emissive.setHex(0xffff00);
+          mat.emissiveIntensity = 2;
+        }
       }
     });
 
-    // After brief delay, call destroyed callback
     setTimeout(() => {
       this.modelContainer.scale.copy(originalScale);
       this.modelContainer.visible = false;
@@ -349,14 +355,14 @@ export class Car extends THREE.Group {
   }
 
   /**
-   * Get car position
+   * Get vehicle position
    */
   getPosition(): THREE.Vector3 {
     return (this as THREE.Group).position.clone();
   }
 
   /**
-   * Get current velocity (based on input direction and speed)
+   * Get current velocity
    */
   getVelocity(): THREE.Vector3 {
     const moveDir = this.getMovementDirection();
@@ -378,7 +384,7 @@ export class Car extends THREE.Group {
   }
 
   /**
-   * Check if car is destroyed
+   * Check if vehicle is destroyed
    */
   isDestroyedState(): boolean {
     return this.isDestroyed;
@@ -400,7 +406,6 @@ export class Car extends THREE.Group {
       this.rigidBody = null;
     }
 
-    // Cleanup model
     this.modelContainer.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.geometry?.dispose();
@@ -412,6 +417,6 @@ export class Car extends THREE.Group {
       }
     });
 
-    console.log('[Car] Disposed');
+    console.log(`[Vehicle] ${this.config.name} disposed`);
   }
 }

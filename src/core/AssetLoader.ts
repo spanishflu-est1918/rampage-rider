@@ -62,6 +62,8 @@ export class AssetLoader {
       '/assets/pedestrians/Worker_Male.gltf',
 
       // Vehicle models
+      '/assets/vehicles/bicycle.glb',
+      '/assets/vehicles/motorbike.glb',
       '/assets/vehicles/car.glb',
     ];
 
