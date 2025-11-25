@@ -1,4 +1,4 @@
-import { Tier, TierConfig } from './types';
+import { Tier, TierConfig } from "./types";
 
 export const WORLD_WIDTH = 40;
 export const WORLD_DEPTH = 60; // Visible depth
@@ -6,7 +6,7 @@ export const CHUNK_SIZE = 40;
 
 export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   [Tier.FOOT]: {
-    name: 'Foot Fiend',
+    name: "Foot Fiend",
     minKills: 0,
     speedMultiplier: 1.0, // Base speed approx 8 units/s
     maxHealth: 50,
@@ -15,7 +15,7 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
     description: "Knife-wielding maniac. Running is cardio.",
   },
   [Tier.BIKE]: {
-    name: 'Bike Butcher',
+    name: "Bike Butcher",
     minKills: 10,
     speedMultiplier: 1.5,
     maxHealth: 75,
@@ -24,7 +24,7 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
     description: "Eco-friendly violence. Pedal to the medal.",
   },
   [Tier.MOTO]: {
-    name: 'Moto Maniac',
+    name: "Moto Maniac",
     minKills: 40,
     speedMultiplier: 2.2,
     maxHealth: 100,
@@ -33,7 +33,7 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
     description: "Two wheels, one engine, zero mercy.",
   },
   [Tier.SEDAN]: {
-    name: 'Sedan Sovereign',
+    name: "Sedan Sovereign",
     minKills: 110,
     speedMultiplier: 3.0,
     maxHealth: 150,
@@ -82,11 +82,11 @@ export const CITY_CONFIG = {
  * European skin tone range from light to medium-tan
  */
 export const SKIN_TONES = [
-  0xF5D0B8, // Very light peachy
-  0xE8B196, // Light peachy tan
-  0xDDA886, // Medium peachy
-  0xD5A27A, // Light tan
-  0xCCA070, // Medium tan
+  0xf5d0b8, // Very light peachy
+  0xe8b196, // Light peachy tan
+  0xdda886, // Medium peachy
+  0xd5a27a, // Light tan
+  0xcca070, // Medium tan
 ] as const;
 
 /**
@@ -94,15 +94,15 @@ export const SKIN_TONES = [
  */
 export const ENTITY_SPEEDS = {
   // Player
-  PLAYER_WALK: 4,      // Shift-held slow movement
-  PLAYER_SPRINT: 7,    // Default movement speed
+  PLAYER_WALK: 4, // Shift-held slow movement
+  PLAYER_SPRINT: 7, // Default movement speed
 
   // Pedestrian
   PEDESTRIAN_WALK: 1.5,
   PEDESTRIAN_RUN: 6.0, // Panic flee speed
 
   // Cop
-  COP_CHASE: 7.2,      // 80% of original 9.0 - player should be able to outrun
+  COP_CHASE: 7.2, // 80% of original 9.0 - player should be able to outrun
 } as const;
 
 /**
@@ -111,8 +111,8 @@ export const ENTITY_SPEEDS = {
 export const PHYSICS_CONFIG = {
   GRAVITY: -15,
   JUMP_FORCE: 5,
-  GROUND_CHECK_Y: 0.57,       // Y position for ground detection
-  MODEL_CONTAINER_Y: -0.57,   // Model container offset to ground character
+  GROUND_CHECK_Y: 0.57, // Y position for ground detection
+  MODEL_CONTAINER_Y: -0.57, // Model container offset to ground character
 } as const;
 
 /**
@@ -123,19 +123,19 @@ export const ATTACK_CONFIG = {
     range: 1.5,
     damage: 10,
     cooldown: 1.5,
-    animation: 'Punch',
+    animation: "Punch",
   },
   TASER: {
     range: 6.0,
-    damage: 15,     // Taser doesn't do direct damage - stuns instead
+    damage: 15, // Taser doesn't do direct damage - stuns instead
     cooldown: 2.0,
-    animation: 'Punch', // Using punch animation for taser
+    animation: "Punch", // Using punch animation for taser
   },
   SHOOT: {
     range: 8.0,
     damage: 20,
     cooldown: 1.0,
-    animation: 'Shoot_OneHanded',
+    animation: "Shoot_OneHanded",
   },
 } as const;
 
@@ -143,48 +143,48 @@ export const ATTACK_CONFIG = {
  * Hit stun durations
  */
 export const HIT_STUN = {
-  PLAYER: 0.3,  // 300ms - player recovers quickly
-  COP: 0.6,     // 600ms - cops stagger longer
+  PLAYER: 0.3, // 300ms - player recovers quickly
+  COP: 0.6, // 600ms - cops stagger longer
 } as const;
 
 /**
  * Cop entity configuration
  */
 export const COP_CONFIG = {
-  HEALTH: 3,              // Requires 3 knife hits to kill
-  MAX_FORCE: 20.0,        // Yuka steering force for instant direction changes
+  HEALTH: 3, // Requires 3 knife hits to kill
+  MAX_FORCE: 20.0, // Yuka steering force for instant direction changes
   UNIFORM_COLOR: 0x0066ff, // Bright police blue
-  GEAR_COLOR: 0x001a4d,   // Dark navy for helmets/gear
+  GEAR_COLOR: 0x001a4d, // Dark navy for helmets/gear
 } as const;
 
 /**
  * Pedestrian entity configuration
  */
 export const PEDESTRIAN_CONFIG = {
-  HEALTH: 1,              // One-shot kill
-  PANIC_DISTANCE: 15,     // Distance at which they flee from danger
-  STUMBLE_DURATION: 0.8,  // How long they stumble after being hit
+  HEALTH: 1, // One-shot kill
+  PANIC_DISTANCE: 15, // Distance at which they flee from danger
+  STUMBLE_DURATION: 0.8, // How long they stumble after being hit
 } as const;
 
 /**
  * Taser escape configuration (player)
  */
 export const TASER_CONFIG = {
-  ESCAPE_DECAY: 15,       // Progress decays 15% per second (was 20 - more forgiving)
-  ESCAPE_PER_PRESS: 15,   // Each Space press adds 15% (was 12 - easier to escape)
-  IMMUNITY_DURATION: 10,  // 10 seconds of immunity after escaping
-  CRAWL_SPEED: 1.5,       // Slow movement speed while tased (about 20% of sprint)
-  ESCAPE_KNOCKBACK: 8,    // Knockback radius when escaping taser
-  ESCAPE_FORCE: 15,       // Force applied to nearby cops when escaping
+  ESCAPE_DECAY: 15, // Progress decays 15% per second (was 20 - more forgiving)
+  ESCAPE_PER_PRESS: 15, // Each Space press adds 15% (was 12 - easier to escape)
+  IMMUNITY_DURATION: 10, // 10 seconds of immunity after escaping
+  CRAWL_SPEED: 1.5, // Slow movement speed while tased (about 20% of sprint)
+  ESCAPE_KNOCKBACK: 8, // Knockback radius when escaping taser
+  ESCAPE_FORCE: 15, // Force applied to nearby cops when escaping
 } as const;
 
 /**
  * Vehicle type enum
  */
 export enum VehicleType {
-  BICYCLE = 'bicycle',
-  MOTORBIKE = 'motorbike',
-  SEDAN = 'sedan',
+  BICYCLE = "bicycle",
+  MOTORBIKE = "motorbike",
+  SEDAN = "sedan",
 }
 
 /**
@@ -204,15 +204,15 @@ export interface VehicleConfig {
   colliderLength: number;
   // Model transform
   modelScale: number;
-  modelRotationY: number;  // Radians to rotate model to face forward
-  modelOffsetY: number;    // Y offset to sit on ground
+  modelRotationY: number; // Radians to rotate model to face forward
+  modelOffsetY: number; // Y offset to sit on ground
   // Rider position (relative to vehicle position)
-  riderOffsetY: number;    // Y offset for seated player
-  riderOffsetZ: number;    // Z offset (forward/back on vehicle)
-  hideRider: boolean;      // Whether to hide rider (for enclosed vehicles like cars)
+  riderOffsetY: number; // Y offset for seated player
+  riderOffsetZ: number; // Z offset (forward/back on vehicle)
+  hideRider: boolean; // Whether to hide rider (for enclosed vehicles like cars)
   // Kill mechanics
   killRadius: number;
-  causesRagdoll: boolean;  // Whether kills send bodies flying (heavy vehicles only)
+  causesRagdoll: boolean; // Whether kills send bodies flying (heavy vehicles only)
 }
 
 /**
@@ -221,60 +221,60 @@ export interface VehicleConfig {
 export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
   [VehicleType.BICYCLE]: {
     type: VehicleType.BICYCLE,
-    name: 'Bicycle',
-    modelPath: '/assets/vehicles/bicycle.glb',
-    speed: 10,           // Faster than sprint (7) but slower than car
-    turnSpeed: 8,        // Very agile
-    maxHealth: 50,       // Fragile
+    name: "Bicycle",
+    modelPath: "/assets/vehicles/bicycle.glb",
+    speed: 10, // Faster than sprint (7) but slower than car
+    turnSpeed: 8, // Very agile
+    maxHealth: 50, // Fragile
     colliderWidth: 0.3,
     colliderHeight: 0.5,
     colliderLength: 0.8,
-    modelScale: 0.18,    // 80% of 0.224
-    modelRotationY: -Math.PI / 2,  // Rotate 90 degrees left
-    modelOffsetY: 0.25,
+    modelScale: 0.18, // 80% of 0.224
+    modelRotationY: -Math.PI / 2, // Rotate 90 degrees left
+    modelOffsetY: 0.05,
     riderOffsetY: 0.5,
-    riderOffsetZ: -0.6,  // Move back to sit on seat
-    hideRider: false,    // Show rider on bicycle
-    killRadius: 1.5,     // Small kill zone
+    riderOffsetZ: -0.6, // Move back to sit on seat
+    hideRider: false, // Show rider on bicycle
+    killRadius: 1.5, // Small kill zone
     causesRagdoll: false, // Too light to send bodies flying
   },
   [VehicleType.MOTORBIKE]: {
     type: VehicleType.MOTORBIKE,
-    name: 'Motorbike',
-    modelPath: '/assets/vehicles/motorbike.glb',
-    speed: 18,           // Fast!
-    turnSpeed: 6,        // Good handling
+    name: "Motorbike",
+    modelPath: "/assets/vehicles/motorbike.glb",
+    speed: 18, // Fast!
+    turnSpeed: 6, // Good handling
     maxHealth: 75,
     colliderWidth: 0.4,
     colliderHeight: 0.6,
     colliderLength: 1.2,
-    modelScale: 0.0045,  // Model is ~462 units tall, need ~2.1 units (1.5x larger)
-    modelRotationY: 0,   // GLTF Y-forward becomes Three.js -Z (default forward)
-    modelOffsetY: 0.3,   // Raise model to sit on ground properly
-    riderOffsetY: 0.2,   // Height for motorbike seat
-    riderOffsetZ: -0.5,  // Move back to sit on seat
-    hideRider: false,    // Show rider on motorbike
+    modelScale: 0.0045, // Model is ~462 units tall, need ~2.1 units (1.5x larger)
+    modelRotationY: 0, // GLTF Y-forward becomes Three.js -Z (default forward)
+    modelOffsetY: 0.3, // Raise model to sit on ground properly
+    riderOffsetY: 0.2, // Height for motorbike seat
+    riderOffsetZ: -0.5, // Move back to sit on seat
+    hideRider: false, // Show rider on motorbike
     killRadius: 2.0,
     causesRagdoll: false, // Too light to send bodies flying
   },
   [VehicleType.SEDAN]: {
     type: VehicleType.SEDAN,
-    name: 'Monster Truck',
-    modelPath: '/assets/vehicles/car.glb',
-    speed: 15,           // Current car speed
+    name: "Monster Truck",
+    modelPath: "/assets/vehicles/car.glb",
+    speed: 15, // Current car speed
     turnSpeed: 5,
     maxHealth: 100,
     colliderWidth: 0.9,
     colliderHeight: 0.6,
     colliderLength: 1.7,
-    modelScale: 0.012,   // Monster truck needs heavy scaling
-    modelRotationY: -Math.PI / 2,  // Rotate to face forward
+    modelScale: 0.012, // Monster truck needs heavy scaling
+    modelRotationY: -Math.PI / 2, // Rotate to face forward
     modelOffsetY: -0.2,
-    riderOffsetY: 0,     // Not used - rider hidden
-    riderOffsetZ: 0,     // Not used - rider hidden
-    hideRider: true,     // Hide rider in enclosed vehicle
+    riderOffsetY: 0, // Not used - rider hidden
+    riderOffsetZ: 0, // Not used - rider hidden
+    hideRider: true, // Hide rider in enclosed vehicle
     killRadius: 3.5,
-    causesRagdoll: true,  // Heavy enough to send bodies flying!
+    causesRagdoll: true, // Heavy enough to send bodies flying!
   },
 };
 
