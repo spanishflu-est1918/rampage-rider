@@ -369,11 +369,7 @@ export class Player extends THREE.Group {
       this.jumpCooldown -= deltaTime;
     }
 
-    // Handle taser escape with SPACE (attack input)
-    // When tased, SPACE is used for escape instead of attack
-    if (this.isTased && this.input.attack && !this.prevInput.attack) {
-      this.handleEscapePress();
-    }
+    // Note: Taser escape is handled by Engine via ActionController
 
     // Apply gravity
     if (!this.isGrounded) {

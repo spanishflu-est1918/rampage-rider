@@ -10,6 +10,7 @@ import { Car } from '../entities/Car';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
 import { GameState, Tier, InputState, GameStats } from '../types';
+import { ActionController, ActionType } from './ActionController';
 
 /**
  * Engine - Core game engine
@@ -131,6 +132,9 @@ export class Engine {
   private car: Car | null = null;
   private isInVehicle: boolean = false;
   private carSpawned: boolean = false; // Car exists but player not inside
+
+  // Action controller - resolves SPACE key based on context
+  private actionController: ActionController = new ActionController();
 
   // Screen shake
   private shakeIntensity: number = 0;
@@ -327,6 +331,11 @@ export class Engine {
         right: input.right,
       });
     } else if (this.player) {
+      // Only pass attack input when not in a context where SPACE does something else
+      const taserState = this.player.getTaserState();
+      const isNearCar = this.carSpawned && this.isPlayerNearCar();
+      const shouldAttack = input.action && !taserState.isTased && !isNearCar;
+
       this.player.handleInput({
         up: input.up,
         down: input.down,
@@ -334,7 +343,7 @@ export class Engine {
         right: input.right,
         sprint: input.mount, // Shift key (walk mode - slows down)
         jump: false, // Jump disabled
-        attack: input.action || false // SPACE = universal action (attack when on foot)
+        attack: shouldAttack // SPACE = attack only when not doing other actions
       });
     }
   }
@@ -386,6 +395,7 @@ export class Engine {
     }
     this.isInVehicle = false;
     this.carSpawned = false;
+    this.actionController.reset();
 
     if (this.crowd) {
       this.crowd.clear();
@@ -860,9 +870,26 @@ export class Engine {
       this.spawnCar();
     }
 
-    // Check SPACE to enter car when near it (and not already in vehicle)
-    if (this.carSpawned && !this.isInVehicle && this.input.action && this.isPlayerNearCar()) {
-      this.enterVehicle();
+    // Resolve SPACE action based on context
+    const taserState = this.player?.getTaserState() || { isTased: false, escapeProgress: 0 };
+    const actionContext = {
+      isTased: taserState.isTased,
+      isNearCar: this.carSpawned && !this.isInVehicle && this.isPlayerNearCar(),
+      isInVehicle: this.isInVehicle,
+    };
+    const { action, isNewPress } = this.actionController.resolve(this.input, actionContext);
+
+    // Handle resolved action
+    if (isNewPress) {
+      switch (action) {
+        case ActionType.ENTER_CAR:
+          this.enterVehicle();
+          break;
+        case ActionType.ESCAPE_TASER:
+          this.player?.handleEscapePress();
+          break;
+        // ATTACK is handled by Player internally via input.attack
+      }
     }
 
     // Update car (always update if spawned, even if player not inside)
