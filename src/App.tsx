@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
 import Overlay from './components/ui/Overlay';
-import KillNotifications from './components/ui/KillNotifications';
+import NotificationSystem, { NotificationController } from './components/ui/NotificationSystem';
 import SnowOverlay from './components/ui/SnowOverlay';
+import VehicleSelector from './components/ui/VehicleSelector';
 import { MainMenu, GameOver } from './components/ui/Menus';
 import { GameState, GameStats, Tier, KillNotification } from './types';
+import { VehicleType } from './constants';
 import ErrorBoundary from './components/ErrorBoundary';
 import { preloader } from './core/Preloader';
 
@@ -44,22 +46,38 @@ function App() {
     setGameState(GameState.GAME_OVER);
   }, []);
 
-  // Kill notification system
-  const addNotificationRef = useRef<((message: string, isPursuit: boolean, points: number) => void) | null>(null);
+  // Unified notification system
+  const notificationControllerRef = useRef<NotificationController | null>(null);
 
   const handleKillNotification = useCallback((notification: KillNotification) => {
-    if (addNotificationRef.current) {
-      addNotificationRef.current(notification.message, notification.isPursuit, notification.points);
+    if (notificationControllerRef.current) {
+      const type = notification.isPursuit ? 'pursuit' : 'kill';
+      notificationControllerRef.current.addNotification(type, notification.message, `+${notification.points}`);
     }
   }, []);
 
-  const registerNotificationCallback = useCallback((addFn: (message: string, isPursuit: boolean, points: number) => void) => {
-    addNotificationRef.current = addFn;
+  const registerNotificationController = useCallback((controller: NotificationController) => {
+    notificationControllerRef.current = controller;
   }, []);
 
   const startGame = () => {
     setGameState(GameState.PLAYING);
   };
+
+  // Debug vehicle spawning
+  const spawnVehicleRef = useRef<((type: VehicleType | null) => void) | null>(null);
+  const [currentVehicle, setCurrentVehicle] = useState<VehicleType | null>(null);
+
+  const handleEngineReady = useCallback((spawnFn: (type: VehicleType | null) => void) => {
+    spawnVehicleRef.current = spawnFn;
+  }, []);
+
+  const handleVehicleSelect = useCallback((vehicleType: VehicleType | null) => {
+    if (spawnVehicleRef.current) {
+      spawnVehicleRef.current(vehicleType);
+      setCurrentVehicle(vehicleType);
+    }
+  }, []);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-neutral-900 select-none">
@@ -71,6 +89,7 @@ function App() {
           onStatsUpdate={handleStatsUpdate}
           onGameOver={handleGameOver}
           onKillNotification={handleKillNotification}
+          onEngineReady={handleEngineReady}
         />
       </ErrorBoundary>
 
@@ -83,7 +102,12 @@ function App() {
         <>
           <SnowOverlay />
           <Overlay stats={stats} />
-          <KillNotifications onRegister={registerNotificationCallback} />
+          <NotificationSystem
+            onRegister={registerNotificationController}
+            showEnterPrompt={stats.isNearCar && !stats.isInVehicle}
+            showTasedAlert={stats.isTased}
+          />
+          <VehicleSelector onSelect={handleVehicleSelect} currentVehicle={currentVehicle} />
         </>
       )}
 

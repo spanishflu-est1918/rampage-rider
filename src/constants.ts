@@ -177,3 +177,99 @@ export const TASER_CONFIG = {
   ESCAPE_KNOCKBACK: 8,    // Knockback radius when escaping taser
   ESCAPE_FORCE: 15,       // Force applied to nearby cops when escaping
 } as const;
+
+/**
+ * Vehicle type enum
+ */
+export enum VehicleType {
+  BICYCLE = 'bicycle',
+  MOTORBIKE = 'motorbike',
+  SEDAN = 'sedan',
+}
+
+/**
+ * Vehicle configuration interface
+ */
+export interface VehicleConfig {
+  type: VehicleType;
+  name: string;
+  modelPath: string;
+  // Physics
+  speed: number;
+  turnSpeed: number;
+  maxHealth: number;
+  // Collider dimensions (half-extents)
+  colliderWidth: number;
+  colliderHeight: number;
+  colliderLength: number;
+  // Model transform
+  modelScale: number;
+  modelRotationY: number;  // Radians to rotate model to face forward
+  modelOffsetY: number;    // Y offset to sit on ground
+  // Kill mechanics
+  killRadius: number;
+  causesRagdoll: boolean;  // Whether kills send bodies flying (heavy vehicles only)
+}
+
+/**
+ * Vehicle configurations for each type
+ */
+export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
+  [VehicleType.BICYCLE]: {
+    type: VehicleType.BICYCLE,
+    name: 'Bicycle',
+    modelPath: '/assets/vehicles/bicycle.glb',
+    speed: 10,           // Faster than sprint (7) but slower than car
+    turnSpeed: 8,        // Very agile
+    maxHealth: 50,       // Fragile
+    colliderWidth: 0.3,
+    colliderHeight: 0.5,
+    colliderLength: 0.8,
+    modelScale: 0.018,   // Model is ~98 units tall, need ~1.8 units (1.5x larger)
+    modelRotationY: 0,   // GLTF Y-forward becomes Three.js -Z (default forward)
+    modelOffsetY: 0,
+    killRadius: 1.5,     // Small kill zone
+    causesRagdoll: false, // Too light to send bodies flying
+  },
+  [VehicleType.MOTORBIKE]: {
+    type: VehicleType.MOTORBIKE,
+    name: 'Motorbike',
+    modelPath: '/assets/vehicles/motorbike.glb',
+    speed: 18,           // Fast!
+    turnSpeed: 6,        // Good handling
+    maxHealth: 75,
+    colliderWidth: 0.4,
+    colliderHeight: 0.6,
+    colliderLength: 1.2,
+    modelScale: 0.0045,  // Model is ~462 units tall, need ~2.1 units (1.5x larger)
+    modelRotationY: 0,   // GLTF Y-forward becomes Three.js -Z (default forward)
+    modelOffsetY: 0,
+    killRadius: 2.0,
+    causesRagdoll: false, // Too light to send bodies flying
+  },
+  [VehicleType.SEDAN]: {
+    type: VehicleType.SEDAN,
+    name: 'Monster Truck',
+    modelPath: '/assets/vehicles/car.glb',
+    speed: 15,           // Current car speed
+    turnSpeed: 5,
+    maxHealth: 100,
+    colliderWidth: 0.9,
+    colliderHeight: 0.6,
+    colliderLength: 1.7,
+    modelScale: 0.012,   // Monster truck needs heavy scaling
+    modelRotationY: -Math.PI / 2,  // Rotate to face forward
+    modelOffsetY: -0.2,
+    killRadius: 3.5,
+    causesRagdoll: true,  // Heavy enough to send bodies flying!
+  },
+};
+
+/**
+ * Map tiers to vehicle types (FOOT tier has no vehicle)
+ */
+export const TIER_VEHICLE_MAP: Partial<Record<Tier, VehicleType>> = {
+  [Tier.BIKE]: VehicleType.BICYCLE,
+  [Tier.MOTO]: VehicleType.MOTORBIKE,
+  [Tier.SEDAN]: VehicleType.SEDAN,
+};

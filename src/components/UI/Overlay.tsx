@@ -24,54 +24,6 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
   return (
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex flex-col justify-between z-10">
 
-      {/* Enter Car Prompt */}
-      {stats.isNearCar && !stats.isInVehicle && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40">
-          <div className="text-center bg-black/80 px-6 py-3 rounded border-2 border-yellow-500">
-            <div className="text-2xl font-bold text-yellow-400 retro" style={{ textShadow: '2px 2px 0 #000' }}>
-              🚗 PRESS SPACE TO ENTER CAR
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Taser Stun Prompt - Centered with smaller font */}
-      {stats.isTased && (
-        <div
-          className="absolute inset-0 flex items-center justify-center z-50"
-          style={{
-            animation: 'shake 0.1s infinite'
-          }}
-        >
-          <style>{`
-            @keyframes shake {
-              0%, 100% { transform: translate(0, 0); }
-              10% { transform: translate(-2px, 2px); }
-              20% { transform: translate(2px, -2px); }
-              30% { transform: translate(-2px, -2px); }
-              40% { transform: translate(2px, 2px); }
-              50% { transform: translate(-2px, 0px); }
-              60% { transform: translate(2px, 0px); }
-              70% { transform: translate(0px, -2px); }
-              80% { transform: translate(0px, 2px); }
-              90% { transform: translate(-2px, 2px); }
-            }
-            @keyframes flash {
-              0%, 50% { opacity: 1; }
-              25%, 75% { opacity: 0.3; }
-            }
-          `}</style>
-          <div className="text-center">
-            <div className="text-3xl font-black text-yellow-400 retro mb-1" style={{ textShadow: '2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000', animation: 'flash 0.3s infinite' }}>
-              ⚡ TASED! ⚡
-            </div>
-            <div className="text-xl font-bold text-white retro" style={{ textShadow: '2px 2px 0 #000', animation: 'flash 0.3s infinite' }}>
-              MASH SPACE!
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Cop Health Dots */}
       {stats.copHealthBars?.map((cop, index) => (
         <div

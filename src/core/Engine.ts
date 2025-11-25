@@ -6,8 +6,9 @@ import { CrowdManager } from '../managers/CrowdManager';
 import { CopManager } from '../managers/CopManager';
 import { BuildingManager } from '../managers/BuildingManager';
 import { Player } from '../entities/Player';
-import { Car } from '../entities/Car';
+import { Vehicle } from '../entities/Vehicle';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
+import { VehicleType, VehicleConfig, VEHICLE_CONFIGS, TIER_VEHICLE_MAP, TIER_CONFIGS } from '../constants';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
 import { GameState, Tier, InputState, GameStats, KillNotification } from '../types';
 import { ActionController, ActionType } from './ActionController';
@@ -131,9 +132,10 @@ export class Engine {
   private player: Player | null = null;
 
   // Vehicle system
-  private car: Car | null = null;
+  private vehicle: Vehicle | null = null;
   private isInVehicle: boolean = false;
-  private carSpawned: boolean = false; // Car exists but player not inside
+  private vehicleSpawned: boolean = false;
+  private currentVehicleTier: Tier | null = null; // Which tier's vehicle is currently spawned
 
   // Action controller - resolves SPACE key based on context
   private actionController: ActionController = new ActionController();
@@ -335,27 +337,23 @@ export class Engine {
     this.input = input;
 
     // Forward input to car or player based on vehicle state
-    if (this.isInVehicle && this.car) {
-      this.car.handleInput({
+    if (this.isInVehicle && this.vehicle) {
+      this.vehicle.handleInput({
         up: input.up,
         down: input.down,
         left: input.left,
         right: input.right,
       });
     } else if (this.player) {
-      // Only pass attack input when not in a context where SPACE does something else
-      const taserState = this.player.getTaserState();
-      const isNearCar = this.carSpawned && this.isPlayerNearCar();
-      const shouldAttack = input.action && !taserState.isTased && !isNearCar;
-
+      // Movement only - action (SPACE) is handled by ActionController in update()
       this.player.handleInput({
         up: input.up,
         down: input.down,
         left: input.left,
         right: input.right,
         sprint: input.mount, // Shift key (walk mode - slows down)
-        jump: false, // Jump disabled
-        attack: shouldAttack // SPACE = attack only when not doing other actions
+        jump: false,
+        attack: false, // Attack is triggered by ActionController via performAttack()
       });
     }
   }
@@ -400,13 +398,13 @@ export class Engine {
     }
 
     // Clear existing car
-    if (this.car) {
-      this.car.dispose();
-      this.scene.remove(this.car);
-      this.car = null;
+    if (this.vehicle) {
+      this.vehicle.dispose();
+      this.scene.remove(this.vehicle);
+      this.vehicle = null;
     }
     this.isInVehicle = false;
-    this.carSpawned = false;
+    this.vehicleSpawned = false;
     this.actionController.reset();
 
     if (this.crowd) {
@@ -478,42 +476,100 @@ export class Engine {
   }
 
   /**
-   * Spawn car near player (at 10 kills threshold)
+   * Spawn vehicle near player based on tier
    */
-  private spawnCar(): void {
-    if (!this.player || this.carSpawned) return;
+  private spawnVehicle(tier: Tier): void {
+    if (!this.player || this.vehicleSpawned) return;
 
+    // Get vehicle type for this tier
+    const vehicleType = TIER_VEHICLE_MAP[tier];
+    if (!vehicleType) {
+      console.warn(`[Engine] No vehicle defined for tier ${tier}`);
+      return;
+    }
+
+    const vehicleConfig = VEHICLE_CONFIGS[vehicleType];
     const world = this.physics.getWorld();
     if (!world) return;
 
     const playerPos = this.player.getPosition();
 
     // Find a safe spawn position (not inside buildings)
-    const carPos = this.findSafeCarSpawnPosition(playerPos);
+    const spawnPos = this.findSafeVehicleSpawnPosition(playerPos);
 
-    // Create car
-    this.car = new Car();
-    this.car.createPhysicsBody(world, carPos);
-    this.scene.add(this.car);
+    // Create vehicle with config
+    this.vehicle = new Vehicle(vehicleConfig);
+    this.vehicle.createPhysicsBody(world, spawnPos);
+    this.scene.add(this.vehicle);
 
-    // Set car destruction callback
-    this.car.setOnDestroyed(() => {
+    // Set vehicle destruction callback
+    this.vehicle.setOnDestroyed(() => {
       this.exitVehicle();
     });
 
-    this.carSpawned = true;
-    console.log('[Engine] Car spawned! Press SPACE near it to enter.');
+    this.vehicleSpawned = true;
+    this.currentVehicleTier = tier;
 
-    // Notify player that car is available
-    this.triggerKillNotification('CAR UNLOCKED!', true, 0);
+    // Debug: verify positions match
+    const vehiclePos = this.vehicle.getPosition();
+    console.log(`[VEHICLE] Spawned ${vehicleConfig.name} at (${spawnPos.x.toFixed(1)}, ${spawnPos.z.toFixed(1)}), player at (${playerPos.x.toFixed(1)}, ${playerPos.z.toFixed(1)}), distance=${playerPos.distanceTo(vehiclePos).toFixed(1)}`);
+
+    // Notify player that vehicle is available
+    const tierConfig = TIER_CONFIGS[tier];
+    this.triggerKillNotification(`${tierConfig.name.toUpperCase()} UNLOCKED!`, true, 0);
   }
 
   /**
-   * Find a safe position to spawn car (not inside buildings)
+   * Debug: Spawn a specific vehicle type (or remove vehicle if null)
    */
-  private findSafeCarSpawnPosition(playerPos: THREE.Vector3): THREE.Vector3 {
+  debugSpawnVehicle(vehicleType: VehicleType | null): void {
+    // Remove existing vehicle if any
+    if (this.vehicle) {
+      if (this.isInVehicle) {
+        this.exitVehicle();
+      }
+      this.scene.remove(this.vehicle);
+      this.vehicle.dispose();
+      this.vehicle = null;
+      this.vehicleSpawned = false;
+      this.currentVehicleTier = null;
+    }
+
+    // If null, just go back to foot
+    if (!vehicleType) {
+      this.stats.tier = Tier.FOOT;
+      return;
+    }
+
+    // Find tier for this vehicle type (reverse lookup from TIER_VEHICLE_MAP)
+    let targetTier: Tier | undefined;
+    if (vehicleType === VehicleType.BICYCLE) targetTier = Tier.BIKE;
+    else if (vehicleType === VehicleType.MOTORBIKE) targetTier = Tier.MOTO;
+    else if (vehicleType === VehicleType.SEDAN) targetTier = Tier.SEDAN;
+
+    if (targetTier) {
+      this.spawnVehicle(targetTier);
+    }
+  }
+
+  /**
+   * Get current vehicle type (for UI)
+   */
+  getCurrentVehicleType(): VehicleType | null {
+    if (!this.vehicleSpawned || !this.currentVehicleTier) return null;
+    return TIER_VEHICLE_MAP[this.currentVehicleTier] || null;
+  }
+
+  /**
+   * Find a safe position to spawn vehicle (not inside buildings)
+   */
+  private findSafeVehicleSpawnPosition(playerPos: THREE.Vector3): THREE.Vector3 {
     const world = this.physics.getWorld();
     if (!world) return playerPos.clone().add(new THREE.Vector3(5, 0, 5));
+
+    // Collision group for buildings
+    const BUILDING_GROUP = 0x0040;
+    const GROUND_GROUP = 0x0001;
 
     // Try offsets at increasing distances, preferring road areas
     const offsets = [
@@ -527,82 +583,107 @@ export class Engine {
       new THREE.Vector3(-5, 0, -5),  // Diagonal
       new THREE.Vector3(10, 0, 0),   // Even further
       new THREE.Vector3(-10, 0, 0),
+      new THREE.Vector3(3, 0, 0),    // Closer options
+      new THREE.Vector3(-3, 0, 0),
+      new THREE.Vector3(0, 0, 3),
+      new THREE.Vector3(0, 0, -3),
     ];
 
     for (const offset of offsets) {
       const testPos = playerPos.clone().add(offset);
 
-      // Cast ray downward to check what's below
-      const ray = new RAPIER.Ray(
+      // First check: horizontal ray to see if we'd hit a building
+      // Cast from player position towards test position
+      const dirToTest = offset.clone().normalize();
+      const horizontalRay = new RAPIER.Ray(
+        { x: playerPos.x, y: playerPos.y + 1, z: playerPos.z },
+        { x: dirToTest.x, y: 0, z: dirToTest.z }
+      );
+
+      const horizontalHit = world.castRay(horizontalRay, offset.length(), true);
+      if (horizontalHit) {
+        const hitGroups = horizontalHit.collider.collisionGroups() & 0xFFFF;
+        if (hitGroups === BUILDING_GROUP) {
+          // Would hit a building, skip this offset
+          continue;
+        }
+      }
+
+      // Second check: downward ray to ensure we have ground below
+      const downRay = new RAPIER.Ray(
         { x: testPos.x, y: testPos.y + 10, z: testPos.z },
         { x: 0, y: -1, z: 0 }
       );
 
-      const hit = world.castRay(ray, 15, true);
-      if (hit) {
-        const hitCollider = hit.collider;
-        const groups = hitCollider.collisionGroups();
-        const membership = groups & 0xFFFF;
+      const downHit = world.castRay(downRay, 15, true);
+      if (downHit) {
+        const hitGroups = downHit.collider.collisionGroups() & 0xFFFF;
 
-        // If we hit ground (0x0001), this is a safe spot
-        if (membership === 0x0001) {
-          console.log('[Engine] Found safe car spawn at offset', offset);
+        // If we hit ground (not a building), this is a safe spot
+        if (hitGroups === GROUND_GROUP) {
+          console.log(`[VEHICLE] Safe spawn found at offset (${offset.x}, ${offset.z})`);
           return testPos;
         }
       }
     }
 
-    // Fallback: spawn further away on the road (X axis is typically road direction)
-    console.log('[Engine] No safe spawn found, using fallback position');
-    return playerPos.clone().add(new THREE.Vector3(8, 0, 0));
+    // Fallback: spawn at player position (they can walk to it)
+    console.log('[VEHICLE] No safe spawn found, using player position');
+    return playerPos.clone();
   }
 
   /**
    * Enter an existing spawned car
    */
   private enterVehicle(): void {
-    if (!this.player || !this.car || this.isInVehicle) return;
+    if (!this.player || !this.vehicle || this.isInVehicle) return;
 
     // Hide player (don't dispose - we'll need it when car explodes)
     this.player.setVisible(false);
 
     this.isInVehicle = true;
-    this.stats.tier = Tier.BIKE;
+
+    // Set tier based on current vehicle
+    if (this.currentVehicleTier) {
+      this.stats.tier = this.currentVehicleTier;
+    }
 
     // Screen shake for entering vehicle
     this.shakeCamera(1.0);
 
-    console.log('[Engine] Entered vehicle!');
+    console.log(`[VEHICLE] Entered ${this.vehicle.getTypeName()}!`);
   }
 
   /**
    * Check if player is near the car
    */
-  private isPlayerNearCar(): boolean {
-    if (!this.player || !this.car) return false;
+  private isPlayerNearVehicle(): boolean {
+    if (!this.player || !this.vehicle) {
+      return false;
+    }
 
     const playerPos = this.player.getPosition();
-    const carPos = this.car.getPosition();
-    const distance = playerPos.distanceTo(carPos);
+    const vehiclePos = this.vehicle.getPosition();
+    const distance = playerPos.distanceTo(vehiclePos);
 
-    return distance < 4.0; // Within 4 units
+    return distance < 6.0; // Within 6 units (increased from 4.0)
   }
 
   /**
    * Exit vehicle (car exploded)
    */
   private exitVehicle(): void {
-    if (!this.car || !this.player) return;
+    if (!this.vehicle || !this.player) return;
 
-    const carPos = this.car.getPosition();
+    const vehiclePos = this.vehicle.getPosition();
 
     // Find safe spawn position (try multiple offsets to avoid buildings)
-    const safePos = this.findSafeExitPosition(carPos);
+    const safePos = this.findSafeExitPosition(vehiclePos);
 
     // Remove car
-    this.scene.remove(this.car);
-    this.car.dispose();
-    this.car = null;
+    this.scene.remove(this.vehicle);
+    this.vehicle.dispose();
+    this.vehicle = null;
 
     // Recreate player at safe position
     const world = this.physics.getWorld();
@@ -619,20 +700,20 @@ export class Engine {
     }
 
     this.isInVehicle = false;
-    this.carSpawned = false;
+    this.vehicleSpawned = false;
     this.stats.tier = Tier.FOOT;
 
     // Explosion effects
     this.shakeCamera(2.0);
-    this.particles.emitBlood(carPos, 100);
+    this.particles.emitBlood(vehiclePos, 100);
 
-    console.log('[Engine] Exited vehicle (destroyed)!');
+    console.log('[VEHICLE] Exited vehicle (destroyed)');
   }
 
   /**
    * Find a safe position to spawn player when exiting vehicle
    */
-  private findSafeExitPosition(carPos: THREE.Vector3): THREE.Vector3 {
+  private findSafeExitPosition(vehiclePos: THREE.Vector3): THREE.Vector3 {
     // Try offsets in different directions
     const offsets = [
       new THREE.Vector3(3, 0, 0),   // Right
@@ -646,11 +727,11 @@ export class Engine {
     ];
 
     const world = this.physics.getWorld();
-    if (!world) return carPos;
+    if (!world) return vehiclePos;
 
     // Try each offset and check if position is clear of buildings
     for (const offset of offsets) {
-      const testPos = carPos.clone().add(offset);
+      const testPos = vehiclePos.clone().add(offset);
 
       // Cast ray downward to check for ground
       const ray = new RAPIER.Ray(
@@ -667,15 +748,15 @@ export class Engine {
 
         // If we hit ground (0x0001), this is a safe spot
         if (membership === 0x0001) {
-          console.log('[Engine] Found safe exit position at offset', offset);
+          console.log(`[VEHICLE] Safe exit found at offset (${offset.x}, ${offset.z})`);
           return testPos;
         }
       }
     }
 
-    // Fallback: just use car position
-    console.log('[Engine] No safe exit found, using car position');
-    return carPos;
+    // Fallback: just use vehicle position
+    console.log('[VEHICLE] No safe exit found, using vehicle position');
+    return vehiclePos;
   }
 
   /**
@@ -986,37 +1067,60 @@ export class Engine {
     // Measure entity updates
     const entitiesStart = performance.now();
 
-    // Tier progression: spawn car at 10 kills
-    if (this.stats.kills >= 10 && !this.carSpawned && this.player) {
-      this.spawnCar();
+    // Tier progression: spawn vehicles at kill thresholds
+    // Check each tier in order (highest first to handle upgrades)
+    if (!this.vehicleSpawned && this.player) {
+      if (this.stats.kills >= TIER_CONFIGS[Tier.SEDAN].minKills) {
+        this.spawnVehicle(Tier.SEDAN);
+      } else if (this.stats.kills >= TIER_CONFIGS[Tier.MOTO].minKills) {
+        this.spawnVehicle(Tier.MOTO);
+      } else if (this.stats.kills >= TIER_CONFIGS[Tier.BIKE].minKills) {
+        this.spawnVehicle(Tier.BIKE);
+      }
     }
 
     // Resolve SPACE action based on context
     const taserState = this.player?.getTaserState() || { isTased: false, escapeProgress: 0 };
+    const isNearVehicle = this.isPlayerNearVehicle();
     const actionContext = {
       isTased: taserState.isTased,
-      isNearCar: this.carSpawned && !this.isInVehicle && this.isPlayerNearCar(),
+      isNearCar: this.vehicleSpawned && !this.isInVehicle && isNearVehicle,
       isInVehicle: this.isInVehicle,
     };
     const { action, isNewPress } = this.actionController.resolve(this.input, actionContext);
 
-    // Handle resolved action
+    // Debug: Log EVERY time SPACE is pressed with full context
+    // Filter in console with: [VEHICLE]
+    if (isNewPress && this.input.action) {
+      const playerPos = this.player?.getPosition();
+      const vehiclePos = this.vehicle?.getPosition();
+      const dist = playerPos && vehiclePos ? playerPos.distanceTo(vehiclePos) : -1;
+      console.log(`[VEHICLE] SPACE pressed: spawned=${this.vehicleSpawned}, inVehicle=${this.isInVehicle}, near=${isNearVehicle}, dist=${dist.toFixed(2)}, action=${action}`);
+    }
+
+    // Handle resolved action - ActionController is the SINGLE source of truth
     if (isNewPress) {
       switch (action) {
         case ActionType.ENTER_CAR:
+          console.log('[VEHICLE] Entering vehicle...');
           this.enterVehicle();
           break;
         case ActionType.ESCAPE_TASER:
           this.player?.handleEscapePress();
           break;
-        // ATTACK is handled by Player internally via input.attack
+        case ActionType.ATTACK:
+          // Directly trigger attack (bypasses Player's edge detection)
+          if (this.player && !this.isInVehicle) {
+            this.player.performAttack();
+          }
+          break;
       }
     }
 
     // Update car (always update if spawned, even if player not inside)
-    if (this.car) {
+    if (this.vehicle) {
       if (this.isInVehicle) {
-        this.car.update(dt);
+        this.vehicle.update(dt);
       }
       // Car sits idle when player not inside
     }
@@ -1038,8 +1142,8 @@ export class Engine {
     }
 
     // Get current position (car or player)
-    const currentPos = this.isInVehicle && this.car
-      ? this.car.getPosition()
+    const currentPos = this.isInVehicle && this.vehicle
+      ? this.vehicle.getPosition()
       : this.player?.getPosition() || new THREE.Vector3();
 
     // Update buildings (spawn/despawn based on current position)
@@ -1052,19 +1156,21 @@ export class Engine {
       this.crowd.update(dt, currentPos);
 
       // Handle pedestrian collisions
-      if (this.isInVehicle && this.car) {
-        // Vehicle contact kills - larger radius to catch pedestrians before physics pushes them away
-        const vehicleKillRadius = 3.5;
-        const carVelocity = this.car.getVelocity();
+      if (this.isInVehicle && this.vehicle) {
+        // Vehicle contact kills - use vehicle's configured kill radius
+        const vehicleKillRadius = this.vehicle.getKillRadius();
+        const vehicleVelocity = this.vehicle.getVelocity();
 
-        // Only check when car is actually moving (speed > 1)
-        const speed = carVelocity.length();
+        // Only check when vehicle is actually moving (speed > 1)
+        const speed = vehicleVelocity.length();
         if (speed > 1) {
-          // Kill pedestrians in front of car (larger radius for fast-moving vehicle)
+          // Kill pedestrians in vehicle's path
           const result = this.crowd.damageInRadius(currentPos, vehicleKillRadius, 999, Infinity);
 
-          // Apply knockback to nearby pedestrians (both dead and alive for ragdoll effect)
-          this.crowd.applyVehicleKnockback(currentPos, carVelocity, vehicleKillRadius);
+          // Only heavy vehicles send bodies flying (ragdoll effect)
+          if (this.vehicle.causesRagdoll()) {
+            this.crowd.applyVehicleKnockback(currentPos, vehicleVelocity, vehicleKillRadius);
+          }
 
           // Handle kills with panic bonus tracking
           const regularKills = result.kills - result.panicKills;
@@ -1098,9 +1204,9 @@ export class Engine {
       // Update cop AI with damage callback (action-based damage)
       this.cops.update(dt, currentPos, this.stats.wantedStars, playerCanBeTased, (damage: number) => {
         // Route damage to vehicle or player
-        if (this.isInVehicle && this.car) {
+        if (this.isInVehicle && this.vehicle) {
           // Cops damage car instead of player (no taser in vehicle, only shooting)
-          this.car.takeDamage(damage);
+          this.vehicle.takeDamage(damage);
         } else if (this.player) {
           // Check if this is a taser attack (1 star AND player can be tased right now)
           const isTaserAttack = this.stats.wantedStars === 1 && this.player.canBeTased();
@@ -1148,8 +1254,8 @@ export class Engine {
     // Camera follow player/car (unless manual control is active)
     if (!this.disableCameraFollow) {
       // Get target position (car or player)
-      const targetPos = this.isInVehicle && this.car
-        ? this.car.getPosition()
+      const targetPos = this.isInVehicle && this.vehicle
+        ? this.vehicle.getPosition()
         : this.player?.getPosition() || new THREE.Vector3();
 
       // Isometric camera with fixed offset
@@ -1214,10 +1320,10 @@ export class Engine {
 
     // Send stats update (including performance data and vehicle state)
     if (this.callbacks.onStatsUpdate) {
-      const isNearCar = this.carSpawned && !this.isInVehicle && this.isPlayerNearCar();
-      const vehicleStats = this.isInVehicle && this.car ? {
-        vehicleHealth: this.car.getHealth(),
-        vehicleMaxHealth: this.car.getMaxHealth(),
+      const isNearCar = this.vehicleSpawned && !this.isInVehicle && this.isPlayerNearVehicle();
+      const vehicleStats = this.isInVehicle && this.vehicle ? {
+        vehicleHealth: this.vehicle.getHealth(),
+        vehicleMaxHealth: this.vehicle.getMaxHealth(),
         isInVehicle: true,
         isNearCar: false,
       } : {
