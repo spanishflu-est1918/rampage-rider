@@ -3,7 +3,6 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
 import { Pedestrian } from '../entities/Pedestrian';
 import { InstancedBlobShadows } from '../rendering/InstancedBlobShadows';
-import { PedestrianGeometryCache } from './PedestrianGeometryCache';
 
 /**
  * CrowdManager
@@ -12,7 +11,6 @@ import { PedestrianGeometryCache } from './PedestrianGeometryCache';
  * - Spawns pedestrians around player
  * - Implements Yuka flocking behavior
  * - Handles death and respawning
- * - Uses geometry caching for memory optimization
  */
 export class CrowdManager {
   private pedestrians: Pedestrian[] = [];
@@ -21,7 +19,6 @@ export class CrowdManager {
   private world: RAPIER.World;
   private entityManager: YUKA.EntityManager;
   private shadowManager: InstancedBlobShadows;
-  private geometryCache: PedestrianGeometryCache;
 
   // Deferred cleanup queue (clean AFTER physics step)
   private pedestriansToRemove: Pedestrian[] = [];
@@ -79,39 +76,7 @@ export class CrowdManager {
     // Create instanced shadow manager (max 60 shadows for pedestrians)
     this.shadowManager = new InstancedBlobShadows(scene, 60);
 
-    // Initialize geometry cache
-    this.geometryCache = PedestrianGeometryCache.getInstance();
-
     this.totalWeight = this.characterPool.reduce((sum, char) => sum + char.weight, 0);
-
-    // Preload and validate all character types
-    this.preloadCharacterTypes();
-  }
-
-  /**
-   * Preload all character types into geometry cache
-   */
-  private preloadCharacterTypes(): void {
-    console.log('[CrowdManager] Preloading pedestrian character types...');
-
-    let loadedCount = 0;
-    for (const char of this.characterPool) {
-      if (this.geometryCache.loadCharacterType(char.type)) {
-        loadedCount++;
-      }
-    }
-
-    // Validate that all characters share the same skeleton
-    const validation = this.geometryCache.validateSkeletonCompatibility();
-
-    if (validation.valid) {
-      console.log(`[CrowdManager] ✅ All ${loadedCount} character types share compatible skeletons!`);
-      console.log('[CrowdManager] Geometry cache stats:', this.geometryCache.getStats());
-    } else {
-      console.warn('[CrowdManager] ⚠️ Some character types have different skeleton structures:');
-      console.warn('[CrowdManager] Bone counts:', Object.fromEntries(validation.boneCounts));
-      console.warn('[CrowdManager] Instanced rendering may not work correctly!');
-    }
   }
 
   /**

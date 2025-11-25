@@ -12,57 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-25]
 
-### Performance Optimizations - Part 2: Shared Geometry
-
-**Added:**
-- **Shared geometry system for pedestrians** - Eliminates geometry duplication
-  - All 23 pedestrian character types verified to share same skeleton structure
-  - `PedestrianGeometryCache` validates skeleton compatibility on startup
-  - Pedestrians now share BufferGeometry references instead of cloning
-  - Each pedestrian still has independent skeleton/mixer for animations
-  - Materials cloned per-instance for unique skin tones
-
-**Technical Implementation:**
-- Replaced `SkeletonUtils.clone()` with manual skeleton cloning
-- Geometry references shared across all instances of same type
-- Only skeletons and materials are cloned (not geometries)
-- Proper disposal updated: materials disposed, geometries preserved
-
-**Performance Impact:**
-```
-Before (SkeletonUtils.clone):
-- Each pedestrian: Unique geometry clone (~6k triangles)
-- 40 pedestrians: ~240k triangles total
-- Memory: High (duplicate geometries)
-
-After (Shared geometry):
-- Each pedestrian: Reference to shared geometry
-- 40 pedestrians: ~6k triangles × 23 types = ~138k triangles
-- Memory: ~70% reduction
-- Spawn time: Faster (no geometry cloning)
-```
-
-**Validation Output:**
-```
-[CrowdManager] ✅ All 23 character types share compatible skeletons!
-[CrowdManager] Geometry cache stats: {
-  characterTypes: 23,
-  totalGeometries: 23,
-  boneCount: 27
-}
-```
-
-**Files Created:**
-- `src/managers/PedestrianGeometryCache.ts` - Validates and caches geometry data
-- `src/rendering/InstancedPedestrianRenderer.ts` - Foundation for future instancing
-
-**Files Modified:**
-- `src/entities/Pedestrian.ts` - Uses shared geometries, manual skeleton cloning
-- `src/managers/CrowdManager.ts` - Preloads and validates all character types
-
----
-
-### Performance Optimizations - Part 1: Shadow Instancing
+### Performance Optimizations
 
 **Fixed:**
 - **Building shadow geometry leak** - Shadows now properly dispose geometry on reposition
@@ -92,8 +42,8 @@ After:
 
 **Future Optimizations:**
 - Extend instanced shadows to Player/Cop entities (-2 draw calls)
-- Full InstancedSkinnedMesh with WebGL2 bone textures (-20+ draw calls)
-- Batch pedestrians of same type into single draw call
+- InstancedMesh for pedestrian models (requires animation batching, -40 draw calls)
+- Share pedestrian geometries instead of SkeletonUtils.clone (-150k triangles)
 
 **Files Created:**
 - `src/rendering/InstancedBlobShadows.ts`
