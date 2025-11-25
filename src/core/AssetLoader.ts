@@ -65,6 +65,7 @@ export class AssetLoader {
 
       // Props
       '/assets/props/christmas-market.glb',
+      '/models/christmas_lamp_post.glb',
     ];
 
     let loaded = 0;

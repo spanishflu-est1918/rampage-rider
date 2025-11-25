@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { CITY_CONFIG } from '../constants';
 import { AssetLoader } from '../core/AssetLoader';
+import { ChristmasLights, LightColorPreset } from '../rendering/ChristmasLights';
 
 /**
  * BuildingManager
@@ -19,7 +20,12 @@ export class BuildingManager {
     mesh: THREE.Group;
     body: RAPIER.RigidBody;
     roofMeshes: THREE.Mesh[];
+    lightsKey: string; // Key into lightsPerBuilding map
   }> = new Map();
+
+  // Christmas lights system
+  private christmasLights: ChristmasLights;
+  private lightsPerBuilding: Map<string, ReturnType<ChristmasLights['createStrand']>[]> = new Map();
 
   // Grid cell size (building + street)
   private cellWidth: number;
@@ -38,9 +44,12 @@ export class BuildingManager {
     this.scene = scene;
     this.world = world;
 
-    // Calculate grid cell size (building dimension + street gap)
+    // Calculate grid cell size (use same spacing for both axes)
     this.cellWidth = CITY_CONFIG.BUILDING_WIDTH + CITY_CONFIG.STREET_WIDTH;
-    this.cellDepth = CITY_CONFIG.BUILDING_DEPTH + CITY_CONFIG.STREET_WIDTH;
+    this.cellDepth = CITY_CONFIG.BUILDING_WIDTH + CITY_CONFIG.STREET_WIDTH; // Same as width for uniform grid
+
+    // Initialize Christmas lights system
+    this.christmasLights = new ChristmasLights(scene);
 
     this.loadModel();
   }
@@ -179,9 +188,10 @@ export class BuildingManager {
     });
 
     // Create physics collider (static) with collision groups
+    // Note: model is rotated 90°, so width and depth are swapped for collider
     const colliderHeight = this.MODEL_HEIGHT * scale;
-    const colliderWidth = (this.MODEL_WIDTH * scale) / 2;
-    const colliderDepth = (this.MODEL_DEPTH * scale) / 2;
+    const colliderHalfWidth = (this.MODEL_DEPTH * scale) / 2;  // Swapped due to 90° rotation
+    const colliderHalfDepth = (this.MODEL_WIDTH * scale) / 2;  // Swapped due to 90° rotation
 
     const bodyDesc = RAPIER.RigidBodyDesc.fixed()
       .setTranslation(worldX, colliderHeight / 2, worldZ);
@@ -191,9 +201,9 @@ export class BuildingManager {
     // Membership: 0x0040 (BUILDING group)
     // Filter: 0x009E (PLAYER=0x0002, PEDESTRIAN=0x0004, COP=0x0008, DEBRIS=0x0010, VEHICLE=0x0080)
     const colliderDesc = RAPIER.ColliderDesc.cuboid(
-      colliderWidth,
+      colliderHalfWidth,
       colliderHeight / 2,
-      colliderDepth
+      colliderHalfDepth
     )
       .setCollisionGroups(0x009E0040);
 

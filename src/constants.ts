@@ -66,9 +66,9 @@ export const SPAWN_RATES = {
 
 export const CITY_CONFIG = {
   BUILDING_WIDTH: 8, // Width of each building (x-axis)
-  BUILDING_DEPTH: 8, // Depth of each building (z-axis)
+  BUILDING_DEPTH: 15, // Depth of each building (z-axis)
   BUILDING_HEIGHT: 5, // All buildings same height
-  STREET_WIDTH: 3, // Gap between buildings (same on all sides)
+  STREET_WIDTH: 5, // Gap between buildings (same on all sides)
   RENDER_DISTANCE: 8, // Number of grid cells to render around player (reduced from 10 for performance)
   BUILDING_COLOR: 0x4a4a4a, // Dark gray for buildings
 };

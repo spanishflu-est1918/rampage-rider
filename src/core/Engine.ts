@@ -5,6 +5,7 @@ import { AIManager } from './AIManager';
 import { CrowdManager } from '../managers/CrowdManager';
 import { CopManager } from '../managers/CopManager';
 import { BuildingManager } from '../managers/BuildingManager';
+import { LampPostManager } from '../managers/LampPostManager';
 import { Player } from '../entities/Player';
 import { Vehicle } from '../entities/Vehicle';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
@@ -24,6 +25,7 @@ export class Engine {
   public crowd: CrowdManager | null = null;
   public cops: CopManager | null = null;
   public buildings: BuildingManager | null = null;
+  public lampPosts: LampPostManager | null = null;
   public particles: ParticleEmitter;
   public bloodDecals: BloodDecalSystem;
 
@@ -139,7 +141,7 @@ export class Engine {
       (frustumSize * aspect) / 2,
       frustumSize / 2,
       frustumSize / -2,
-      1,
+      0.1,
       1000
     );
 
@@ -203,6 +205,7 @@ export class Engine {
       this.crowd = new CrowdManager(this.scene, world);
       this.cops = new CopManager(this.scene, world);
       this.buildings = new BuildingManager(this.scene, world);
+      this.lampPosts = new LampPostManager(this.scene);
     }
   }
 
@@ -1134,6 +1137,10 @@ export class Engine {
 
     if (this.buildings) {
       this.buildings.update(currentPos);
+    }
+
+    if (this.lampPosts) {
+      this.lampPosts.update(currentPos);
     }
 
     if (this.crowd) {
