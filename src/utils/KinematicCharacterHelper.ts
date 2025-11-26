@@ -8,6 +8,8 @@ import * as THREE from 'three';
  * Used by Player, Pedestrian, and Cop entities.
  */
 export class KinematicCharacterHelper {
+  // Pre-allocated vector for moveCharacter (reused to avoid GC pressure)
+  private static readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
   /**
    * Create a kinematic character body with collision support
    */
@@ -70,17 +72,17 @@ export class KinematicCharacterHelper {
     const correctedMovement = controller.computedMovement();
     const currentPos = body.translation();
 
-    // Calculate new position
-    const newPosition = new THREE.Vector3(
+    // Calculate new position (reuse pre-allocated vector)
+    this._tempPosition.set(
       currentPos.x + correctedMovement.x,
       currentPos.y + correctedMovement.y,
       currentPos.z + correctedMovement.z
     );
 
     // Apply to physics body
-    body.setNextKinematicTranslation(newPosition);
+    body.setNextKinematicTranslation(this._tempPosition);
 
-    return newPosition;
+    return this._tempPosition;
   }
 
   /**
