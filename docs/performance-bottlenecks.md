@@ -27,13 +27,14 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Status**: ✅ Fixed - MotorbikeCopManager now uses shared AIManager
 - **Impact**: Critical - doubles steering calculations
 
-### 4. Taser Beam Frame-by-Frame Updates
-**Location**: `src/entities/Cop.ts:609-641`
+### 4. Taser Beam Frame-by-Frame Updates ✅ FIXED
+**Location**: `src/entities/Cop.ts:426-433`
 - **Issue**:
   - Updates geometry buffer attributes every frame
   - Math.random() called 3x per tasing cop per frame
   - Triggers GPU upload with `needsUpdate = true`
 - **Fix**: Update every 2-3 frames or remove jitter entirely
+- **Status**: ✅ Fixed - Taser beam updates every 3 frames (60fps → 20fps updates)
 - **Impact**: High when multiple cops are tasing
 
 ### 5. Blood Particle Material Clones ✅ FIXED
@@ -75,16 +76,18 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Status**: ✅ Not present - Pedestrians only use WanderBehavior and FleeBehavior, no Alignment/Cohesion/Separation
 - **Impact**: High - quadratic complexity
 
-### 9. Camera LookAt Every Frame
-**Location**: `src/core/Engine.ts:820`
+### 9. Camera LookAt Every Frame (TRADEOFF)
+**Location**: `src/core/Engine.ts:1517-1546`
 - **Issue**: Recalculates quaternion from target every frame
 - **Fix**: Cache quaternion, only update on significant movement
-- **Impact**: Moderate - unnecessary matrix math
+- **Status**: TRADEOFF - Movement threshold exists but set to 0 (threshold > 0 caused camera jerk). For isometric camera the quaternion is nearly constant, making lookAt cost minimal. Current implementation caches `cameraBaseQuaternion` for shake effect restoration.
+- **Impact**: Moderate - unnecessary matrix math (but fixing causes visible jerk)
 
-### 10. Cop Health Bar Screen Projection
+### 10. Cop Health Bar Screen Projection ✅ FIXED
 **Location**: `src/core/Engine.ts:829-849`
 - **Issue**: Projects every cop's 3D position to screen space every frame
 - **Fix**: Update only when camera moves or every N frames
+- **Status**: ✅ Fixed - Added throttling to update every 3 frames
 - **Impact**: Moderate - matrix multiplications per cop
 
 ---
@@ -119,16 +122,18 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Fix**: Limit to first 2 seconds after death
 - **Impact**: Low-Medium depending on kill count
 
-### 15. Bullet Distance Checks with sqrt
-**Location**: `src/entities/Cop.ts:686-702`
+### 15. Bullet Distance Checks with sqrt ✅ FIXED
+**Location**: `src/entities/Cop.ts:773-792`
 - **Issue**: Vector distance (with sqrt) calculated every frame per bullet
 - **Fix**: Use squared distance comparison
+- **Status**: ✅ Fixed - Uses `lengthSq()` and compares squared distances
 - **Impact**: Low-Medium
 
-### 16. Blood Decal Age Checking
-**Location**: `src/rendering/BloodDecalSystem.ts:183-191`
+### 16. Blood Decal Age Checking ✅ FIXED
+**Location**: `src/rendering/BloodDecalSystem.ts:302-311`
 - **Issue**: `Date.now()` and array shifts every frame
 - **Fix**: Check every 60 frames instead
+- **Status**: ✅ Fixed - Uses `updateFrameCounter` to throttle checks to every 60 frames (~1 second)
 - **Impact**: Low
 
 ### 17. Entity Removal Array Operations
@@ -178,10 +183,11 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Status**: Pool capped at 200, but materials still cloned (see #5)
 - **Impact**: Memory churn - related to issue #5
 
-### 24. Taser Beam Disposal
-**Location**: `src/entities/Cop.ts:646-655`
+### 24. Taser Beam Disposal ✅ FIXED
+**Location**: `src/entities/Cop.ts:725-737`
 - **Issue**: If `parentScene` is null, beam may leak
 - **Fix**: Always dispose geometry/material even if not in scene
+- **Status**: ✅ Fixed - `removeTaserBeam()` now always disposes geometry/material regardless of parentScene
 - **Impact**: Low - edge case
 
 ---
@@ -209,13 +215,14 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Status**: ✅ Partially fixed - extracted `updateWantedStars()` and `emitBloodEffects()` helpers
 - **Impact**: High maintainability risk, bug-prone
 
-### 26. Magic Numbers Scattered
+### 26. Magic Numbers Scattered ✅ FIXED
 **Location**: Multiple files
 - **Examples**:
   - `Engine.ts:205` - `frustumSize = 15`
   - `Engine.ts:689` - `distance < 15.0` (vehicle enter distance)
   - `Engine.ts:799-801` - `pedAttackRadius = 2.5`, `copAttackRadius = 4.5`
 - **Fix**: Move all gameplay tuning values to `constants.ts`
+- **Status**: ✅ Fixed - Extracted CAMERA_CONFIG, PLAYER_ATTACK_CONFIG, SCORING_CONFIG, VEHICLE_INTERACTION, WANTED_STARS, RENDERING_CONFIG to constants.ts
 - **Impact**: Hard to tune game balance
 
 ### 27. Collision Group Duplication
@@ -244,10 +251,11 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Status**: ✅ Fixed - CopManager now uses `_tempDirection`, `_tempSpawnPos`, and returns position references
 - **Impact**: High GC pressure
 
-### 30. Rapier Ray Allocations
+### 30. Rapier Ray Allocations ✅ FIXED
 **Location**: `src/core/Engine.ts:628-656`
 - **Issue**: Creates new `RAPIER.Ray` for every raycast in vehicle spawn tests
 - **Fix**: Pre-allocate ray object, reuse with setters
+- **Status**: ✅ Fixed - Added `_horizontalRay` and `_downRay` pre-allocated rays, updated via property setters
 - **Impact**: High during spawn calculations
 
 ### 31. Material Cloning Per Building
