@@ -49,6 +49,11 @@ export class Pedestrian extends THREE.Group {
 
   // Pre-allocated vectors (reused every frame to avoid GC pressure)
   private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempKnockback: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempCarDir: THREE.Vector3 = new THREE.Vector3();
+
+  // Pre-allocated Rapier ray for dead body physics (avoid per-frame allocation)
+  private _deadBodyRay: RAPIER.Ray | null = null;
 
   // Instanced shadow system
   private shadowManager: InstancedBlobShadows;
@@ -195,6 +200,10 @@ export class Pedestrian extends THREE.Group {
   /**
    * Make pedestrian panic and run away from danger
    */
+  // Pre-allocated YUKA vector for flee behavior (avoids per-panic allocation)
+  private _fleeTarget: YUKA.Vector3 = new YUKA.Vector3();
+  private _fleeBehavior: YUKA.FleeBehavior | null = null;
+
   panic(dangerPosition: THREE.Vector3): void {
     if (this.isDead) return;
 
@@ -205,10 +214,15 @@ export class Pedestrian extends THREE.Group {
     this.yukaVehicle.steering.clear();
 
     // Flee from danger (flatten to 2D to prevent vertical movement)
-    const flatDangerPosition = new YUKA.Vector3(dangerPosition.x, 0, dangerPosition.z);
-    const fleeBehavior = new YUKA.FleeBehavior(flatDangerPosition);
-    fleeBehavior.panicDistance = PEDESTRIAN_CONFIG.PANIC_DISTANCE;
-    this.yukaVehicle.steering.add(fleeBehavior);
+    // Reuse pre-allocated vector and behavior
+    this._fleeTarget.set(dangerPosition.x, 0, dangerPosition.z);
+    if (!this._fleeBehavior) {
+      this._fleeBehavior = new YUKA.FleeBehavior(this._fleeTarget);
+    } else {
+      this._fleeBehavior.target = this._fleeTarget;
+    }
+    this._fleeBehavior.panicDistance = PEDESTRIAN_CONFIG.PANIC_DISTANCE;
+    this.yukaVehicle.steering.add(this._fleeBehavior);
 
     // Play walk animation (speed will be increased in update loop)
     this.playAnimation('Walk', 0.1);
@@ -270,12 +284,22 @@ export class Pedestrian extends THREE.Group {
 
         // Check for building collision via raycast (horizontal)
         if (Math.abs(this.deadVelocity.x) + Math.abs(this.deadVelocity.z) > 1) {
-          const ray = new RAPIER.Ray(
-            { x: currentPos.x, y: 0.5, z: currentPos.z },
-            { x: this.deadVelocity.x, y: 0, z: this.deadVelocity.z }
-          );
+          // Reuse pre-allocated ray to avoid per-frame allocation
+          if (!this._deadBodyRay) {
+            this._deadBodyRay = new RAPIER.Ray(
+              { x: currentPos.x, y: 0.5, z: currentPos.z },
+              { x: this.deadVelocity.x, y: 0, z: this.deadVelocity.z }
+            );
+          } else {
+            this._deadBodyRay.origin.x = currentPos.x;
+            this._deadBodyRay.origin.y = 0.5;
+            this._deadBodyRay.origin.z = currentPos.z;
+            this._deadBodyRay.dir.x = this.deadVelocity.x;
+            this._deadBodyRay.dir.y = 0;
+            this._deadBodyRay.dir.z = this.deadVelocity.z;
+          }
           // Use castRayAndGetNormal to get surface normal for bounce calculation
-          const hit = this.world.castRayAndGetNormal(ray, 1.0, true);
+          const hit = this.world.castRayAndGetNormal(this._deadBodyRay, 1.0, true);
 
           if (hit && hit.timeOfImpact < 0.5) {
             // Hit building! Bounce off using reflection formula
@@ -411,8 +435,10 @@ export class Pedestrian extends THREE.Group {
     if (this.isDead || this.isStumbling) return;
 
     // Apply impulse to Yuka vehicle to make them stumble
-    const knockbackVelocity = direction.clone().normalize().multiplyScalar(force);
-    this.yukaVehicle.velocity.add(knockbackVelocity);
+    // Reuse pre-allocated vector instead of clone()
+    this._tempKnockback.copy(direction).normalize().multiplyScalar(force);
+    this.yukaVehicle.velocity.x += this._tempKnockback.x;
+    this.yukaVehicle.velocity.z += this._tempKnockback.z;
 
     // Set stumbling state and play RecieveHit animation
     this.isStumbling = true;
@@ -424,17 +450,19 @@ export class Pedestrian extends THREE.Group {
    * Apply violent knockback from vehicle hit - launches them far ("salir despedido")
    */
   applyVehicleKnockback(carPosition: THREE.Vector3, carVelocity: THREE.Vector3): void {
-    // Direction away from car
-    const direction = new THREE.Vector3()
+    // Direction away from car - reuse pre-allocated vector
+    this._tempKnockback
       .subVectors((this as THREE.Group).position, carPosition)
       .setY(0)
       .normalize();
 
     // Add car's velocity direction for realistic physics - bodies fly in direction car was going
     const carSpeed = carVelocity.length();
-    const knockbackDir = direction.clone()
-      .add(carVelocity.clone().normalize().multiplyScalar(1.5))
-      .normalize();
+    // Normalize car velocity into temp vector, then combine
+    if (carSpeed > 0.1) {
+      this._tempCarDir.copy(carVelocity).normalize().multiplyScalar(1.5);
+      this._tempKnockback.add(this._tempCarDir).normalize();
+    }
 
     // Strong knockback force based on car speed
     const horizontalForce = 10 + carSpeed * 1.5 + Math.random() * 5;
@@ -444,13 +472,17 @@ export class Pedestrian extends THREE.Group {
     // For dead bodies, use deadVelocity (processed in update loop)
     if (this.isDead) {
       this.deadVelocity.set(
-        knockbackDir.x * horizontalForce,
+        this._tempKnockback.x * horizontalForce,
         verticalForce,
-        knockbackDir.z * horizontalForce
+        this._tempKnockback.z * horizontalForce
       );
     } else {
       // For alive pedestrians, use Yuka velocity (no vertical)
-      this.yukaVehicle.velocity.set(knockbackDir.x * horizontalForce, 0, knockbackDir.z * horizontalForce);
+      this.yukaVehicle.velocity.set(
+        this._tempKnockback.x * horizontalForce,
+        0,
+        this._tempKnockback.z * horizontalForce
+      );
     }
   }
 

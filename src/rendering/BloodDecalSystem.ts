@@ -18,6 +18,10 @@ export class BloodDecalSystem {
   private decalLifetime: number = 30; // Reduced from 60 seconds
   private maxDecals: number = 100; // Cap total decals
 
+  // Pre-allocated vectors (avoid GC pressure)
+  private readonly _tempOffset: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempDecalPos: THREE.Vector3 = new THREE.Vector3();
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
@@ -162,18 +166,21 @@ export class BloodDecalSystem {
     const actualCount = Math.min(count, 3);
 
     for (let i = 0; i < actualCount; i++) {
-      const offset = direction.clone()
-        .multiplyScalar(Math.random() * 2)
-        .add(new THREE.Vector3(
-          (Math.random() - 0.5) * 1.5,
-          0,
-          (Math.random() - 0.5) * 1.5
-        ));
+      const mult = Math.random() * 2;
+      // Reuse pre-allocated vectors instead of clone()
+      this._tempOffset.set(
+        direction.x * mult + (Math.random() - 0.5) * 1.5,
+        0,
+        direction.z * mult + (Math.random() - 0.5) * 1.5
+      );
 
-      const decalPos = position.clone().add(offset);
-      decalPos.y = 0.01;
+      this._tempDecalPos.set(
+        position.x + this._tempOffset.x,
+        0.01,
+        position.z + this._tempOffset.z
+      );
 
-      this.addBloodDecal(decalPos, 0.5 + Math.random() * 0.8);
+      this.addBloodDecal(this._tempDecalPos, 0.5 + Math.random() * 0.8);
     }
   }
 

@@ -172,6 +172,14 @@ export class ChristmasLights {
     return strand;
   }
 
+  // Pre-allocated corners for perimeter lights
+  private readonly _perimeterCorners: THREE.Vector3[] = [
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+  ];
+
   /**
    * Create lights around a rectangular perimeter (for market stalls)
    */
@@ -186,27 +194,29 @@ export class ChristmasLights {
     const halfW = width / 2;
     const halfD = depth / 2;
 
-    // Four corners at the roof edge
-    const corners = [
-      new THREE.Vector3(center.x - halfW, center.y + height, center.z - halfD),
-      new THREE.Vector3(center.x + halfW, center.y + height, center.z - halfD),
-      new THREE.Vector3(center.x + halfW, center.y + height, center.z + halfD),
-      new THREE.Vector3(center.x - halfW, center.y + height, center.z + halfD),
-    ];
+    // Four corners at the roof edge - reuse pre-allocated vectors
+    this._perimeterCorners[0].set(center.x - halfW, center.y + height, center.z - halfD);
+    this._perimeterCorners[1].set(center.x + halfW, center.y + height, center.z - halfD);
+    this._perimeterCorners[2].set(center.x + halfW, center.y + height, center.z + halfD);
+    this._perimeterCorners[3].set(center.x - halfW, center.y + height, center.z + halfD);
 
     // Create strands along each edge
     for (let i = 0; i < 4; i++) {
-      const start = corners[i];
-      const end = corners[(i + 1) % 4];
+      const start = this._perimeterCorners[i];
+      const end = this._perimeterCorners[(i + 1) % 4];
       strands.push(this.createStrand(start, end, config));
     }
 
     return strands;
   }
 
+  // Pre-allocated for catenary calculation
+  private readonly _catenaryDir: THREE.Vector3 = new THREE.Vector3();
+
   /**
    * Generate catenary curve points between two points
    * Approximates the natural hanging curve of a cable
+   * NOTE: These Vector3s are stored in geometry, not per-frame allocations
    */
   private generateCatenaryPoints(
     start: THREE.Vector3,
@@ -216,14 +226,15 @@ export class ChristmasLights {
   ): THREE.Vector3[] {
     const points: THREE.Vector3[] = [];
 
-    // Vector from start to end
-    const direction = new THREE.Vector3().subVectors(end, start);
-    const length = direction.length();
+    // Vector from start to end - reuse pre-allocated vector
+    this._catenaryDir.subVectors(end, start);
+    const length = this._catenaryDir.length();
 
     for (let i = 0; i < numPoints; i++) {
       const t = i / (numPoints - 1);
 
       // Linear interpolation along the line
+      // These Vector3s are stored, not per-frame, so allocation is OK
       const point = new THREE.Vector3().lerpVectors(start, end, t);
 
       // Add catenary sag (parabolic approximation)

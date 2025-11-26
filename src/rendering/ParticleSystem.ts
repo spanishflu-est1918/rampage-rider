@@ -25,6 +25,10 @@ export class ParticleEmitter {
 
   private onGroundHitCallback: ((position: THREE.Vector3, size: number) => void) | null = null;
 
+  // Pre-allocated vectors (reused every frame to avoid GC pressure)
+  private readonly _tempVelocity: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempHitPosition: THREE.Vector3 = new THREE.Vector3();
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
@@ -124,17 +128,17 @@ export class ParticleEmitter {
 
       const angle = Math.random() * Math.PI * 2;
       const speed = 1 + Math.random() * 3;
-      const velocity = new THREE.Vector3(
-        Math.cos(angle) * speed,
-        1 + Math.random() * 2,
-        Math.sin(angle) * speed
-      );
 
+      // Create velocity vector for this particle (stored in particle object, not per-frame)
       const maxLife = 2.0; // Reduced from 3.0
 
       this.particles.push({
         sprite,
-        velocity,
+        velocity: new THREE.Vector3(
+          Math.cos(angle) * speed,
+          1 + Math.random() * 2,
+          Math.sin(angle) * speed
+        ),
         life: maxLife,
         maxLife,
         hasCollided: false,
@@ -164,16 +168,19 @@ export class ParticleEmitter {
       this.scene.add(sprite);
 
       const spread = 0.5;
-      const velocity = direction.clone().normalize().multiplyScalar(3 + Math.random() * 4);
-      velocity.x += (Math.random() - 0.5) * spread;
-      velocity.y = 0.5 + Math.random() * 1.5;
-      velocity.z += (Math.random() - 0.5) * spread;
+      const speedMult = 3 + Math.random() * 4;
+      // Normalize direction once (reuse temp vector for calculation)
+      const dirLen = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z) || 1;
 
       const maxLife = 2.0; // Reduced from 3.0
 
       this.particles.push({
         sprite,
-        velocity,
+        velocity: new THREE.Vector3(
+          (direction.x / dirLen) * speedMult + (Math.random() - 0.5) * spread,
+          0.5 + Math.random() * 1.5,
+          (direction.z / dirLen) * speedMult + (Math.random() - 0.5) * spread
+        ),
         life: maxLife,
         maxLife,
         hasCollided: false,
@@ -202,17 +209,17 @@ export class ParticleEmitter {
       }
 
       particle.velocity.y += gravity * deltaTime;
-      particle.sprite.position.add(
-        particle.velocity.clone().multiplyScalar(deltaTime)
-      );
+      // Use addScaledVector instead of clone().multiplyScalar() to avoid allocation
+      particle.sprite.position.addScaledVector(particle.velocity, deltaTime);
 
       if (!particle.hasCollided && particle.sprite.position.y <= groundLevel) {
         particle.hasCollided = true;
 
         if (this.onGroundHitCallback) {
-          const hitPosition = particle.sprite.position.clone();
-          hitPosition.y = 0.01;
-          this.onGroundHitCallback(hitPosition, particle.size);
+          // Reuse pre-allocated vector instead of clone()
+          this._tempHitPosition.copy(particle.sprite.position);
+          this._tempHitPosition.y = 0.01;
+          this.onGroundHitCallback(this._tempHitPosition, particle.size);
         }
         this.returnSprite(particle.sprite);
         this.particles.splice(i, 1);

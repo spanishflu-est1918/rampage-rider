@@ -386,12 +386,17 @@ export class MotorbikeCop extends THREE.Group {
     this.onDealDamage = callback;
   }
 
+  // Pre-allocated target position (avoids clone() every frame)
+  private _lastTargetInternal: THREE.Vector3 = new THREE.Vector3();
+
   /**
    * Set chase target (player position)
    */
   setChaseTarget(target: THREE.Vector3): void {
     if (this.isDead) return;
-    this.lastTarget = target.clone();
+    // Copy instead of clone to avoid allocation
+    this._lastTargetInternal.copy(target);
+    this.lastTarget = this._lastTargetInternal;
   }
 
   /**
@@ -713,7 +718,11 @@ export class MotorbikeCop extends THREE.Group {
     const copPos = this.getPosition();
     copPos.y += 0.8;
 
-    const points = [copPos, targetPos.clone().setY(targetPos.y + 0.5)];
+    const targetWithHeight = targetPos.clone().setY(targetPos.y + 0.5);
+    const midPoint = copPos.clone().lerp(targetWithHeight, 0.5);
+
+    // Create geometry with 3 points (cop, midpoint, target) to match updateTaserBeam
+    const points = [copPos, midPoint, targetWithHeight];
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({
       color: 0xffff00,

@@ -124,6 +124,9 @@ export class Engine {
   private readonly _tempCameraPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempLookAt: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempScreenPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempAttackDir: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempVehicleDir: THREE.Vector3 = new THREE.Vector3();
+  private readonly _yAxis: THREE.Vector3 = new THREE.Vector3(0, 1, 0);
   private input: InputState = {
     up: false,
     down: false,
@@ -252,7 +255,7 @@ export class Engine {
       this.cops = new CopManager(this.scene, world);
       this.motorbikeCops = new MotorbikeCopManager(this.scene, world);
       this.buildings = new BuildingManager(this.scene, world);
-      this.lampPosts = new LampPostManager(this.scene);
+      // this.lampPosts = new LampPostManager(this.scene);
     }
   }
 
@@ -861,9 +864,10 @@ export class Engine {
     if (totalKills > 0) {
       const playerPos = this.player!.getPosition();
       for (const killPos of allKillPositions) {
-        const direction = new THREE.Vector3().subVectors(killPos, playerPos).normalize();
+        // Reuse pre-allocated vector instead of new THREE.Vector3()
+        this._tempAttackDir.subVectors(killPos, playerPos).normalize();
         this.particles.emitBlood(killPos, 30);
-        this.particles.emitBloodSpray(killPos, direction, 20);
+        this.particles.emitBloodSpray(killPos, this._tempAttackDir, 20);
       }
 
       this.shakeIntensity = 0.5 * totalKills;
@@ -874,8 +878,8 @@ export class Engine {
     if (!this.vehicle || !this.player) return;
 
     const attackPosition = this.vehicle.getPosition();
-    const attackDirection = new THREE.Vector3(0, 0, 1)
-      .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.vehicle.getRotationY());
+    // Reuse pre-allocated vectors instead of new THREE.Vector3()
+    this._tempVehicleDir.set(0, 0, 1).applyAxisAngle(this._yAxis, this.vehicle.getRotationY());
 
     const attackRadius = 3.0;
     const damage = 1;
@@ -891,7 +895,7 @@ export class Engine {
         attackRadius,
         damage,
         maxKills,
-        attackDirection,
+        this._tempVehicleDir,
         coneAngle
       );
 
@@ -934,7 +938,7 @@ export class Engine {
         attackRadius + 1,
         damage,
         maxKills,
-        attackDirection,
+        this._tempVehicleDir,
         coneAngle
       );
 
@@ -963,9 +967,10 @@ export class Engine {
     if (totalKills > 0) {
       const vehiclePos = this.vehicle.getPosition();
       for (const killPos of allKillPositions) {
-        const direction = new THREE.Vector3().subVectors(killPos, vehiclePos).normalize();
+        // Reuse pre-allocated vector instead of new THREE.Vector3()
+        this._tempAttackDir.subVectors(killPos, vehiclePos).normalize();
         this.particles.emitBlood(killPos, 30);
-        this.particles.emitBloodSpray(killPos, direction, 20);
+        this.particles.emitBloodSpray(killPos, this._tempAttackDir, 20);
       }
       this.shakeIntensity = 0.5 * totalKills;
     }
@@ -975,8 +980,8 @@ export class Engine {
     if (!this.vehicle || !this.player) return;
 
     const attackPosition = this.vehicle.getPosition();
-    const attackDirection = new THREE.Vector3(0, 0, 1)
-      .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.vehicle.getRotationY());
+    // Reuse pre-allocated vectors instead of new THREE.Vector3()
+    this._tempVehicleDir.set(0, 0, 1).applyAxisAngle(this._yAxis, this.vehicle.getRotationY());
 
     const attackRadius = 10.0;
     const damage = 1;
@@ -992,7 +997,7 @@ export class Engine {
         attackRadius,
         damage,
         maxKills,
-        attackDirection,
+        this._tempVehicleDir,
         coneAngle
       );
 
@@ -1022,7 +1027,7 @@ export class Engine {
         attackRadius,
         damage,
         maxKills,
-        attackDirection,
+        this._tempVehicleDir,
         coneAngle
       );
 
@@ -1049,9 +1054,10 @@ export class Engine {
     if (totalKills > 0) {
       const vehiclePos = this.vehicle.getPosition();
       for (const killPos of allKillPositions) {
-        const direction = new THREE.Vector3().subVectors(killPos, vehiclePos).normalize();
+        // Reuse pre-allocated vector instead of new THREE.Vector3()
+        this._tempAttackDir.subVectors(killPos, vehiclePos).normalize();
         this.particles.emitBlood(killPos, 40);
-        this.particles.emitBloodSpray(killPos, direction, 30);
+        this.particles.emitBloodSpray(killPos, this._tempAttackDir, 30);
       }
       this.shakeIntensity = 0.8;
     }

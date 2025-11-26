@@ -57,6 +57,11 @@ export class BuildingManager {
   private currentBaseX = Infinity;
   private currentBaseZ = Infinity;
 
+  // Pre-allocated vectors (avoid per-frame/per-reposition allocations)
+  private readonly _lightDir: THREE.Vector3 = new THREE.Vector3(1, 0, 1).normalize();
+  private readonly _tempStrandStart: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempStrandEnd: THREE.Vector3 = new THREE.Vector3();
+
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
     this.world = world;
@@ -159,14 +164,14 @@ export class BuildingManager {
 
     this.world.createCollider(colliderDesc, body);
 
-    // Create interior point light (warm glow from inside stall)
-    const light = new THREE.PointLight(0xffaa44, 1.5, 12);
-    light.position.set(worldX, this.scaledHeight * 0.5, worldZ);
-    this.scene.add(light);
+    // DISABLED: Interior point lights are expensive
+    // const light = new THREE.PointLight(0xffaa44, 1.5, 12);
+    // light.position.set(worldX, this.scaledHeight * 0.5, worldZ);
+    // this.scene.add(light);
+    const light = null as unknown as THREE.PointLight; // Placeholder
 
     // Create baked shadow plane (light comes from (-30, 50, -30) direction)
-    const lightDir = new THREE.Vector3(1, 0, 1).normalize();
-    const shadow = createBuildingShadow(this.scaledWidth, this.scaledDepth, lightDir, 4);
+    const shadow = createBuildingShadow(this.scaledWidth, this.scaledDepth, this._lightDir, 4);
     shadow.position.set(worldX, 0.02, worldZ);
     this.scene.add(shadow);
 
@@ -198,16 +203,15 @@ export class BuildingManager {
     );
     building.body.wakeUp();
 
-    // Move light
-    building.light.position.set(worldX, this.scaledHeight * 0.5, worldZ);
+    // Move light (disabled)
+    // building.light.position.set(worldX, this.scaledHeight * 0.5, worldZ);
 
     // Dispose old shadow geometry and create new one at new position
     // (Shadow geometry is position-dependent due to directional projection)
     this.scene.remove(building.shadow);
     building.shadow.geometry.dispose();
 
-    const lightDir = new THREE.Vector3(1, 0, 1).normalize();
-    building.shadow = createBuildingShadow(this.scaledWidth, this.scaledDepth, lightDir, 4);
+    building.shadow = createBuildingShadow(this.scaledWidth, this.scaledDepth, this._lightDir, 4);
     building.shadow.position.set(worldX, 0.02, worldZ);
     this.scene.add(building.shadow);
 
@@ -253,16 +257,20 @@ export class BuildingManager {
         const key = `x_${building.gridX}_${building.gridZ}`;
         const strands: ReturnType<ChristmasLights['createStrand']>[] = [];
 
-        // NE to neighbor NW
+        // NE to neighbor NW - reuse pre-allocated vectors
+        this._tempStrandStart.set(worldX + halfW, roofHeight, worldZ - halfD);
+        this._tempStrandEnd.set(neighborWorldX - halfW, roofHeight, worldZ - halfD);
         strands.push(this.christmasLights.createStrand(
-          new THREE.Vector3(worldX + halfW, roofHeight, worldZ - halfD),
-          new THREE.Vector3(neighborWorldX - halfW, roofHeight, worldZ - halfD),
+          this._tempStrandStart,
+          this._tempStrandEnd,
           streetConfig
         ));
         // SE to neighbor SW
+        this._tempStrandStart.set(worldX + halfW, roofHeight, worldZ + halfD);
+        this._tempStrandEnd.set(neighborWorldX - halfW, roofHeight, worldZ + halfD);
         strands.push(this.christmasLights.createStrand(
-          new THREE.Vector3(worldX + halfW, roofHeight, worldZ + halfD),
-          new THREE.Vector3(neighborWorldX - halfW, roofHeight, worldZ + halfD),
+          this._tempStrandStart,
+          this._tempStrandEnd,
           streetConfig
         ));
         this.streetLights.set(key, strands);
@@ -277,16 +285,20 @@ export class BuildingManager {
         const key = `z_${building.gridX}_${building.gridZ}`;
         const strands: ReturnType<ChristmasLights['createStrand']>[] = [];
 
-        // SW to neighbor NW
+        // SW to neighbor NW - reuse pre-allocated vectors
+        this._tempStrandStart.set(worldX - halfW, roofHeight, worldZ + halfD);
+        this._tempStrandEnd.set(worldX - halfW, roofHeight, neighborWorldZ - halfD);
         strands.push(this.christmasLights.createStrand(
-          new THREE.Vector3(worldX - halfW, roofHeight, worldZ + halfD),
-          new THREE.Vector3(worldX - halfW, roofHeight, neighborWorldZ - halfD),
+          this._tempStrandStart,
+          this._tempStrandEnd,
           streetConfig
         ));
         // SE to neighbor NE
+        this._tempStrandStart.set(worldX + halfW, roofHeight, worldZ + halfD);
+        this._tempStrandEnd.set(worldX + halfW, roofHeight, neighborWorldZ - halfD);
         strands.push(this.christmasLights.createStrand(
-          new THREE.Vector3(worldX + halfW, roofHeight, worldZ + halfD),
-          new THREE.Vector3(worldX + halfW, roofHeight, neighborWorldZ - halfD),
+          this._tempStrandStart,
+          this._tempStrandEnd,
           streetConfig
         ));
         this.streetLights.set(key, strands);
@@ -334,7 +346,9 @@ export class BuildingManager {
 
     for (const building of this.buildings) {
       const buildingPos = building.mesh.position;
-      const distance = playerPosition.distanceTo(buildingPos);
+      const dx = playerPosition.x - buildingPos.x;
+      const dz = playerPosition.z - buildingPos.z;
+      const distance = Math.sqrt(dx * dx + dz * dz);
 
       let opacity = 1;
       if (distance < fadeStartDistance) {
@@ -381,13 +395,14 @@ export class BuildingManager {
 
     this.currentBaseX = baseX;
     this.currentBaseZ = baseZ;
-    this.updateStreetLights();
+    // DISABLED: Christmas lights for performance testing
+    // this.updateStreetLights();
   }
 
   clear(): void {
     for (const building of this.buildings) {
       this.scene.remove(building.mesh);
-      this.scene.remove(building.light);
+      if (building.light) this.scene.remove(building.light);
       this.scene.remove(building.shadow);
       building.shadow.geometry.dispose();
       this.world.removeRigidBody(building.body);
