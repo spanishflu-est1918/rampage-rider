@@ -165,10 +165,12 @@ export class CrowdManager {
    * Make all pedestrians panic and flee from danger position
    */
   panicCrowd(dangerPosition: THREE.Vector3, radius: number = 15): void {
-    for (const pedestrian of this.pedestrians) {
-      const distance = (pedestrian as THREE.Group).position.distanceTo(dangerPosition);
+    const radiusSq = radius * radius;
 
-      if (distance < radius && !pedestrian.isDeadState()) {
+    for (const pedestrian of this.pedestrians) {
+      const distanceSq = (pedestrian as THREE.Group).position.distanceToSquared(dangerPosition);
+
+      if (distanceSq < radiusSq && !pedestrian.isDeadState()) {
         pedestrian.panic(dangerPosition);
       }
     }

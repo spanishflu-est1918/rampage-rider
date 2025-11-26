@@ -343,15 +343,18 @@ export class BuildingManager {
     // Update roof transparency based on distance to player
     const fadeStartDistance = 12;
     const fadeEndDistance = 5;
+    const fadeStartDistanceSq = fadeStartDistance * fadeStartDistance;
 
     for (const building of this.buildings) {
       const buildingPos = building.mesh.position;
       const dx = playerPosition.x - buildingPos.x;
       const dz = playerPosition.z - buildingPos.z;
-      const distance = Math.sqrt(dx * dx + dz * dz);
+      const distanceSq = dx * dx + dz * dz;
 
       let opacity = 1;
-      if (distance < fadeStartDistance) {
+      // Only compute sqrt when within fade range (common case is outside range)
+      if (distanceSq < fadeStartDistanceSq) {
+        const distance = Math.sqrt(distanceSq);
         opacity = Math.max(0, (distance - fadeEndDistance) / (fadeStartDistance - fadeEndDistance));
       }
 
