@@ -44,6 +44,10 @@ export class Vehicle extends THREE.Group {
 
   private onDestroyedCallback: (() => void) | null = null;
 
+  // Pre-allocated vectors (reused every frame to avoid GC pressure)
+  private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempVelocity: THREE.Vector3 = new THREE.Vector3();
+
   constructor(config: VehicleConfig) {
     super();
 
@@ -224,8 +228,9 @@ export class Vehicle extends THREE.Group {
     if (this.input.left) x -= 1;
     if (this.input.right) x += 1;
 
-    const dir = new THREE.Vector3(x, 0, z);
-    return dir.length() > 0 ? dir.normalize() : dir;
+    // Reuse pre-allocated vector
+    this._tempDirection.set(x, 0, z);
+    return this._tempDirection.length() > 0 ? this._tempDirection.normalize() : this._tempDirection;
   }
 
   /**
@@ -253,8 +258,9 @@ export class Vehicle extends THREE.Group {
       );
     }
 
-    // Calculate velocity using current speed
-    const velocity = moveVector.clone().multiplyScalar(this.currentSpeed);
+    // Calculate velocity using current speed (reuse pre-allocated vector)
+    this._tempVelocity.copy(moveVector).multiplyScalar(this.currentSpeed);
+    const velocity = this._tempVelocity;
 
     // Rotate vehicle to face movement direction (smooth rotation)
     if (isMoving) {

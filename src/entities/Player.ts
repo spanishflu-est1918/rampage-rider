@@ -100,6 +100,10 @@ export class Player extends THREE.Group {
   // Fake blob shadow (cheaper than real shadows)
   private blobShadow: BlobShadow;
 
+  // Pre-allocated vectors (reused every frame to avoid GC pressure)
+  private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempVelocity: THREE.Vector3 = new THREE.Vector3();
+
   constructor() {
     super();
 
@@ -352,8 +356,9 @@ export class Player extends THREE.Group {
       x += 1;
     }
 
-    const dir = new THREE.Vector3(x, 0, z);
-    return dir.length() > 0 ? dir.normalize() : dir;
+    // Reuse pre-allocated vector
+    this._tempDirection.set(x, 0, z);
+    return this._tempDirection.length() > 0 ? this._tempDirection.normalize() : this._tempDirection;
   }
 
   /**
@@ -525,15 +530,16 @@ export class Player extends THREE.Group {
     }
 
     // Apply move speed (reduced during taser stun, blocked during attack)
-    let velocity: THREE.Vector3;
+    // Reuse pre-allocated _tempVelocity to avoid allocations
     if (this.isAttacking) {
-      velocity = new THREE.Vector3(0, 0, 0);
+      this._tempVelocity.set(0, 0, 0);
     } else if (this.isTased) {
       // Allow slow crawling while tased - player can try to escape
-      velocity = moveVector.clone().multiplyScalar(TASER_CONFIG.CRAWL_SPEED);
+      this._tempVelocity.copy(moveVector).multiplyScalar(TASER_CONFIG.CRAWL_SPEED);
     } else {
-      velocity = moveVector.clone().multiplyScalar(currentSpeed);
+      this._tempVelocity.copy(moveVector).multiplyScalar(currentSpeed);
     }
+    const velocity = this._tempVelocity;
 
     // Rotate character to face movement direction
     if (isMoving && !this.isAttacking) {
