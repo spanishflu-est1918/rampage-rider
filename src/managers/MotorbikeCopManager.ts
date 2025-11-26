@@ -36,10 +36,27 @@ export class MotorbikeCopManager {
   // Heat tracking
   private previousHeat: number = 0;
 
+  // Damage callback (set once, not every frame)
+  private damageCallback: ((damage: number, isRam: boolean) => void) | null = null;
+
+  // Pre-allocated vector for distance calculations (avoid GC pressure)
+  private readonly _tempCopPos: THREE.Vector3 = new THREE.Vector3();
+
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
     this.world = world;
     this.entityManager = new YUKA.EntityManager();
+  }
+
+  /**
+   * Set damage callback once (called when cop deals damage)
+   */
+  setDamageCallback(callback: (damage: number, isRam: boolean) => void): void {
+    this.damageCallback = callback;
+    // Update existing cops
+    for (const cop of this.cops) {
+      cop.setDamageCallback(callback);
+    }
   }
 
   /**
@@ -212,6 +229,9 @@ export class MotorbikeCopManager {
     // Create the cop
     const cop = new MotorbikeCop(spawnPos, this.world, this.entityManager, variant);
     cop.setParentScene(this.scene);
+    if (this.damageCallback) {
+      cop.setDamageCallback(this.damageCallback);
+    }
 
     this.cops.push(cop);
     this.scene.add(cop);
@@ -233,14 +253,14 @@ export class MotorbikeCopManager {
 
   /**
    * Update all cops
+   * NOTE: Damage callback is set once via setDamageCallback(), not every frame
    */
   update(
     deltaTime: number,
     playerPosition: THREE.Vector3,
     playerVelocity: THREE.Vector3,
     wantedStars: number,
-    playerCanBeTased: boolean,
-    onCopAttack: (damage: number, isRam: boolean) => void
+    playerCanBeTased: boolean
   ): void {
     // Update Yuka entity manager
     this.entityManager.update(deltaTime);
@@ -251,11 +271,10 @@ export class MotorbikeCopManager {
         // Set chase target
         cop.setChaseTarget(playerPosition);
 
-        // Set damage callback
-        cop.setDamageCallback(onCopAttack);
-
         // Handle ranged attacks based on wanted stars and distance
-        const distance = cop.getPosition().distanceTo(playerPosition);
+        // Use zero-alloc getPositionInto to avoid GC pressure
+        cop.getPositionInto(this._tempCopPos);
+        const distance = this._tempCopPos.distanceTo(playerPosition);
         const state = cop.getState();
 
         if (state === MotorbikeCopState.CHASE) {

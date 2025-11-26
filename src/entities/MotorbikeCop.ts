@@ -96,6 +96,13 @@ export class MotorbikeCop extends THREE.Group {
   // Fake blob shadow (cheaper than real shadows)
   private blobShadow: BlobShadow;
 
+  // Pre-allocated vectors (reused every frame to avoid GC pressure)
+  private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempMidPoint: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempTargetWithHeight: THREE.Vector3 = new THREE.Vector3();
+  private readonly _taserPositions: Float32Array = new Float32Array(9); // 3 points × 3 coords
+
   // Collision groups
   private static readonly COLLISION_GROUPS = {
     GROUND: 0x0001,
@@ -483,21 +490,22 @@ export class MotorbikeCop extends THREE.Group {
 
   /**
    * Apply knockback force
+   * NOTE: Uses pre-allocated _tempDirection vector to avoid GC pressure
    */
   applyKnockback(fromPosition: THREE.Vector3, force: number): void {
     if (this.isDead) return;
 
     const currentPos = this.rigidBody.translation();
-    const direction = new THREE.Vector3(
+    this._tempDirection.set(
       currentPos.x - fromPosition.x,
       0,
       currentPos.z - fromPosition.z
     ).normalize();
 
     this.yukaVehicle.velocity.set(
-      direction.x * force,
+      this._tempDirection.x * force,
       0,
-      direction.z * force
+      this._tempDirection.z * force
     );
 
     this.isHitStunned = true;
@@ -538,8 +546,9 @@ export class MotorbikeCop extends THREE.Group {
 
   /**
    * Update cop
+   * NOTE: playerVelocity param kept for API compatibility but not used
    */
-  update(deltaTime: number, playerVelocity: THREE.Vector3 = new THREE.Vector3()): void {
+  update(deltaTime: number, _playerVelocity?: THREE.Vector3): void {
     if (!this.modelLoaded) return;
 
     // Update siren light
@@ -560,14 +569,14 @@ export class MotorbikeCop extends THREE.Group {
       this.attackCooldown -= deltaTime;
     }
 
-    // Get current position
+    // Get current position (reuse pre-allocated vector)
     const currentPos = this.rigidBody.translation();
-    const currentPosition = new THREE.Vector3(currentPos.x, currentPos.y, currentPos.z);
+    this._tempPosition.set(currentPos.x, currentPos.y, currentPos.z);
 
     // Calculate distance to target
     let distanceToTarget = Infinity;
     if (this.lastTarget) {
-      distanceToTarget = currentPosition.distanceTo(this.lastTarget);
+      distanceToTarget = this._tempPosition.distanceTo(this.lastTarget);
     }
 
     // Update state machine
@@ -586,7 +595,7 @@ export class MotorbikeCop extends THREE.Group {
 
     // Handle attacks based on state
     if (this.state === MotorbikeCopState.RAM && this.attackCooldown <= 0 && this.lastTarget) {
-      this.executeRamAttack(currentPosition);
+      this.executeRamAttack(this._tempPosition);
     }
 
     // Don't move while stunned
@@ -726,28 +735,43 @@ export class MotorbikeCop extends THREE.Group {
 
   /**
    * Update taser beam position
+   * NOTE: Uses pre-allocated vectors and Float32Array to avoid GC pressure
    */
   private updateTaserBeam(targetPos: THREE.Vector3): void {
     if (!this.taserBeam) return;
 
-    const copPos = this.getPosition();
-    copPos.y += 0.8;
-    const targetWithHeight = targetPos.clone().setY(targetPos.y + 0.5);
+    // Get cop position using pre-allocated vector
+    const pos = this.rigidBody.translation();
+    const copX = pos.x;
+    const copY = pos.y + 0.8;
+    const copZ = pos.z;
 
-    // Electric jitter
+    // Target with height offset
+    const targetX = targetPos.x;
+    const targetY = targetPos.y + 0.5;
+    const targetZ = targetPos.z;
+
+    // Electric jitter at midpoint
     const jitter = 0.1;
-    const midPoint = new THREE.Vector3().lerpVectors(copPos, targetWithHeight, 0.5);
-    midPoint.x += (Math.random() - 0.5) * jitter;
-    midPoint.y += (Math.random() - 0.5) * jitter;
-    midPoint.z += (Math.random() - 0.5) * jitter;
+    const midX = (copX + targetX) * 0.5 + (Math.random() - 0.5) * jitter;
+    const midY = (copY + targetY) * 0.5 + (Math.random() - 0.5) * jitter;
+    const midZ = (copZ + targetZ) * 0.5 + (Math.random() - 0.5) * jitter;
 
-    const positions = new Float32Array([
-      copPos.x, copPos.y, copPos.z,
-      midPoint.x, midPoint.y, midPoint.z,
-      targetWithHeight.x, targetWithHeight.y, targetWithHeight.z
-    ]);
-    this.taserBeam.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    this.taserBeam.geometry.attributes.position.needsUpdate = true;
+    // Update pre-allocated Float32Array directly
+    this._taserPositions[0] = copX;
+    this._taserPositions[1] = copY;
+    this._taserPositions[2] = copZ;
+    this._taserPositions[3] = midX;
+    this._taserPositions[4] = midY;
+    this._taserPositions[5] = midZ;
+    this._taserPositions[6] = targetX;
+    this._taserPositions[7] = targetY;
+    this._taserPositions[8] = targetZ;
+
+    // Update existing BufferAttribute instead of creating new one
+    const posAttr = this.taserBeam.geometry.getAttribute('position') as THREE.BufferAttribute;
+    posAttr.set(this._taserPositions);
+    posAttr.needsUpdate = true;
 
     const material = this.taserBeam.material as THREE.LineBasicMaterial;
     material.opacity = 0.7 + Math.random() * 0.3;
@@ -792,11 +816,13 @@ export class MotorbikeCop extends THREE.Group {
 
   /**
    * Update bullet movement
+   * NOTE: Uses pre-allocated _tempDirection vector to avoid GC pressure
    */
   private updateBulletProjectile(deltaTime: number): void {
     if (!this.bulletProjectile || !this.bulletTarget) return;
 
-    const direction = new THREE.Vector3()
+    // Use pre-allocated vector for direction calculation
+    this._tempDirection
       .subVectors(this.bulletTarget, this.bulletProjectile.position)
       .normalize();
 
@@ -810,7 +836,7 @@ export class MotorbikeCop extends THREE.Group {
       }
       this.removeBulletProjectile();
     } else {
-      this.bulletProjectile.position.add(direction.multiplyScalar(moveDistance));
+      this.bulletProjectile.position.add(this._tempDirection.multiplyScalar(moveDistance));
     }
   }
 
@@ -829,10 +855,20 @@ export class MotorbikeCop extends THREE.Group {
 
   /**
    * Get position
+   * NOTE: Returns a new Vector3 for external use (safe but allocates).
+   * Internal methods should use _tempPosition directly.
    */
   getPosition(): THREE.Vector3 {
     const pos = this.rigidBody.translation();
     return new THREE.Vector3(pos.x, pos.y, pos.z);
+  }
+
+  /**
+   * Get position into provided vector (zero allocation)
+   */
+  getPositionInto(out: THREE.Vector3): THREE.Vector3 {
+    const pos = this.rigidBody.translation();
+    return out.set(pos.x, pos.y, pos.z);
   }
 
   /**

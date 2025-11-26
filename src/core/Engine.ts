@@ -402,6 +402,40 @@ export class Engine {
 
     if (this.motorbikeCops) {
       this.motorbikeCops.clear();
+      // Set damage callback once (not every frame)
+      this.motorbikeCops.setDamageCallback((damage: number, isRam: boolean) => {
+        if (this.isInVehicle && this.vehicle) {
+          const vehicleDamage = isRam ? damage * 2 : damage;
+          this.vehicle.takeDamage(vehicleDamage);
+          if (isRam) {
+            this.shakeCamera(1.5);
+          }
+        } else if (this.player) {
+          const isTaserAttack = this.stats.wantedStars === 1 && this.player.canBeTased() && !isRam;
+
+          if (isTaserAttack) {
+            this.player.applyTaserStun();
+          } else {
+            this.stats.health -= damage;
+            this.player.applyHitStun();
+            if (isRam) {
+              this.shakeCamera(2.0);
+            }
+          }
+
+          if (this.stats.health <= 0 && !this.isDying) {
+            this.stats.health = 0;
+            this.isDying = true;
+
+            this.player.die(() => {
+              this.state = GameState.GAME_OVER;
+              if (this.callbacks.onGameOver) {
+                this.callbacks.onGameOver({ ...this.stats });
+              }
+            });
+          }
+        }
+      });
     }
 
     if (this.buildings) {
@@ -1348,39 +1382,8 @@ export class Engine {
 
       const playerCanBeTased = !this.isInVehicle && this.player ? this.player.canBeTased() : false;
 
-      this.motorbikeCops.update(dt, currentPos, playerVelocity, this.stats.wantedStars, playerCanBeTased, (damage: number, isRam: boolean) => {
-        if (this.isInVehicle && this.vehicle) {
-          const vehicleDamage = isRam ? damage * 2 : damage;
-          this.vehicle.takeDamage(vehicleDamage);
-          if (isRam) {
-            this.shakeCamera(1.5);
-          }
-        } else if (this.player) {
-          const isTaserAttack = this.stats.wantedStars === 1 && this.player.canBeTased() && !isRam;
-
-          if (isTaserAttack) {
-            this.player.applyTaserStun();
-          } else {
-            this.stats.health -= damage;
-            this.player.applyHitStun();
-            if (isRam) {
-              this.shakeCamera(2.0);
-            }
-          }
-
-          if (this.stats.health <= 0 && !this.isDying) {
-            this.stats.health = 0;
-            this.isDying = true;
-
-            this.player.die(() => {
-              this.state = GameState.GAME_OVER;
-              if (this.callbacks.onGameOver) {
-                this.callbacks.onGameOver({ ...this.stats });
-              }
-            });
-          }
-        }
-      });
+      // NOTE: Damage callback is set once in resetGame(), not every frame
+      this.motorbikeCops.update(dt, currentPos, playerVelocity, this.stats.wantedStars, playerCanBeTased);
     }
     this.performanceStats.cops = performance.now() - copsStart;
 
