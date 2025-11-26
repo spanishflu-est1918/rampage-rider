@@ -1,46 +1,65 @@
 import * as THREE from 'three';
 
 /**
- * BloodDecalSystem - OPTIMIZED
- * Uses simple PlaneGeometry instead of expensive DecalGeometry
- * Shares textures and uses instancing for better performance
+ * BloodDecalSystem - INSTANCED VERSION
+ * Uses InstancedMesh for minimal draw calls (3 instead of 100)
+ * One InstancedMesh per texture variant
  */
-interface DecalEntry {
-  mesh: THREE.Mesh;
+interface DecalData {
+  textureIndex: number;
+  instanceIndex: number;
   createdAt: number;
 }
 
 export class BloodDecalSystem {
   private scene: THREE.Scene;
-  private decals: DecalEntry[] = [];
+  private decals: DecalData[] = [];
   private bloodTextures: THREE.Texture[] = [];
+  private sharedMaterials: THREE.MeshBasicMaterial[] = [];
   private sharedGeometry: THREE.PlaneGeometry;
-  private decalLifetime: number = 30; // Reduced from 60 seconds
-  private maxDecals: number = 100; // Cap total decals
+  private instancedMeshes: THREE.InstancedMesh[] = []; // One per texture
+  private decalLifetime: number = 30;
+  private maxDecals: number = 100;
+  private maxDecalsPerTexture: number; // Will be calculated
 
-  // Pre-allocated vectors (avoid GC pressure)
+  // Instance tracking per texture
+  private instanceCounts: number[] = []; // Current count per texture
+  private freeIndices: number[][] = []; // Pool of free indices per texture
+
+  // Pre-allocated objects
   private readonly _tempOffset: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempDecalPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempMatrix: THREE.Matrix4 = new THREE.Matrix4();
+  private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempQuaternion: THREE.Quaternion = new THREE.Quaternion();
+  private readonly _tempScale: THREE.Vector3 = new THREE.Vector3();
+  private readonly _zeroScale: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private readonly _flatRotation: THREE.Quaternion = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(1, 0, 0),
+    -Math.PI / 2
+  );
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
     // Create ONE shared geometry for all decals
     this.sharedGeometry = new THREE.PlaneGeometry(1, 1);
-    this.sharedGeometry.rotateX(-Math.PI / 2); // Flat on ground
+    // Don't rotate geometry - we'll handle rotation per instance
 
     this.createBloodTextures();
+    this.createSharedMaterials();
+    this.createInstancedMeshes();
   }
 
   /**
    * Create procedural blood splatter textures (only 3 variations)
    */
   private createBloodTextures(): void {
-    const textureCount = 3; // Reduced from 5
+    const textureCount = 3;
 
     for (let i = 0; i < textureCount; i++) {
       const canvas = document.createElement('canvas');
-      canvas.width = 256; // Reduced from 512
+      canvas.width = 256;
       canvas.height = 256;
       const ctx = canvas.getContext('2d')!;
 
@@ -49,7 +68,6 @@ export class BloodDecalSystem {
       const seed = i * 12345;
       this.drawBloodSplatter(ctx, 128, 128, 100 + Math.random() * 40, seed);
 
-      // Fewer droplets
       const dropletCount = 3 + Math.floor(Math.random() * 4);
       for (let j = 0; j < dropletCount; j++) {
         const angle = Math.random() * Math.PI * 2;
@@ -63,6 +81,54 @@ export class BloodDecalSystem {
       const texture = new THREE.CanvasTexture(canvas);
       texture.needsUpdate = true;
       this.bloodTextures.push(texture);
+    }
+  }
+
+  /**
+   * Create shared materials (one per texture variant)
+   */
+  private createSharedMaterials(): void {
+    for (const texture of this.bloodTextures) {
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        depthWrite: false,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+      });
+      this.sharedMaterials.push(material);
+    }
+  }
+
+  /**
+   * Create InstancedMesh for each texture (3 meshes total = 3 draw calls)
+   */
+  private createInstancedMeshes(): void {
+    const textureCount = this.bloodTextures.length;
+    this.maxDecalsPerTexture = Math.ceil(this.maxDecals / textureCount) + 10; // Extra buffer
+
+    for (let i = 0; i < textureCount; i++) {
+      const instancedMesh = new THREE.InstancedMesh(
+        this.sharedGeometry,
+        this.sharedMaterials[i],
+        this.maxDecalsPerTexture
+      );
+      instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      instancedMesh.count = 0; // Start with 0 visible instances
+      instancedMesh.frustumCulled = false; // Decals are flat on ground, culling can be weird
+      instancedMesh.renderOrder = -1; // Render before other objects
+
+      // Initialize all instances to zero scale (invisible)
+      for (let j = 0; j < this.maxDecalsPerTexture; j++) {
+        this._tempMatrix.compose(this._tempPosition.set(0, -100, 0), this._flatRotation, this._zeroScale);
+        instancedMesh.setMatrixAt(j, this._tempMatrix);
+      }
+      instancedMesh.instanceMatrix.needsUpdate = true;
+
+      this.scene.add(instancedMesh);
+      this.instancedMeshes.push(instancedMesh);
+      this.instanceCounts.push(0);
+      this.freeIndices.push([]);
     }
   }
 
@@ -122,52 +188,94 @@ export class BloodDecalSystem {
 
   /**
    * Add blood decal at world position
+   * Uses instancing - just updates matrix in existing InstancedMesh
    */
   addBloodDecal(position: THREE.Vector3, size: number = 2.0): void {
     // Enforce max decals - remove oldest if at limit
-    if (this.decals.length >= this.maxDecals) {
-      const oldest = this.decals.shift()!;
-      this.scene.remove(oldest.mesh);
-      (oldest.mesh.material as THREE.Material).dispose();
+    while (this.decals.length >= this.maxDecals) {
+      this.removeOldestDecal();
     }
 
     // Random texture
-    const texture = this.bloodTextures[Math.floor(Math.random() * this.bloodTextures.length)];
+    const textureIndex = Math.floor(Math.random() * this.sharedMaterials.length);
 
-    // Create material (shares texture reference)
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      depthWrite: false,
-      opacity: 0.9,
-    });
+    // Get or allocate instance index for this texture's mesh
+    let instanceIndex: number;
+    if (this.freeIndices[textureIndex].length > 0) {
+      instanceIndex = this.freeIndices[textureIndex].pop()!;
+    } else {
+      instanceIndex = this.instanceCounts[textureIndex];
+      this.instanceCounts[textureIndex]++;
+    }
+
+    // Safety check
+    if (instanceIndex >= this.maxDecalsPerTexture) {
+      console.warn('[BloodDecalSystem] Max instances reached for texture', textureIndex);
+      return;
+    }
 
     // Random size variation
     const decalSize = size * (0.8 + Math.random() * 0.7);
 
-    // Create mesh using shared geometry
-    const decalMesh = new THREE.Mesh(this.sharedGeometry, material);
-    decalMesh.scale.set(decalSize, decalSize, decalSize);
-    decalMesh.position.set(position.x, 0.01, position.z);
-    decalMesh.rotation.y = Math.random() * Math.PI * 2;
+    // Create rotation quaternion (flat on ground + random Y rotation)
+    const yRotation = Math.random() * Math.PI * 2;
+    this._tempQuaternion
+      .setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), yRotation));
 
-    this.scene.add(decalMesh);
+    // Set instance matrix
+    this._tempPosition.set(position.x, 0.01, position.z);
+    this._tempScale.set(decalSize, decalSize, 1);
+    this._tempMatrix.compose(this._tempPosition, this._tempQuaternion, this._tempScale);
+
+    const mesh = this.instancedMeshes[textureIndex];
+    mesh.setMatrixAt(instanceIndex, this._tempMatrix);
+    mesh.instanceMatrix.needsUpdate = true;
+
+    // Update visible count if needed
+    if (instanceIndex >= mesh.count) {
+      mesh.count = instanceIndex + 1;
+    }
+
+    // Track decal
     this.decals.push({
-      mesh: decalMesh,
+      textureIndex,
+      instanceIndex,
       createdAt: Date.now() / 1000,
     });
+  }
+
+  /**
+   * Remove oldest decal (hide its instance)
+   */
+  private removeOldestDecal(): void {
+    if (this.decals.length === 0) return;
+
+    const oldest = this.decals.shift()!;
+
+    // Hide this instance by setting scale to 0
+    this._tempMatrix.compose(
+      this._tempPosition.set(0, -100, 0),
+      this._flatRotation,
+      this._zeroScale
+    );
+
+    const mesh = this.instancedMeshes[oldest.textureIndex];
+    mesh.setMatrixAt(oldest.instanceIndex, this._tempMatrix);
+    mesh.instanceMatrix.needsUpdate = true;
+
+    // Return index to free pool for reuse
+    this.freeIndices[oldest.textureIndex].push(oldest.instanceIndex);
   }
 
   /**
    * Add blood spray (multiple small decals in a direction)
    */
   addBloodSpray(position: THREE.Vector3, direction: THREE.Vector3, count: number = 5): void {
-    // Reduced count for performance
     const actualCount = Math.min(count, 3);
 
     for (let i = 0; i < actualCount; i++) {
       const mult = Math.random() * 2;
-      // Reuse pre-allocated vectors instead of clone()
       this._tempOffset.set(
         direction.x * mult + (Math.random() - 0.5) * 1.5,
         0,
@@ -190,11 +298,8 @@ export class BloodDecalSystem {
   update(): void {
     const currentTime = Date.now() / 1000;
 
-    // Remove expired decals
     while (this.decals.length > 0 && currentTime - this.decals[0].createdAt > this.decalLifetime) {
-      const entry = this.decals.shift()!;
-      this.scene.remove(entry.mesh);
-      (entry.mesh.material as THREE.Material).dispose();
+      this.removeOldestDecal();
     }
   }
 
@@ -202,19 +307,41 @@ export class BloodDecalSystem {
    * Clear all decals
    */
   clear(): void {
-    for (const entry of this.decals) {
-      this.scene.remove(entry.mesh);
-      (entry.mesh.material as THREE.Material).dispose();
+    // Reset all instance matrices to hidden
+    for (let t = 0; t < this.instancedMeshes.length; t++) {
+      const mesh = this.instancedMeshes[t];
+      for (let i = 0; i < this.maxDecalsPerTexture; i++) {
+        this._tempMatrix.compose(this._tempPosition.set(0, -100, 0), this._flatRotation, this._zeroScale);
+        mesh.setMatrixAt(i, this._tempMatrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.count = 0;
+      this.instanceCounts[t] = 0;
+      this.freeIndices[t] = [];
     }
     this.decals = [];
   }
 
   /**
-   * Dispose of all resources
+   * Dispose of all resources (only call on game shutdown)
    */
   dispose(): void {
     this.clear();
+
+    // Remove instanced meshes from scene
+    for (const mesh of this.instancedMeshes) {
+      this.scene.remove(mesh);
+      mesh.dispose();
+    }
+    this.instancedMeshes = [];
+
     this.sharedGeometry.dispose();
+
+    for (const material of this.sharedMaterials) {
+      material.dispose();
+    }
+    this.sharedMaterials = [];
+
     for (const texture of this.bloodTextures) {
       texture.dispose();
     }

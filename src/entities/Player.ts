@@ -103,6 +103,7 @@ export class Player extends THREE.Group {
   // Pre-allocated vectors (reused every frame to avoid GC pressure)
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempVelocity: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempAttackPos: THREE.Vector3 = new THREE.Vector3();
 
   constructor() {
     super();
@@ -319,7 +320,9 @@ export class Player extends THREE.Group {
       this.attackTimer = 0.5;
 
       if (this.onAttackCallback) {
-        this.onAttackCallback((this as THREE.Group).position.clone());
+        // Reuse pre-allocated vector instead of clone()
+        this._tempAttackPos.copy((this as THREE.Group).position);
+        this.onAttackCallback(this._tempAttackPos);
       }
     }
   }
@@ -399,9 +402,17 @@ export class Player extends THREE.Group {
       return;
     }
 
-    // Handle taser stun decay
+    // Handle taser stun decay - EXPONENTIAL: faster drain as progress increases
     if (this.isTased && this.taseEscapeProgress > 0) {
-      this.taseEscapeProgress = Math.max(0, this.taseEscapeProgress - (TASER_CONFIG.ESCAPE_DECAY * deltaTime));
+      // Base decay + exponential multiplier based on progress
+      // At 0%: decay = base (15/s)
+      // At 50%: decay = base * 1.5 (~22/s)
+      // At 80%: decay = base * 2.9 (~44/s)
+      // At 95%: decay = base * 4.8 (~72/s)
+      const progressRatio = this.taseEscapeProgress / 100;
+      const exponentialMultiplier = 1 + Math.pow(progressRatio, 2.2) * 4.5; // 1x to 5.5x
+      const decayRate = TASER_CONFIG.ESCAPE_DECAY * exponentialMultiplier;
+      this.taseEscapeProgress = Math.max(0, this.taseEscapeProgress - (decayRate * deltaTime));
     }
 
     // Decrement taser immunity timer
@@ -703,10 +714,20 @@ export class Player extends THREE.Group {
 
   /**
    * Handle Space key press for escaping taser
+   * Uses INVERSE EXPONENTIAL: the higher your progress, the less each press adds
    */
   handleEscapePress(): void {
     if (this.isTased) {
-      this.taseEscapeProgress = Math.min(100, this.taseEscapeProgress + TASER_CONFIG.ESCAPE_PER_PRESS);
+      // Diminishing returns: each press gives less as you get closer to 100%
+      // At 0%: gain = full (15%)
+      // At 50%: gain = 80% of full (~12%)
+      // At 80%: gain = 52% of full (~7.8%)
+      // At 95%: gain = 32% of full (~4.8%)
+      const progressRatio = this.taseEscapeProgress / 100;
+      const diminishingMultiplier = 1 - Math.pow(progressRatio, 1.9) * 0.66; // ~34% at 95%
+      const actualGain = TASER_CONFIG.ESCAPE_PER_PRESS * diminishingMultiplier;
+
+      this.taseEscapeProgress = Math.min(100, this.taseEscapeProgress + actualGain);
 
       // Trigger screen shake feedback
       if (this.onEscapePressCallback) {

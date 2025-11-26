@@ -48,6 +48,11 @@ export class Cop extends THREE.Group {
   private isHitStunned: boolean = false;
   private hitStunTimer: number = 0;
 
+  // Ragdoll knockback state (for taser escape explosion)
+  private isRagdolling: boolean = false;
+  private ragdollVelocity: THREE.Vector3 = new THREE.Vector3();
+  private ragdollTimer: number = 0;
+
   // Attack state
   private currentWantedStars: number = 0; // 0=punch, 1=taser, 2+=shoot
   private playerCanBeTased: boolean = true;
@@ -337,6 +342,45 @@ export class Cop extends THREE.Group {
 
     if (this.isDead) return;
 
+    // Ragdoll physics (bouncing knockback from taser escape explosion)
+    if (this.isRagdolling) {
+      this.ragdollTimer -= deltaTime;
+
+      // Apply gravity
+      this.ragdollVelocity.y -= 25 * deltaTime;
+
+      // Get current position
+      const currentPos = this.rigidBody.translation();
+      let newX = currentPos.x + this.ragdollVelocity.x * deltaTime;
+      let newY = currentPos.y + this.ragdollVelocity.y * deltaTime;
+      let newZ = currentPos.z + this.ragdollVelocity.z * deltaTime;
+
+      // Floor bounce
+      if (newY <= 0) {
+        newY = 0;
+        this.ragdollVelocity.y = Math.abs(this.ragdollVelocity.y) * 0.4; // Bounce
+        this.ragdollVelocity.x *= 0.7; // Friction
+        this.ragdollVelocity.z *= 0.7;
+      }
+
+      // Update position directly (bypass Yuka)
+      this.rigidBody.setNextKinematicTranslation({ x: newX, y: newY, z: newZ });
+      (this as THREE.Group).position.set(newX, newY, newZ);
+      this.blobShadow.position.set(newX, 0.01, newZ);
+
+      // Sync Yuka position
+      this.yukaVehicle.position.set(newX, newY, newZ);
+
+      // End ragdoll when timer expires or velocity is low
+      const speed = this.ragdollVelocity.length();
+      if (this.ragdollTimer <= 0 || (speed < 1 && newY <= 0.1)) {
+        this.isRagdolling = false;
+        this.ragdollVelocity.set(0, 0, 0);
+      }
+
+      return; // Skip normal AI while ragdolling
+    }
+
     // Update hit stun timer
     if (this.hitStunTimer > 0) {
       this.hitStunTimer -= deltaTime;
@@ -494,6 +538,20 @@ export class Cop extends THREE.Group {
     this.removeTaserBeam();
     this.removeBulletProjectile();
     // Note: blob shadow is removed by CopManager when it removes from scene
+
+    // Dispose cloned materials (SkeletonUtils.clone DOES clone materials)
+    // But DON'T dispose geometries - those ARE shared by reference
+    (this as THREE.Group).traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        // Dispose materials (cloned per instance)
+        if (Array.isArray(child.material)) {
+          child.material.forEach((mat) => mat.dispose());
+        } else if (child.material) {
+          child.material.dispose();
+        }
+        // DON'T dispose geometry - shared across all clones
+      }
+    });
   }
 
   /**
@@ -525,8 +583,8 @@ export class Cop extends THREE.Group {
   }
 
   /**
-   * Apply knockback force (used when player escapes taser)
-   * NOTE: Uses pre-allocated _tempDirection vector to avoid GC pressure
+   * Apply knockback force with ragdoll physics (used when player escapes taser)
+   * Cops bounce back like pedestrians hit by cars
    */
   applyKnockback(fromPosition: THREE.Vector3, force: number): void {
     if (this.isDead) return;
@@ -539,16 +597,21 @@ export class Cop extends THREE.Group {
       currentPos.z - fromPosition.z
     ).normalize();
 
-    // Apply knockback to Yuka vehicle velocity
-    this.yukaVehicle.velocity.set(
+    // Enable ragdoll mode with physics velocity
+    this.isRagdolling = true;
+    this.ragdollTimer = 1.5; // Ragdoll for 1.5 seconds
+    this.ragdollVelocity.set(
       this._tempDirection.x * force,
-      0,
+      8, // Launch upward for bounce effect
       this._tempDirection.z * force
     );
 
-    // Trigger hit stun so they can't immediately chase
+    // Stop Yuka AI movement
+    this.yukaVehicle.velocity.set(0, 0, 0);
+
+    // Trigger hit stun so they can't immediately chase after ragdoll ends
     this.isHitStunned = true;
-    this.hitStunTimer = HIT_STUN.COP * 2; // Double stun duration for explosion
+    this.hitStunTimer = 2.0; // Long stun after ragdoll
 
     // Play hit animation
     if (this.mixer && this.animations.length > 0) {

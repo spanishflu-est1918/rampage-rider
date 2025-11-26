@@ -144,6 +144,7 @@ function App() {
             onRegister={registerNotificationController}
             showEnterPrompt={stats.isNearCar && !stats.isInVehicle}
             showTasedAlert={stats.isTased}
+            taseEscapeProgress={stats.taseEscapeProgress}
           />
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex gap-2 bg-black/60 p-2 rounded-lg border border-white/20">
             <VehicleSelector onSelect={handleVehicleSelect} currentVehicle={currentVehicle} />

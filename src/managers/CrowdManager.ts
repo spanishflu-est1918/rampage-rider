@@ -71,6 +71,7 @@ export class CrowdManager {
 
   // Pre-allocated vectors for per-frame operations (avoid GC pressure)
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempKillPos: THREE.Vector3 = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;

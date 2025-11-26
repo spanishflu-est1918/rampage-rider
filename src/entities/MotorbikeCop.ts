@@ -960,14 +960,17 @@ export class MotorbikeCop extends THREE.Group {
       this.riderMixer = null;
     }
 
+    // Dispose cloned materials (SkeletonUtils.clone DOES clone materials)
+    // But DON'T dispose geometries - those ARE shared by reference
     this.modelContainer.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.geometry?.dispose();
+        // Dispose materials (cloned per instance)
         if (Array.isArray(child.material)) {
           child.material.forEach((m) => m.dispose());
         } else if (child.material) {
           child.material.dispose();
         }
+        // DON'T dispose geometry - shared across all clones
       }
     });
   }

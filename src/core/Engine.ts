@@ -119,8 +119,18 @@ export class Engine {
   private cameraShakeDecay: number = 5;
   private cameraBasePosition: THREE.Vector3 = new THREE.Vector3();
   private cameraBaseQuaternion: THREE.Quaternion = new THREE.Quaternion();
+
+  // Taser escape flash effect (per-press)
+  private escapeFlashSprite: THREE.Sprite | null = null;
+  private escapeFlashLife: number = 0;
+
+  // Taser escape explosion effect (on successful escape)
+  private explosionSprite: THREE.Sprite | null = null;
+  private explosionLife: number = 0;
+  private shockwaveRing: THREE.Mesh | null = null;
+  private shockwaveLife: number = 0;
   private lastPlayerPosition: THREE.Vector3 = new THREE.Vector3();
-  private cameraMoveThreshold: number = 0.1; // Only update camera if player moved this much
+  private cameraMoveThreshold: number = 0; // Update every frame (0.1 caused jerk)
 
   // Pre-allocated vectors for update loop (avoid GC pressure)
   private readonly _tempCameraPos: THREE.Vector3 = new THREE.Vector3();
@@ -129,6 +139,14 @@ export class Engine {
   private readonly _tempAttackDir: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempVehicleDir: THREE.Vector3 = new THREE.Vector3();
   private readonly _yAxis: THREE.Vector3 = new THREE.Vector3(0, 1, 0);
+
+  // Attack performance tracking - logs continuously after attack until settled
+  private attackTrackingActive: boolean = false;
+  private attackTrackingFrames: number = 0;
+  private attackStartParticles: number = 0;
+  private attackStartDecals: number = 0;
+  private attackStartGeom: number = 0;
+  private attackStartTex: number = 0;
 
   private input: InputState = {
     up: false,
@@ -173,9 +191,6 @@ export class Engine {
   private currentVehicleTier: Tier | null = null;
 
   private actionController: ActionController = new ActionController();
-
-  private shakeIntensity: number = 0;
-  private shakeDecay: number = 0.9;
   private static readonly KILL_MESSAGES = ['SPLAT!', 'CRUSHED!', 'DEMOLISHED!', 'OBLITERATED!', 'TERMINATED!'];
   private static readonly PANIC_KILL_MESSAGES = ['COWARD!', 'NO ESCAPE!', 'RUN FASTER!', 'BACKSTAB!', 'EASY PREY!'];
   private static readonly PURSUIT_KILL_MESSAGES = ['HEAT KILL!', 'WANTED BONUS!', 'PURSUIT FRENZY!', 'HOT STREAK!', 'RAMPAGE!'];
@@ -201,6 +216,7 @@ export class Engine {
     this.camera.lookAt(0, 0, 0);
     this.camera.rotation.z = -0.15; // Tilt to see building sides better
     this.cameraBasePosition.copy(this.camera.position);
+    this.cameraBaseQuaternion.copy(this.camera.quaternion);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -257,7 +273,8 @@ export class Engine {
     if (world) {
       this.crowd = new CrowdManager(this.scene, world, this.ai);
       this.cops = new CopManager(this.scene, world, this.ai);
-      this.motorbikeCops = new MotorbikeCopManager(this.scene, world, this.ai);
+      // DISABLED: Motorbike cops for performance testing
+      // this.motorbikeCops = new MotorbikeCopManager(this.scene, world, this.ai);
       this.buildings = new BuildingManager(this.scene, world);
       // this.lampPosts = new LampPostManager(this.scene);
     }
@@ -756,10 +773,12 @@ export class Engine {
 
     this.player.setOnEscapePress(() => {
       this.shakeCamera(0.3);
+      this.showEscapeFlash();
     });
 
     this.player.setOnTaserEscape((position, radius, force) => {
-      this.shakeCamera(1.5);
+      this.shakeCamera(2.5); // Big shake!
+      this.showTaserEscapeExplosion(position);
       if (this.cops) {
         this.cops.applyKnockbackInRadius(position, radius, force);
         this.cops.clearTaserBeams();
@@ -775,6 +794,8 @@ export class Engine {
   }
 
   private handlePlayerAttack(attackPosition: THREE.Vector3): void {
+    const attackStart = performance.now();
+
     const pedAttackRadius = 2.5;
     const copAttackRadius = 4.5;
     const damage = 1;
@@ -785,6 +806,9 @@ export class Engine {
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
 
+    // --- Pedestrian damage ---
+    const pedDamageStart = performance.now();
+    let pedKills = 0;
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -794,6 +818,7 @@ export class Engine {
         attackDirection,
         coneAngle
       );
+      pedKills = pedResult.kills;
 
       if (pedResult.kills > 0) {
         this.stats.kills += pedResult.kills;
@@ -829,7 +854,11 @@ export class Engine {
         this.crowd.panicCrowd(attackPosition, 10);
       }
     }
+    const pedDamageTime = performance.now() - pedDamageStart;
 
+    // --- Cop damage ---
+    const copDamageStart = performance.now();
+    let copKills = 0;
     if (this.cops) {
       const copResult = this.cops.damageInRadius(
         attackPosition,
@@ -839,6 +868,7 @@ export class Engine {
         attackDirection,
         coneAngle
       );
+      copKills = copResult.kills;
 
       if (copResult.kills > 0) {
         const basePoints = 50;
@@ -864,7 +894,10 @@ export class Engine {
         }
       }
     }
+    const copDamageTime = performance.now() - copDamageStart;
 
+    // --- Blood particles and decals ---
+    const particlesStart = performance.now();
     if (totalKills > 0) {
       const playerPos = this.player!.getPosition();
       for (const killPos of allKillPositions) {
@@ -874,7 +907,25 @@ export class Engine {
         this.particles.emitBloodSpray(killPos, this._tempAttackDir, 20);
       }
 
-      this.shakeIntensity = 0.5 * totalKills;
+      this.shakeCamera(0.5 * totalKills);
+    }
+    const particlesTime = performance.now() - particlesStart;
+
+    const totalTime = performance.now() - attackStart;
+
+    // Start attack tracking on kill - will log continuously until settled
+    if (totalKills > 0) {
+      const r = this.renderer.info;
+      this.attackTrackingActive = true;
+      this.attackTrackingFrames = 0;
+      this.attackStartParticles = this.particles.getParticleCount();
+      this.attackStartDecals = this.bloodDecals.getDecalCount();
+      this.attackStartGeom = r.memory.geometries;
+      this.attackStartTex = r.memory.textures;
+      console.log(
+        `[STAB] START Kills:${totalKills} (ped:${pedKills} cop:${copKills}) | ` +
+        `Total:${totalTime.toFixed(1)}ms (PedDmg:${pedDamageTime.toFixed(1)} CopDmg:${copDamageTime.toFixed(1)} Particles:${particlesTime.toFixed(1)})`
+      );
     }
   }
 
@@ -976,7 +1027,7 @@ export class Engine {
         this.particles.emitBlood(killPos, 30);
         this.particles.emitBloodSpray(killPos, this._tempAttackDir, 20);
       }
-      this.shakeIntensity = 0.5 * totalKills;
+      this.shakeCamera(0.5 * totalKills);
     }
   }
 
@@ -1063,11 +1114,11 @@ export class Engine {
         this.particles.emitBlood(killPos, 40);
         this.particles.emitBloodSpray(killPos, this._tempAttackDir, 30);
       }
-      this.shakeIntensity = 0.8;
+      this.shakeCamera(0.8);
     }
 
     if (totalKills === 0) {
-      this.shakeIntensity = 0.3;
+      this.shakeCamera(0.3);
     }
   }
 
@@ -1099,7 +1150,7 @@ export class Engine {
     }
     this.triggerKillNotification(message, wasPanicking || this.stats.inPursuit, points);
 
-    this.shakeIntensity = 0.3;
+    this.shakeCamera(0.3);
   }
 
   resize(width: number, height: number): void {
@@ -1197,6 +1248,33 @@ export class Engine {
         `Geom:${r.geometries} Tex:${r.textures} | ` +
         `Peds:${p.counts.pedestrians} Cops:${p.counts.cops} Parts:${p.counts.particles} Blood:${p.counts.bloodDecals}`
       );
+    }
+
+    // Attack tracking - log continuously after attack for 60 frames (~1 second)
+    if (this.attackTrackingActive) {
+      this.attackTrackingFrames++;
+      const r = this.renderer.info;
+      const p = this.performanceStats;
+      const currentParts = this.particles.getParticleCount();
+      const currentDecals = this.bloodDecals.getDecalCount();
+      const deltaParts = currentParts - this.attackStartParticles;
+      const deltaDecals = currentDecals - this.attackStartDecals;
+      const deltaGeom = r.memory.geometries - this.attackStartGeom;
+      const deltaTex = r.memory.textures - this.attackStartTex;
+
+      console.log(
+        `[STAB] f${this.attackTrackingFrames} | ` +
+        `FPS:${p.fps.toFixed(0)} Frame:${p.frameTime.toFixed(1)}ms | ` +
+        `DrawCalls:${r.render.calls} Tris:${(r.render.triangles/1000).toFixed(1)}k | ` +
+        `Geom:${r.memory.geometries}(+${deltaGeom}) Tex:${r.memory.textures}(+${deltaTex}) | ` +
+        `Parts:${currentParts}(+${deltaParts}) Decals:${currentDecals}(+${deltaDecals})`
+      );
+
+      // Stop tracking after 60 frames
+      if (this.attackTrackingFrames >= 60) {
+        this.attackTrackingActive = false;
+        console.log(`[STAB] END`);
+      }
     }
 
     if (this.performanceStats.frameTime > this.performanceStats.worstFrame.frameTime) {
@@ -1410,6 +1488,8 @@ export class Engine {
     this.ai.update(dt);
     this.particles.update(dt);
     this.bloodDecals.update();
+    this.updateEscapeFlash(dt);
+    this.updateExplosionEffects(dt);
 
     // Total entities update time
     this.performanceStats.entities = performance.now() - entitiesStart;
@@ -1426,7 +1506,7 @@ export class Engine {
       const targetMoveDist = targetPos.distanceToSquared(this.lastPlayerPosition);
       const shouldUpdateCamera = targetMoveDist > (this.cameraMoveThreshold * this.cameraMoveThreshold);
 
-      if (shouldUpdateCamera || this.shakeIntensity > 0) {
+      if (shouldUpdateCamera) {
         // Isometric camera with fixed offset (reuse pre-allocated vector)
         this._tempCameraPos.set(
           targetPos.x + 2.5,
@@ -1437,31 +1517,12 @@ export class Engine {
         // Smooth lerp camera to follow target
         this.camera.position.lerp(this._tempCameraPos, 0.1);
 
-        // Apply screen shake AFTER lerp (so it's not smoothed out)
-        if (this.shakeIntensity > 0) {
-          const shakeX = (Math.random() - 0.5) * this.shakeIntensity;
-          const shakeY = (Math.random() - 0.5) * this.shakeIntensity;
-          const shakeZ = (Math.random() - 0.5) * this.shakeIntensity;
+        // Update lookAt (reuse pre-allocated vector)
+        this._tempLookAt.set(targetPos.x, targetPos.y, targetPos.z);
+        this.camera.lookAt(this._tempLookAt);
+        this.lastPlayerPosition.copy(targetPos);
 
-          this.camera.position.x += shakeX;
-          this.camera.position.y += shakeY;
-          this.camera.position.z += shakeZ;
-
-          // Decay shake intensity
-          this.shakeIntensity -= dt * 2; // Decay over time instead of exponential
-          if (this.shakeIntensity < 0) {
-            this.shakeIntensity = 0;
-          }
-        }
-
-        // Only recalculate lookAt when target moved significantly (reuse pre-allocated vector)
-        if (shouldUpdateCamera) {
-          this._tempLookAt.set(targetPos.x, targetPos.y, targetPos.z);
-          this.camera.lookAt(this._tempLookAt);
-          this.lastPlayerPosition.copy(targetPos);
-        }
-
-        // Update base position AND rotation AFTER lookAt (so render() preserves both)
+        // Update base position AND rotation AFTER lookAt (so render() applies shake from this base)
         this.cameraBasePosition.copy(this.camera.position);
         this.cameraBaseQuaternion.copy(this.camera.quaternion);
       }
@@ -1520,6 +1581,191 @@ export class Engine {
    */
   private shakeCamera(intensity: number = 0.3): void {
     this.cameraShakeIntensity = Math.max(this.cameraShakeIntensity, intensity);
+  }
+
+  /**
+   * Show a cartoonish flash effect at player position during taser escape
+   */
+  private showEscapeFlash(): void {
+    if (!this.player) return;
+
+    const position = this.player.getPosition();
+
+    // Create or reuse flash sprite
+    if (!this.escapeFlashSprite) {
+      // Create a radial gradient texture for the flash
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d')!;
+
+      // Draw a cartoonish starburst/flash pattern
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, 128, 128);
+
+      // Radial gradient for glow
+      const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gradient.addColorStop(0, 'rgba(255, 255, 100, 1)');
+      gradient.addColorStop(0.2, 'rgba(255, 255, 200, 0.9)');
+      gradient.addColorStop(0.4, 'rgba(255, 200, 50, 0.7)');
+      gradient.addColorStop(0.7, 'rgba(255, 150, 0, 0.3)');
+      gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(64, 64, 64, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Add starburst rays for cartoonish effect
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 3;
+      const rays = 8;
+      for (let i = 0; i < rays; i++) {
+        const angle = (i / rays) * Math.PI * 2;
+        const innerRadius = 20;
+        const outerRadius = 55;
+        ctx.beginPath();
+        ctx.moveTo(64 + Math.cos(angle) * innerRadius, 64 + Math.sin(angle) * innerRadius);
+        ctx.lineTo(64 + Math.cos(angle) * outerRadius, 64 + Math.sin(angle) * outerRadius);
+        ctx.stroke();
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+
+      this.escapeFlashSprite = new THREE.Sprite(material);
+      this.escapeFlashSprite.scale.set(3, 3, 1);
+      this.scene.add(this.escapeFlashSprite);
+    }
+
+    // Position flash at player
+    this.escapeFlashSprite.position.set(position.x, position.y + 1, position.z);
+    this.escapeFlashSprite.visible = true;
+
+    // Randomize rotation for variety
+    this.escapeFlashSprite.material.rotation = Math.random() * Math.PI * 2;
+
+    // Set life for fade out
+    this.escapeFlashLife = 0.15; // 150ms flash
+  }
+
+  /**
+   * Update escape flash effect
+   */
+  private updateEscapeFlash(dt: number): void {
+    if (this.escapeFlashLife > 0 && this.escapeFlashSprite) {
+      this.escapeFlashLife -= dt;
+      const alpha = Math.max(0, this.escapeFlashLife / 0.15);
+      this.escapeFlashSprite.material.opacity = alpha;
+      // Scale up as it fades
+      const scale = 3 + (1 - alpha) * 2;
+      this.escapeFlashSprite.scale.set(scale, scale, 1);
+
+      if (this.escapeFlashLife <= 0) {
+        this.escapeFlashSprite.visible = false;
+      }
+    }
+  }
+
+  /**
+   * Show big explosion effect when player escapes taser
+   */
+  private showTaserEscapeExplosion(position: THREE.Vector3): void {
+    // Create explosion sprite (bright flash)
+    if (!this.explosionSprite) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d')!;
+
+      // Big radial gradient explosion
+      const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      gradient.addColorStop(0.2, 'rgba(255, 255, 150, 1)');
+      gradient.addColorStop(0.4, 'rgba(255, 200, 50, 0.8)');
+      gradient.addColorStop(0.6, 'rgba(255, 100, 0, 0.5)');
+      gradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(64, 64, 64, 0, Math.PI * 2);
+      ctx.fill();
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+
+      this.explosionSprite = new THREE.Sprite(material);
+      this.scene.add(this.explosionSprite);
+    }
+
+    // Create shockwave ring
+    if (!this.shockwaveRing) {
+      const ringGeometry = new THREE.RingGeometry(0.5, 1, 32);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffff00,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide,
+      });
+      this.shockwaveRing = new THREE.Mesh(ringGeometry, ringMaterial);
+      this.shockwaveRing.rotation.x = -Math.PI / 2; // Lay flat
+      this.scene.add(this.shockwaveRing);
+    }
+
+    // Position and activate explosion
+    this.explosionSprite.position.set(position.x, position.y + 1, position.z);
+    this.explosionSprite.scale.set(2, 2, 1);
+    this.explosionSprite.visible = true;
+    this.explosionSprite.material.opacity = 1;
+    this.explosionLife = 0.4;
+
+    // Position and activate shockwave
+    this.shockwaveRing.position.set(position.x, 0.1, position.z);
+    this.shockwaveRing.scale.set(1, 1, 1);
+    this.shockwaveRing.visible = true;
+    (this.shockwaveRing.material as THREE.MeshBasicMaterial).opacity = 0.8;
+    this.shockwaveLife = 0.5;
+  }
+
+  /**
+   * Update explosion and shockwave effects
+   */
+  private updateExplosionEffects(dt: number): void {
+    // Update explosion sprite
+    if (this.explosionLife > 0 && this.explosionSprite) {
+      this.explosionLife -= dt;
+      const progress = 1 - (this.explosionLife / 0.4);
+      this.explosionSprite.material.opacity = 1 - progress;
+      const scale = 2 + progress * 10; // Expand from 2 to 12
+      this.explosionSprite.scale.set(scale, scale, 1);
+
+      if (this.explosionLife <= 0) {
+        this.explosionSprite.visible = false;
+      }
+    }
+
+    // Update shockwave ring
+    if (this.shockwaveLife > 0 && this.shockwaveRing) {
+      this.shockwaveLife -= dt;
+      const progress = 1 - (this.shockwaveLife / 0.5);
+      (this.shockwaveRing.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - progress);
+      const scale = 1 + progress * 16; // Expand from 1 to 17
+      this.shockwaveRing.scale.set(scale, scale, 1);
+
+      if (this.shockwaveLife <= 0) {
+        this.shockwaveRing.visible = false;
+      }
+    }
   }
 
   /**
