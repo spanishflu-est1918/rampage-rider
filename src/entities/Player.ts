@@ -619,10 +619,11 @@ export class Player extends THREE.Group {
   }
 
   /**
-   * Get player position
+   * Get player position (reference - do not modify!)
+   * Returns the actual position vector to avoid per-frame allocation
    */
   getPosition(): THREE.Vector3 {
-    return (this as THREE.Group).position.clone();
+    return (this as THREE.Group).position;
   }
 
   /**

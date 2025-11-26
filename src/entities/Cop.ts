@@ -620,12 +620,16 @@ export class Cop extends THREE.Group {
     }
   }
 
+  // Pre-allocated vector for getPosition (avoid per-call allocation)
+  private readonly _positionResult: THREE.Vector3 = new THREE.Vector3();
+
   /**
-   * Get cop position
+   * Get cop position (reference - do not modify!)
+   * Returns a reused vector to avoid per-call allocation
    */
   getPosition(): THREE.Vector3 {
     const pos = this.rigidBody.translation();
-    return new THREE.Vector3(pos.x, pos.y, pos.z);
+    return this._positionResult.set(pos.x, pos.y, pos.z);
   }
 
   /**

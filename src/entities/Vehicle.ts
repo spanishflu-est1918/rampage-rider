@@ -382,10 +382,11 @@ export class Vehicle extends THREE.Group {
   }
 
   /**
-   * Get vehicle position
+   * Get vehicle position (reference - do not modify!)
+   * Returns the actual position vector to avoid per-frame allocation
    */
   getPosition(): THREE.Vector3 {
-    return (this as THREE.Group).position.clone();
+    return (this as THREE.Group).position;
   }
 
   /**

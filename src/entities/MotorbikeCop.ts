@@ -37,6 +37,10 @@ export enum MotorbikeCopVariant {
  * - Drops shield pickups on kill
  */
 export class MotorbikeCop extends THREE.Group {
+  // Shared geometry/material for bullets (one instance for all motorbike cops)
+  private static sharedBulletGeometry: THREE.SphereGeometry | null = null;
+  private static sharedBulletMaterial: THREE.MeshBasicMaterial | null = null;
+
   private rigidBody: RAPIER.RigidBody;
   private collider: RAPIER.Collider;
   private characterController: RAPIER.KinematicCharacterController;
@@ -703,18 +707,24 @@ export class MotorbikeCop extends THREE.Group {
   }
 
   /**
-   * Fire taser at target
+   * Fire taser at target (uses pre-allocated vectors to avoid GC pressure)
    */
   fireTaser(targetPos: THREE.Vector3): void {
     if (!this.parentScene || this.attackCooldown > 0) return;
 
     this.removeTaserBeam();
 
-    const copPos = this.getPosition();
-    copPos.y += 0.8;
+    // Reuse pre-allocated vectors to avoid per-fire allocation
+    this._tempPosition.copy(this.getPosition());
+    this._tempPosition.y += 0.8;
 
-    const targetWithHeight = targetPos.clone().setY(targetPos.y + 0.5);
-    const midPoint = copPos.clone().lerp(targetWithHeight, 0.5);
+    this._tempTargetWithHeight.copy(targetPos).setY(targetPos.y + 0.5);
+    this._tempMidPoint.lerpVectors(this._tempPosition, this._tempTargetWithHeight, 0.5);
+
+    // Create local copies of the computed positions (geometry needs stable refs)
+    const copPos = this._tempPosition.clone();
+    const targetWithHeight = this._tempTargetWithHeight.clone();
+    const midPoint = this._tempMidPoint.clone();
 
     // Create geometry with 3 points (cop, midpoint, target) to match updateTaserBeam
     const points = [copPos, midPoint, targetWithHeight];
@@ -795,7 +805,7 @@ export class MotorbikeCop extends THREE.Group {
   }
 
   /**
-   * Fire bullet at target
+   * Fire bullet at target (uses shared geometry/material across all motorbike cops)
    */
   fireBullet(targetPos: THREE.Vector3): void {
     if (!this.parentScene || this.attackCooldown > 0) return;
@@ -805,12 +815,17 @@ export class MotorbikeCop extends THREE.Group {
     const copPos = this.getPosition();
     copPos.y += 0.8;
 
-    const geometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xffcc00,
-    });
+    // Lazily initialize shared geometry/material (one instance for all motorbike cops)
+    if (!MotorbikeCop.sharedBulletGeometry) {
+      MotorbikeCop.sharedBulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+    }
+    if (!MotorbikeCop.sharedBulletMaterial) {
+      MotorbikeCop.sharedBulletMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffcc00,
+      });
+    }
 
-    this.bulletProjectile = new THREE.Mesh(geometry, material);
+    this.bulletProjectile = new THREE.Mesh(MotorbikeCop.sharedBulletGeometry, MotorbikeCop.sharedBulletMaterial);
     this.bulletProjectile.position.copy(copPos);
     this.bulletTarget = targetPos.clone().setY(targetPos.y + 0.5);
     this.parentScene.add(this.bulletProjectile);
