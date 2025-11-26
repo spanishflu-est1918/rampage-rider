@@ -17,13 +17,14 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Fix**: Use simpler collision or direct position sync like pedestrians
 - **Impact**: High - expensive Rapier calculations
 
-### 3. Duplicate Yuka AI Updates
+### 3. Duplicate Yuka AI Updates ✅ FIXED
 **Location**:
 - `src/core/Engine.ts:287` (entityManager.update)
 - `src/managers/CrowdManager.ts:287` (entityManager.update)
 - `src/managers/CopManager.ts:100` (entityManager.update)
 - **Issue**: Separate EntityManagers for crowd and cops - each iterates ALL entities
 - **Fix**: Use single shared EntityManager in Engine
+- **Status**: ✅ Fixed - MotorbikeCopManager now uses shared AIManager
 - **Impact**: Critical - doubles steering calculations
 
 ### 4. Taser Beam Frame-by-Frame Updates
@@ -35,39 +36,43 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Fix**: Update every 2-3 frames or remove jitter entirely
 - **Impact**: High when multiple cops are tasing
 
-### 5. Blood Particle Material Clones
+### 5. Blood Particle Material Clones ✅ FIXED
 **Location**: `src/rendering/ParticleSystem.ts:79`
 - **Issue**: `this.sharedMaterial.clone()` creates NEW material per particle
 - **Impact**: 30-50 material clones per kill
 - **Fix**: Use THREE.Points with single material or instanced attributes
+- **Status**: ✅ Fixed - Now uses THREE.Points with shared PointsMaterial
 - **Impact**: Critical - memory churn + GC pressure
 
 ---
 
 ## HIGH IMPACT - Medium Priority
 
-### 6. Shadow Updates Every Frame
+### 6. Shadow Updates Every Frame ✅ OPTIMIZED
 **Location**:
 - `src/entities/Pedestrian.ts:338-340`
 - `src/entities/Cop.ts:441-442`
 - **Issue**: 48+ shadow position updates per frame (40 peds + 8 cops)
 - **Fix**: Skip updates for stationary entities or batch updates
+- **Status**: ✅ Already optimized - Pedestrians use InstancedBlobShadows (single draw call), shadows only update on movement
 - **Impact**: Moderate - instanced shadows already help
 
-### 7. Animation Mixer Updates for All Entities
+### 7. Animation Mixer Updates for All Entities ✅ FIXED
 **Location**:
 - `src/entities/Player.ts:595-597`
 - `src/entities/Pedestrian.ts:255-257`
 - `src/entities/Cop.ts:324-326`
 - **Issue**: Skeleton calculations every frame even when idle
 - **Fix**: Skip mixer.update() for distant entities or frozen animations
+- **Status**: ✅ Fixed - Both Pedestrian and Cop skip animations for entities >25 units away
 - **Impact**: High - expensive bone transformations
 
-### 8. Redundant Flocking Behaviors
+### 8. Redundant Flocking Behaviors ✅ NOT PRESENT
 **Location**: `src/managers/CrowdManager.ts:147-167`
 - **Issue**: Creates Alignment/Cohesion/Separation behaviors for each pedestrian
 - **Impact**: N² behavior calculations (each checks all others)
 - **Fix**: Remove redundant flocking setup (separation already in constructor)
+- **Status**: ✅ Not present - Pedestrians only use WanderBehavior and FleeBehavior, no Alignment/Cohesion/Separation
 - **Impact**: High - quadratic complexity
 
 ### 9. Camera LookAt Every Frame
