@@ -3,6 +3,7 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
 import { MotorbikeCop, MotorbikeCopVariant, MotorbikeCopState } from '../entities/MotorbikeCop';
 import { MOTORBIKE_COP_CONFIG } from '../constants';
+import { AIManager } from '../core/AIManager';
 
 /**
  * MotorbikeCopManager
@@ -14,12 +15,14 @@ import { MOTORBIKE_COP_CONFIG } from '../constants';
  *
  * Heat decays over time and drops significantly on cop kills.
  * Wave clears give temporary respite.
+ *
+ * NOTE: Uses shared AIManager EntityManager - Engine.ai.update() handles Yuka updates
  */
 export class MotorbikeCopManager {
   private cops: MotorbikeCop[] = [];
   private scene: THREE.Scene;
   private world: RAPIER.World;
-  private entityManager: YUKA.EntityManager;
+  private aiManager: AIManager;
 
   // Spawn tracking
   private scoutCount: number = 0;
@@ -43,10 +46,10 @@ export class MotorbikeCopManager {
   private readonly _tempCopPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
 
-  constructor(scene: THREE.Scene, world: RAPIER.World) {
+  constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
     this.world = world;
-    this.entityManager = new YUKA.EntityManager();
+    this.aiManager = aiManager;
   }
 
   /**
@@ -227,8 +230,8 @@ export class MotorbikeCopManager {
     // Ensure spawn position is on ground
     spawnPos.y = 0;
 
-    // Create the cop
-    const cop = new MotorbikeCop(spawnPos, this.world, this.entityManager, variant);
+    // Create the cop (uses shared AIManager EntityManager)
+    const cop = new MotorbikeCop(spawnPos, this.world, this.aiManager.getEntityManager(), variant);
     cop.setParentScene(this.scene);
     if (this.damageCallback) {
       cop.setDamageCallback(this.damageCallback);
@@ -263,8 +266,7 @@ export class MotorbikeCopManager {
     wantedStars: number,
     playerCanBeTased: boolean
   ): void {
-    // Update Yuka entity manager
-    this.entityManager.update(deltaTime);
+    // NOTE: Yuka EntityManager update is handled by Engine.ai.update() - no duplicate call here
 
     // Update each cop
     for (const cop of this.cops) {

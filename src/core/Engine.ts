@@ -257,7 +257,7 @@ export class Engine {
     if (world) {
       this.crowd = new CrowdManager(this.scene, world, this.ai);
       this.cops = new CopManager(this.scene, world, this.ai);
-      this.motorbikeCops = new MotorbikeCopManager(this.scene, world);
+      this.motorbikeCops = new MotorbikeCopManager(this.scene, world, this.ai);
       this.buildings = new BuildingManager(this.scene, world);
       // this.lampPosts = new LampPostManager(this.scene);
     }
