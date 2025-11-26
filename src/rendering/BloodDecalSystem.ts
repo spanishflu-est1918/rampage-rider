@@ -25,6 +25,7 @@ export class BloodDecalSystem {
   // Instance tracking per texture
   private instanceCounts: number[] = []; // Current count per texture
   private freeIndices: number[][] = []; // Pool of free indices per texture
+  private updateFrameCounter: number = 0; // Throttle update checks
 
   // Pre-allocated objects
   private readonly _tempOffset: THREE.Vector3 = new THREE.Vector3();
@@ -38,6 +39,8 @@ export class BloodDecalSystem {
     new THREE.Vector3(1, 0, 0),
     -Math.PI / 2
   );
+  private readonly _yRotationQuat: THREE.Quaternion = new THREE.Quaternion();
+  private readonly _zAxis: THREE.Vector3 = new THREE.Vector3(0, 0, 1);
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -218,10 +221,10 @@ export class BloodDecalSystem {
     const decalSize = size * (0.8 + Math.random() * 0.7);
 
     // Create rotation quaternion (flat on ground + random Y rotation)
+    // Reuse pre-allocated quaternions to avoid GC pressure
     const yRotation = Math.random() * Math.PI * 2;
-    this._tempQuaternion
-      .setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), yRotation));
+    this._yRotationQuat.setFromAxisAngle(this._zAxis, yRotation);
+    this._tempQuaternion.copy(this._flatRotation).multiply(this._yRotationQuat);
 
     // Set instance matrix
     this._tempPosition.set(position.x, 0.01, position.z);
@@ -294,8 +297,13 @@ export class BloodDecalSystem {
 
   /**
    * Update system - removes expired decals
+   * Throttled to every 60 frames (~1 second at 60fps) for performance
    */
   update(): void {
+    this.updateFrameCounter++;
+    if (this.updateFrameCounter < 60) return;
+    this.updateFrameCounter = 0;
+
     const currentTime = Date.now() / 1000;
 
     while (this.decals.length > 0 && currentTime - this.decals[0].createdAt > this.decalLifetime) {

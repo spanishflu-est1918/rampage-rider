@@ -10,7 +10,20 @@ import { LampPostManager } from '../managers/LampPostManager';
 import { Player } from '../entities/Player';
 import { Vehicle } from '../entities/Vehicle';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
-import { VehicleType, VehicleConfig, VEHICLE_CONFIGS, TIER_VEHICLE_MAP, TIER_CONFIGS, MOTORBIKE_COP_CONFIG } from '../constants';
+import {
+  VehicleType,
+  VehicleConfig,
+  VEHICLE_CONFIGS,
+  TIER_VEHICLE_MAP,
+  TIER_CONFIGS,
+  MOTORBIKE_COP_CONFIG,
+  CAMERA_CONFIG,
+  PLAYER_ATTACK_CONFIG,
+  SCORING_CONFIG,
+  VEHICLE_INTERACTION,
+  WANTED_STARS,
+  RENDERING_CONFIG,
+} from '../constants';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
 import { GameState, Tier, InputState, GameStats, KillNotification } from '../types';
 import { ActionController, ActionType } from './ActionController';
@@ -132,6 +145,7 @@ export class Engine {
   private shockwaveLife: number = 0;
   private lastPlayerPosition: THREE.Vector3 = new THREE.Vector3();
   private cameraMoveThreshold: number = 0; // Update every frame (0.1 caused jerk)
+  private healthBarUpdateCounter: number = 0; // Throttle health bar projection
 
   // Pre-allocated vectors for update loop (avoid GC pressure)
   private readonly _tempCameraPos: THREE.Vector3 = new THREE.Vector3();
@@ -140,6 +154,31 @@ export class Engine {
   private readonly _tempAttackDir: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempVehicleDir: THREE.Vector3 = new THREE.Vector3();
   private readonly _yAxis: THREE.Vector3 = new THREE.Vector3(0, 1, 0);
+  private readonly _tempSpawnTestPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempSpawnDir: THREE.Vector3 = new THREE.Vector3();
+  private readonly _zeroVelocity: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private readonly _tempCurrentPos: THREE.Vector3 = new THREE.Vector3();
+
+  // Pre-allocated spawn position offsets (avoid per-call allocation)
+  private readonly _spawnOffsets: THREE.Vector3[] = [
+    new THREE.Vector3(5, 0, 0), new THREE.Vector3(-5, 0, 0),
+    new THREE.Vector3(0, 0, 5), new THREE.Vector3(0, 0, -5),
+    new THREE.Vector3(7, 0, 0), new THREE.Vector3(-7, 0, 0),
+    new THREE.Vector3(5, 0, 5), new THREE.Vector3(-5, 0, -5),
+    new THREE.Vector3(10, 0, 0), new THREE.Vector3(-10, 0, 0),
+    new THREE.Vector3(3, 0, 0), new THREE.Vector3(-3, 0, 0),
+    new THREE.Vector3(0, 0, 3), new THREE.Vector3(0, 0, -3),
+  ];
+  private readonly _exitOffsets: THREE.Vector3[] = [
+    new THREE.Vector3(3, 0, 0), new THREE.Vector3(-3, 0, 0),
+    new THREE.Vector3(0, 0, 3), new THREE.Vector3(0, 0, -3),
+    new THREE.Vector3(3, 0, 3), new THREE.Vector3(-3, 0, -3),
+    new THREE.Vector3(3, 0, -3), new THREE.Vector3(-3, 0, 3),
+  ];
+
+  // Pre-allocated Rapier rays for spawn tests (initialized lazily)
+  private _horizontalRay: RAPIER.Ray | null = null;
+  private _downRay: RAPIER.Ray | null = null;
 
   // Attack performance tracking - logs continuously after attack until settled
   private attackTrackingActive: boolean = false;
@@ -203,7 +242,7 @@ export class Engine {
     this.scene.background = new THREE.Color(0x1a1a1a);
 
     const aspect = width / height;
-    const frustumSize = 15;
+    const frustumSize = CAMERA_CONFIG.FRUSTUM_SIZE;
     this.camera = new THREE.OrthographicCamera(
       (frustumSize * aspect) / -2,
       (frustumSize * aspect) / 2,
@@ -250,14 +289,14 @@ export class Engine {
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(-30, 50, -30);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.left = -50;
-    dirLight.shadow.camera.right = 50;
-    dirLight.shadow.camera.top = 50;
-    dirLight.shadow.camera.bottom = -50;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 200;
+    dirLight.shadow.mapSize.width = RENDERING_CONFIG.SHADOW_MAP_SIZE;
+    dirLight.shadow.mapSize.height = RENDERING_CONFIG.SHADOW_MAP_SIZE;
+    dirLight.shadow.camera.left = -RENDERING_CONFIG.SHADOW_CAMERA_SIZE;
+    dirLight.shadow.camera.right = RENDERING_CONFIG.SHADOW_CAMERA_SIZE;
+    dirLight.shadow.camera.top = RENDERING_CONFIG.SHADOW_CAMERA_SIZE;
+    dirLight.shadow.camera.bottom = -RENDERING_CONFIG.SHADOW_CAMERA_SIZE;
+    dirLight.shadow.camera.near = RENDERING_CONFIG.SHADOW_CAMERA_NEAR;
+    dirLight.shadow.camera.far = RENDERING_CONFIG.SHADOW_CAMERA_FAR;
     this.scene.add(dirLight);
   }
 
@@ -282,7 +321,7 @@ export class Engine {
   }
 
   private createTestGround(): void {
-    const groundSize = 1000;
+    const groundSize = RENDERING_CONFIG.GROUND_SIZE;
     const geometry = new THREE.PlaneGeometry(groundSize, groundSize);
 
     const textureLoader = new THREE.TextureLoader();
@@ -595,44 +634,42 @@ export class Engine {
    * Press H key to use
    */
   debugBoostHeat(): void {
-    this.stats.heat = Math.min(100, this.stats.heat + 25);
+    this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + SCORING_CONFIG.HEAT_DEBUG_BOOST);
     console.log(`[DEBUG] Heat boosted to ${this.stats.heat}%`);
   }
 
   private findSafeVehicleSpawnPosition(playerPos: THREE.Vector3): THREE.Vector3 {
     const world = this.physics.getWorld();
-    if (!world) return playerPos.clone().add(new THREE.Vector3(5, 0, 5));
+    if (!world) {
+      this._tempSpawnTestPos.copy(playerPos).add(this._spawnOffsets[0]);
+      return this._tempSpawnTestPos.clone();
+    }
 
     const BUILDING_GROUP = 0x0040;
     const GROUND_GROUP = 0x0001;
 
-    const offsets = [
-      new THREE.Vector3(5, 0, 0),
-      new THREE.Vector3(-5, 0, 0),
-      new THREE.Vector3(0, 0, 5),
-      new THREE.Vector3(0, 0, -5),
-      new THREE.Vector3(7, 0, 0),
-      new THREE.Vector3(-7, 0, 0),
-      new THREE.Vector3(5, 0, 5),
-      new THREE.Vector3(-5, 0, -5),
-      new THREE.Vector3(10, 0, 0),
-      new THREE.Vector3(-10, 0, 0),
-      new THREE.Vector3(3, 0, 0),
-      new THREE.Vector3(-3, 0, 0),
-      new THREE.Vector3(0, 0, 3),
-      new THREE.Vector3(0, 0, -3),
-    ];
+    // Lazily initialize reusable Rapier rays
+    if (!this._horizontalRay) {
+      this._horizontalRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
+    }
+    if (!this._downRay) {
+      this._downRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+    }
 
-    for (const offset of offsets) {
-      const testPos = playerPos.clone().add(offset);
+    for (const offset of this._spawnOffsets) {
+      // Reuse temp vectors instead of cloning
+      this._tempSpawnTestPos.copy(playerPos).add(offset);
+      this._tempSpawnDir.copy(offset).normalize();
 
-      const dirToTest = offset.clone().normalize();
-      const horizontalRay = new RAPIER.Ray(
-        { x: playerPos.x, y: playerPos.y + 1, z: playerPos.z },
-        { x: dirToTest.x, y: 0, z: dirToTest.z }
-      );
+      // Update horizontal ray origin and direction
+      this._horizontalRay.origin.x = playerPos.x;
+      this._horizontalRay.origin.y = playerPos.y + 1;
+      this._horizontalRay.origin.z = playerPos.z;
+      this._horizontalRay.dir.x = this._tempSpawnDir.x;
+      this._horizontalRay.dir.y = 0;
+      this._horizontalRay.dir.z = this._tempSpawnDir.z;
 
-      const horizontalHit = world.castRay(horizontalRay, offset.length(), true);
+      const horizontalHit = world.castRay(this._horizontalRay, offset.length(), true);
       if (horizontalHit) {
         const hitGroups = horizontalHit.collider.collisionGroups() & 0xFFFF;
         if (hitGroups === BUILDING_GROUP) {
@@ -640,16 +677,16 @@ export class Engine {
         }
       }
 
-      const downRay = new RAPIER.Ray(
-        { x: testPos.x, y: testPos.y + 10, z: testPos.z },
-        { x: 0, y: -1, z: 0 }
-      );
+      // Update down ray origin
+      this._downRay.origin.x = this._tempSpawnTestPos.x;
+      this._downRay.origin.y = this._tempSpawnTestPos.y + 10;
+      this._downRay.origin.z = this._tempSpawnTestPos.z;
 
-      const downHit = world.castRay(downRay, 15, true);
+      const downHit = world.castRay(this._downRay, 15, true);
       if (downHit) {
         const hitGroups = downHit.collider.collisionGroups() & 0xFFFF;
         if (hitGroups === GROUND_GROUP) {
-          return testPos;
+          return this._tempSpawnTestPos.clone();
         }
       }
     }
@@ -688,7 +725,7 @@ export class Engine {
     const vehiclePos = this.vehicle.getPosition();
     const distance = playerPos.distanceTo(vehiclePos);
 
-    return distance < 15.0;
+    return distance < VEHICLE_INTERACTION.ENTER_DISTANCE;
   }
 
   private exitVehicle(): void {
@@ -733,36 +770,31 @@ export class Engine {
   }
 
   private findSafeExitPosition(vehiclePos: THREE.Vector3): THREE.Vector3 {
-    const offsets = [
-      new THREE.Vector3(3, 0, 0),
-      new THREE.Vector3(-3, 0, 0),
-      new THREE.Vector3(0, 0, 3),
-      new THREE.Vector3(0, 0, -3),
-      new THREE.Vector3(3, 0, 3),
-      new THREE.Vector3(-3, 0, -3),
-      new THREE.Vector3(3, 0, -3),
-      new THREE.Vector3(-3, 0, 3),
-    ];
-
     const world = this.physics.getWorld();
     if (!world) return vehiclePos;
 
-    for (const offset of offsets) {
-      const testPos = vehiclePos.clone().add(offset);
+    // Lazily initialize reusable down ray if needed
+    if (!this._downRay) {
+      this._downRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+    }
 
-      const ray = new RAPIER.Ray(
-        { x: testPos.x, y: testPos.y + 5, z: testPos.z },
-        { x: 0, y: -1, z: 0 }
-      );
+    for (const offset of this._exitOffsets) {
+      // Reuse temp vector instead of cloning
+      this._tempSpawnTestPos.copy(vehiclePos).add(offset);
 
-      const hit = world.castRay(ray, 10, true);
+      // Update down ray origin
+      this._downRay.origin.x = this._tempSpawnTestPos.x;
+      this._downRay.origin.y = this._tempSpawnTestPos.y + 5;
+      this._downRay.origin.z = this._tempSpawnTestPos.z;
+
+      const hit = world.castRay(this._downRay, 10, true);
       if (hit) {
         const hitCollider = hit.collider;
         const groups = hitCollider.collisionGroups();
         const membership = groups & 0xFFFF;
 
         if (membership === 0x0001) {
-          return testPos;
+          return this._tempSpawnTestPos.clone();
         }
       }
     }
@@ -799,9 +831,9 @@ export class Engine {
    * Update wanted stars based on cop kills - consolidated from multiple attack handlers
    */
   private updateWantedStars(): void {
-    if (this.stats.copKills === 0) {
+    if (this.stats.copKills < WANTED_STARS.STAR_1) {
       this.stats.wantedStars = 0;
-    } else if (this.stats.copKills <= 3) {
+    } else if (this.stats.copKills < WANTED_STARS.STAR_2) {
       this.stats.wantedStars = 1;
     } else {
       this.stats.wantedStars = 2;
@@ -826,13 +858,14 @@ export class Engine {
 
   private handlePlayerAttack(attackPosition: THREE.Vector3): void {
     const attackStart = performance.now();
+    const cfg = PLAYER_ATTACK_CONFIG.KNIFE;
 
-    const pedAttackRadius = 2.5;
-    const copAttackRadius = 4.5;
-    const damage = 1;
-    const maxKills = this.stats.combo >= 10 ? Infinity : 1;
+    const pedAttackRadius = cfg.pedRadius;
+    const copAttackRadius = cfg.copRadius;
+    const damage = cfg.damage;
+    const maxKills = this.stats.combo >= cfg.comboThreshold ? Infinity : 1;
     const attackDirection = this.player!.getFacingDirection();
-    const coneAngle = Math.PI;
+    const coneAngle = cfg.coneAngle;
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
@@ -854,17 +887,17 @@ export class Engine {
       if (pedResult.kills > 0) {
         this.stats.kills += pedResult.kills;
 
-        const basePoints = 10;
+        const basePoints = SCORING_CONFIG.PEDESTRIAN_BASE;
         const regularKills = pedResult.kills - pedResult.panicKills;
         const panicKills = pedResult.panicKills;
 
-        const regularPoints = regularKills * (this.stats.inPursuit ? basePoints * 2 : basePoints);
-        const panicPoints = panicKills * (this.stats.inPursuit ? basePoints * 4 : basePoints * 2);
+        const regularPoints = regularKills * (this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints);
+        const panicPoints = panicKills * (this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER * SCORING_CONFIG.PANIC_MULTIPLIER : basePoints * SCORING_CONFIG.PANIC_MULTIPLIER);
 
         this.stats.score += regularPoints + panicPoints;
         this.stats.combo += pedResult.kills;
-        this.stats.comboTimer = 5.0;
-        this.stats.heat = Math.min(100, this.stats.heat + (pedResult.kills * 10));
+        this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (pedResult.kills * SCORING_CONFIG.HEAT_PER_PED_KILL));
 
         totalKills += pedResult.kills;
         allKillPositions.push(...pedResult.positions);
@@ -873,16 +906,16 @@ export class Engine {
           const message = this.stats.inPursuit
             ? Engine.randomFrom(Engine.PURSUIT_KILL_MESSAGES)
             : Engine.randomFrom(Engine.KILL_MESSAGES);
-          const points = this.stats.inPursuit ? basePoints * 2 : basePoints;
+          const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints;
           this.triggerKillNotification(message, this.stats.inPursuit, points);
         }
         for (let i = 0; i < panicKills; i++) {
           const message = Engine.randomFrom(Engine.PANIC_KILL_MESSAGES);
-          const points = this.stats.inPursuit ? basePoints * 4 : basePoints * 2;
+          const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER * SCORING_CONFIG.PANIC_MULTIPLIER : basePoints * SCORING_CONFIG.PANIC_MULTIPLIER;
           this.triggerKillNotification(message, true, points);
         }
 
-        this.crowd.panicCrowd(attackPosition, 10);
+        this.crowd.panicCrowd(attackPosition, cfg.panicRadius);
       }
     }
     const pedDamageTime = performance.now() - pedDamageStart;
@@ -902,12 +935,12 @@ export class Engine {
       copKills = copResult.kills;
 
       if (copResult.kills > 0) {
-        const basePoints = 50;
-        const pointsPerKill = basePoints * 2;
+        const basePoints = SCORING_CONFIG.COP_BASE;
+        const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
         this.updateWantedStars();
-        this.stats.heat = Math.min(100, this.stats.heat + (copResult.kills * 25));
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
 
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
@@ -922,8 +955,8 @@ export class Engine {
     // --- Blood particles and decals ---
     const particlesStart = performance.now();
     if (totalKills > 0) {
-      this.emitBloodEffects(allKillPositions, this.player!.getPosition(), 30, 20);
-      this.shakeCamera(0.5 * totalKills);
+      this.emitBloodEffects(allKillPositions, this.player!.getPosition(), cfg.particleCount, cfg.decalCount);
+      this.shakeCamera(cfg.cameraShakeMultiplier * totalKills);
     }
     const particlesTime = performance.now() - particlesStart;
 
@@ -932,30 +965,32 @@ export class Engine {
     // Start attack tracking on kill - will log continuously until settled
     if (totalKills > 0) {
       const r = this.renderer.info;
-      this.attackTrackingActive = true;
-      this.attackTrackingFrames = 0;
-      this.attackStartParticles = this.particles.getParticleCount();
-      this.attackStartDecals = this.bloodDecals.getDecalCount();
-      this.attackStartGeom = r.memory.geometries;
-      this.attackStartTex = r.memory.textures;
-      console.log(
-        `[STAB] START Kills:${totalKills} (ped:${pedKills} cop:${copKills}) | ` +
-        `Total:${totalTime.toFixed(1)}ms (PedDmg:${pedDamageTime.toFixed(1)} CopDmg:${copDamageTime.toFixed(1)} Particles:${particlesTime.toFixed(1)})`
-      );
+      // DISABLED: Attack tracking (uncomment for debugging)
+      // this.attackTrackingActive = true;
+      // this.attackTrackingFrames = 0;
+      // this.attackStartParticles = this.particles.getParticleCount();
+      // this.attackStartDecals = this.bloodDecals.getDecalCount();
+      // this.attackStartGeom = r.memory.geometries;
+      // this.attackStartTex = r.memory.textures;
+      // console.log(
+      //   `[STAB] START Kills:${totalKills} (ped:${pedKills} cop:${copKills}) | ` +
+      //   `Total:${totalTime.toFixed(1)}ms (PedDmg:${pedDamageTime.toFixed(1)} CopDmg:${copDamageTime.toFixed(1)} Particles:${particlesTime.toFixed(1)})`
+      // );
     }
   }
 
   private handleBicycleAttack(): void {
     if (!this.vehicle || !this.player) return;
+    const cfg = PLAYER_ATTACK_CONFIG.BICYCLE;
 
     const attackPosition = this.vehicle.getPosition();
     // Reuse pre-allocated vectors instead of new THREE.Vector3()
     this._tempVehicleDir.set(0, 0, 1).applyAxisAngle(this._yAxis, this.vehicle.getRotationY());
 
-    const attackRadius = 3.0;
-    const damage = 1;
-    const maxKills = this.stats.combo >= 10 ? Infinity : 2;
-    const coneAngle = Math.PI * 1.5;
+    const attackRadius = cfg.attackRadius;
+    const damage = cfg.damage;
+    const maxKills = this.stats.combo >= cfg.comboThreshold ? Infinity : cfg.maxKills;
+    const coneAngle = cfg.coneAngle;
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
@@ -971,18 +1006,18 @@ export class Engine {
       );
 
       if (pedResult.kills > 0) {
-        const basePoints = 12;
+        const basePoints = SCORING_CONFIG.PEDESTRIAN_BICYCLE;
         const regularKills = pedResult.kills - pedResult.panicKills;
         const panicKills = pedResult.panicKills;
 
-        const regularPoints = regularKills * (this.stats.inPursuit ? basePoints * 2 : basePoints);
-        const panicPoints = panicKills * (this.stats.inPursuit ? basePoints * 4 : basePoints * 2);
+        const regularPoints = regularKills * (this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints);
+        const panicPoints = panicKills * (this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER * SCORING_CONFIG.PANIC_MULTIPLIER : basePoints * SCORING_CONFIG.PANIC_MULTIPLIER);
 
         this.stats.score += regularPoints + panicPoints;
         this.stats.kills += pedResult.kills;
         this.stats.combo += pedResult.kills;
-        this.stats.comboTimer = 5.0;
-        this.stats.heat = Math.min(100, this.stats.heat + (pedResult.kills * 10));
+        this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (pedResult.kills * SCORING_CONFIG.HEAT_PER_PED_KILL));
 
         totalKills += pedResult.kills;
         allKillPositions.push(...pedResult.positions);
@@ -991,15 +1026,15 @@ export class Engine {
           const message = this.stats.inPursuit
             ? Engine.randomFrom(Engine.PURSUIT_KILL_MESSAGES)
             : 'BIKE SLASH!';
-          const points = this.stats.inPursuit ? basePoints * 2 : basePoints;
+          const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints;
           this.triggerKillNotification(message, this.stats.inPursuit, points);
         }
         for (let i = 0; i < panicKills; i++) {
-          const points = this.stats.inPursuit ? basePoints * 4 : basePoints * 2;
+          const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER * SCORING_CONFIG.PANIC_MULTIPLIER : basePoints * SCORING_CONFIG.PANIC_MULTIPLIER;
           this.triggerKillNotification('CYCLE SLAUGHTER!', true, points);
         }
 
-        this.crowd.panicCrowd(attackPosition, 12);
+        this.crowd.panicCrowd(attackPosition, cfg.panicRadius);
       }
     }
 
@@ -1014,12 +1049,12 @@ export class Engine {
       );
 
       if (copResult.kills > 0) {
-        const basePoints = 50;
-        const pointsPerKill = basePoints * 2;
+        const basePoints = SCORING_CONFIG.COP_BASE;
+        const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
         this.updateWantedStars();
-        this.stats.heat = Math.min(100, this.stats.heat + (copResult.kills * 25));
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
 
@@ -1030,22 +1065,23 @@ export class Engine {
     }
 
     if (totalKills > 0) {
-      this.emitBloodEffects(allKillPositions, this.vehicle.getPosition(), 30, 20);
-      this.shakeCamera(0.5 * totalKills);
+      this.emitBloodEffects(allKillPositions, this.vehicle.getPosition(), cfg.particleCount, cfg.decalCount);
+      this.shakeCamera(cfg.cameraShakeMultiplier * totalKills);
     }
   }
 
   private handleMotorbikeShoot(): void {
     if (!this.vehicle || !this.player) return;
+    const cfg = PLAYER_ATTACK_CONFIG.MOTORBIKE;
 
     const attackPosition = this.vehicle.getPosition();
     // Reuse pre-allocated vectors instead of new THREE.Vector3()
     this._tempVehicleDir.set(0, 0, 1).applyAxisAngle(this._yAxis, this.vehicle.getRotationY());
 
-    const attackRadius = 10.0;
-    const damage = 1;
-    const maxKills = 1;
-    const coneAngle = Math.PI / 3;
+    const attackRadius = cfg.attackRadius;
+    const damage = cfg.damage;
+    const maxKills = cfg.maxKills;
+    const coneAngle = cfg.coneAngle;
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
@@ -1061,14 +1097,14 @@ export class Engine {
       );
 
       if (pedResult.kills > 0) {
-        const basePoints = 15;
-        const points = this.stats.inPursuit ? basePoints * 2 : basePoints;
+        const basePoints = SCORING_CONFIG.PEDESTRIAN_MOTORBIKE;
+        const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints;
 
         this.stats.score += points * pedResult.kills;
         this.stats.kills += pedResult.kills;
         this.stats.combo += pedResult.kills;
-        this.stats.comboTimer = 5.0;
-        this.stats.heat = Math.min(100, this.stats.heat + (pedResult.kills * 15));
+        this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (pedResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_PED_KILL));
 
         totalKills += pedResult.kills;
         allKillPositions.push(...pedResult.positions);
@@ -1076,7 +1112,7 @@ export class Engine {
         const message = pedResult.panicKills > 0 ? 'DRIVE-BY TERROR!' : 'DRIVE-BY!';
         this.triggerKillNotification(message, true, points);
 
-        this.crowd.panicCrowd(attackPosition, 15);
+        this.crowd.panicCrowd(attackPosition, cfg.panicRadius);
       }
     }
 
@@ -1091,12 +1127,12 @@ export class Engine {
       );
 
       if (copResult.kills > 0) {
-        const basePoints = 75;
-        const pointsPerKill = basePoints * 2;
+        const basePoints = SCORING_CONFIG.COP_MOTORBIKE;
+        const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
         this.updateWantedStars();
-        this.stats.heat = Math.min(100, this.stats.heat + (copResult.kills * 30));
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_COP_KILL));
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
 
@@ -1105,31 +1141,32 @@ export class Engine {
     }
 
     if (totalKills > 0) {
-      this.emitBloodEffects(allKillPositions, this.vehicle.getPosition(), 40, 30);
-      this.shakeCamera(0.8);
+      this.emitBloodEffects(allKillPositions, this.vehicle.getPosition(), cfg.particleCount, cfg.decalCount);
+      this.shakeCamera(cfg.cameraShakeHit);
     }
 
     if (totalKills === 0) {
-      this.shakeCamera(0.3);
+      this.shakeCamera(cfg.cameraShakeMiss);
     }
   }
 
   private handleVehicleKill(position: THREE.Vector3, wasPanicking: boolean = false): void {
+    const cfg = PLAYER_ATTACK_CONFIG.VEHICLE_HIT;
     this.stats.kills++;
 
-    const basePoints = 15;
+    const basePoints = SCORING_CONFIG.PEDESTRIAN_ROADKILL;
     let points = basePoints;
-    if (wasPanicking) points *= 2;
-    if (this.stats.inPursuit) points *= 2;
+    if (wasPanicking) points *= SCORING_CONFIG.PANIC_MULTIPLIER;
+    if (this.stats.inPursuit) points *= SCORING_CONFIG.PURSUIT_MULTIPLIER;
 
     this.stats.score += points;
     this.stats.combo++;
-    this.stats.comboTimer = 5.0;
-    this.stats.heat = Math.min(100, this.stats.heat + 10);
+    this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+    this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + SCORING_CONFIG.HEAT_PER_PED_KILL);
 
-    this.particles.emitBlood(position, 40);
+    this.particles.emitBlood(position, cfg.particleCount);
     if (this.crowd) {
-      this.crowd.panicCrowd(position, 15);
+      this.crowd.panicCrowd(position, cfg.panicRadius);
     }
 
     let message: string;
@@ -1142,12 +1179,12 @@ export class Engine {
     }
     this.triggerKillNotification(message, wasPanicking || this.stats.inPursuit, points);
 
-    this.shakeCamera(0.3);
+    this.shakeCamera(cfg.cameraShake);
   }
 
   resize(width: number, height: number): void {
     const aspect = width / height;
-    const frustumSize = 15;
+    const frustumSize = CAMERA_CONFIG.FRUSTUM_SIZE;
 
     this.camera.left = (frustumSize * aspect) / -2;
     this.camera.right = (frustumSize * aspect) / 2;
@@ -1218,45 +1255,45 @@ export class Engine {
     this.performanceStats.avgRendering = history.rendering.average();
     this.performanceStats.avgDrawCalls = history.drawCalls.average();
 
+    // DISABLED: Performance logging (uncomment for debugging)
     // Log performance stats every 15 frames (~0.25 seconds)
-    if (history.frameTime.length % 15 === 0) {
-      const r = this.performanceStats.renderer;
-      const p = this.performanceStats;
-      console.log(
-        `[3PERF] FPS:${p.fps.toFixed(0)} Frame:${p.avgFrameTime.toFixed(1)}ms | ` +
-        `Render:${p.avgRendering.toFixed(1)}ms | ` +
-        `DrawCalls:${r.drawCalls} Tris:${(r.triangles/1000).toFixed(1)}k | ` +
-        `Geom:${r.geometries} Tex:${r.textures} | ` +
-        `Peds:${p.counts.pedestrians} Cops:${p.counts.cops} Parts:${p.counts.particles} Blood:${p.counts.bloodDecals}`
-      );
-    }
+    // if (history.frameTime.length % 15 === 0) {
+    //   const r = this.performanceStats.renderer;
+    //   const p = this.performanceStats;
+    //   console.log(
+    //     `[3PERF] FPS:${p.fps.toFixed(0)} Frame:${p.avgFrameTime.toFixed(1)}ms | ` +
+    //     `Render:${p.avgRendering.toFixed(1)}ms | ` +
+    //     `DrawCalls:${r.drawCalls} Tris:${(r.triangles/1000).toFixed(1)}k | ` +
+    //     `Geom:${r.geometries} Tex:${r.textures} | ` +
+    //     `Peds:${p.counts.pedestrians} Cops:${p.counts.cops} Parts:${p.counts.particles} Blood:${p.counts.bloodDecals}`
+    //   );
+    // }
 
-    // Attack tracking - log continuously after attack for 60 frames (~1 second)
-    if (this.attackTrackingActive) {
-      this.attackTrackingFrames++;
-      const r = this.renderer.info;
-      const p = this.performanceStats;
-      const currentParts = this.particles.getParticleCount();
-      const currentDecals = this.bloodDecals.getDecalCount();
-      const deltaParts = currentParts - this.attackStartParticles;
-      const deltaDecals = currentDecals - this.attackStartDecals;
-      const deltaGeom = r.memory.geometries - this.attackStartGeom;
-      const deltaTex = r.memory.textures - this.attackStartTex;
-
-      console.log(
-        `[STAB] f${this.attackTrackingFrames} | ` +
-        `FPS:${p.fps.toFixed(0)} Frame:${p.frameTime.toFixed(1)}ms | ` +
-        `DrawCalls:${r.render.calls} Tris:${(r.render.triangles/1000).toFixed(1)}k | ` +
-        `Geom:${r.memory.geometries}(+${deltaGeom}) Tex:${r.memory.textures}(+${deltaTex}) | ` +
-        `Parts:${currentParts}(+${deltaParts}) Decals:${currentDecals}(+${deltaDecals})`
-      );
-
-      // Stop tracking after 60 frames
-      if (this.attackTrackingFrames >= 60) {
-        this.attackTrackingActive = false;
-        console.log(`[STAB] END`);
-      }
-    }
+    // DISABLED: Attack tracking (uncomment for debugging)
+    // if (this.attackTrackingActive) {
+    //   this.attackTrackingFrames++;
+    //   const r = this.renderer.info;
+    //   const p = this.performanceStats;
+    //   const currentParts = this.particles.getParticleCount();
+    //   const currentDecals = this.bloodDecals.getDecalCount();
+    //   const deltaParts = currentParts - this.attackStartParticles;
+    //   const deltaDecals = currentDecals - this.attackStartDecals;
+    //   const deltaGeom = r.memory.geometries - this.attackStartGeom;
+    //   const deltaTex = r.memory.textures - this.attackStartTex;
+    //
+    //   console.log(
+    //     `[STAB] f${this.attackTrackingFrames} | ` +
+    //     `FPS:${p.fps.toFixed(0)} Frame:${p.frameTime.toFixed(1)}ms | ` +
+    //     `DrawCalls:${r.render.calls} Tris:${(r.render.triangles/1000).toFixed(1)}k | ` +
+    //     `Geom:${r.memory.geometries}(+${deltaGeom}) Tex:${r.memory.textures}(+${deltaTex}) | ` +
+    //     `Parts:${currentParts}(+${deltaParts}) Decals:${currentDecals}(+${deltaDecals})`
+    //   );
+    //
+    //   if (this.attackTrackingFrames >= 60) {
+    //     this.attackTrackingActive = false;
+    //     console.log(`[STAB] END`);
+    //   }
+    // }
 
     if (this.performanceStats.frameTime > this.performanceStats.worstFrame.frameTime) {
       const { physics, entities, player, cops, pedestrians, world, rendering, renderer } = this.performanceStats;
@@ -1386,9 +1423,11 @@ export class Engine {
     }
     this.performanceStats.player = performance.now() - playerStart;
 
-    const currentPos = this.isInVehicle && this.vehicle
+    // Get current position (reuse pre-allocated vector for fallback)
+    const playerPos = this.isInVehicle && this.vehicle
       ? this.vehicle.getPosition()
-      : this.player?.getPosition() || new THREE.Vector3();
+      : this.player?.getPosition();
+    const currentPos = playerPos || this._tempCurrentPos.set(0, 0, 0);
 
     // World elements (buildings, lampposts)
     const worldStart = performance.now();
@@ -1434,10 +1473,10 @@ export class Engine {
     }
     this.performanceStats.pedestrians = performance.now() - pedestriansStart;
 
-    // Get player velocity for cop AI prediction
+    // Get player velocity for cop AI prediction (reuse pre-allocated zero vector for fallback)
     const playerVelocity = this.isInVehicle && this.vehicle
       ? this.vehicle.getVelocity()
-      : new THREE.Vector3();
+      : this._zeroVelocity;
 
     // Cops (foot cops and motorbike cops)
     const copsStart = performance.now();
@@ -1477,10 +1516,8 @@ export class Engine {
 
     // Camera follow player/car (unless manual control is active)
     if (!this.disableCameraFollow) {
-      // Get target position (car or player)
-      const targetPos = this.isInVehicle && this.vehicle
-        ? this.vehicle.getPosition()
-        : this.player?.getPosition() || new THREE.Vector3();
+      // Get target position (reuse currentPos already calculated above)
+      const targetPos = currentPos;
 
       // Only update camera if target moved significantly (performance optimization)
       // Uses squared distance to avoid sqrt
@@ -1509,8 +1546,10 @@ export class Engine {
       }
     }
 
-    // Update cop health bars (project 3D positions to 2D screen space)
-    if (this.cops) {
+    // Update cop health bars every 3 frames (project 3D positions to 2D screen space)
+    this.healthBarUpdateCounter++;
+    if (this.cops && this.healthBarUpdateCounter >= 3) {
+      this.healthBarUpdateCounter = 0;
       const copData = this.cops.getCopData();
       this.stats.copHealthBars = copData.map(cop => {
         // Project 3D world position to 2D screen coordinates

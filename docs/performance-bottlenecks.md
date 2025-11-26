@@ -270,8 +270,12 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 ### 33. setTimeout for Animation Timing
 **Location**: `Player.ts:240,687,841,880,900`, `Cop.ts:324`
 - **Issue**: setTimeout unreliable at low FPS, animations can desync
-- **Fix**: Use deltaTime counters in update() loop
-- **Impact**: Animation glitches under load
+- **Fix Options**:
+  1. Use deltaTime counters in update() loop (complex - needs callback queue)
+  2. Use Three.js AnimationMixer 'finished' events (cleaner, requires refactor)
+  3. Keep setTimeout for now - main game loop is stable at 60fps
+- **Status**: Low priority - game runs smoothly at target FPS. Consider for future if FPS drops cause animation issues.
+- **Impact**: Animation glitches under load (not currently observed)
 
 ---
 

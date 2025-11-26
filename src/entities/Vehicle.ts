@@ -2,13 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
-import { VehicleConfig } from '../constants';
-
-const COLLISION_GROUPS = {
-  GROUND: 0x0001,
-  BUILDING: 0x0040,
-  VEHICLE: 0x0080,
-} as const;
+import { VehicleConfig, COLLISION_GROUPS } from '../constants';
 
 export class Vehicle extends THREE.Group {
   private config: VehicleConfig;

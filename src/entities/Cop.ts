@@ -30,7 +30,7 @@ export class Cop extends THREE.Group {
 
   private rigidBody: RAPIER.RigidBody;
   private collider: RAPIER.Collider;
-  private characterController: RAPIER.KinematicCharacterController;
+  // Note: characterController removed - using simple position sync instead for performance
   private world: RAPIER.World;
   private mixer: THREE.AnimationMixer | null = null;
   private animations: THREE.AnimationClip[] = [];
@@ -80,6 +80,8 @@ export class Cop extends THREE.Group {
   // Pre-allocated vectors (reused every frame to avoid GC pressure)
   private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempMidPoint: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempTargetWithHeight: THREE.Vector3 = new THREE.Vector3();
 
   constructor(
     position: THREE.Vector3,
@@ -118,7 +120,8 @@ export class Cop extends THREE.Group {
     const groups = KinematicCharacterHelper.getCollisionGroups();
     const collisionFilter = KinematicCharacterHelper.getCopCollisionFilter();
 
-    const { body, collider, controller } = KinematicCharacterHelper.createCharacterBody(
+    // Create character body (controller not used - simple position sync instead)
+    const { body, collider } = KinematicCharacterHelper.createCharacterBody(
       world,
       position,
       0.3, // capsule half height
@@ -129,7 +132,6 @@ export class Cop extends THREE.Group {
 
     this.rigidBody = body;
     this.collider = collider;
-    this.characterController = controller;
 
     // Create blob shadow (fake shadow for performance)
     this.blobShadow = createBlobShadow(0.9);
@@ -478,37 +480,25 @@ export class Cop extends THREE.Group {
       this.attackCooldown = attackParams.cooldown;
     } else if (distanceToTarget > attackParams.range) {
       this.isCurrentlyAttacking = false;
-      // Chase logic: move toward target
-      // Get desired position from Yuka AI
-      const desiredX = this.yukaVehicle.position.x;
-      const desiredZ = this.yukaVehicle.position.z;
 
-      // Calculate desired movement delta
-      const deltaX = desiredX - currentPos.x;
-      const deltaZ = desiredZ - currentPos.z;
-      const desiredMovement = { x: deltaX, y: 0.0, z: deltaZ };
+      // Simple position sync from Yuka AI (no expensive character controller)
+      // Cops use Yuka's obstacle avoidance behavior to avoid buildings
+      const yukaPos = this.yukaVehicle.position;
+      this._tempPosition.set(yukaPos.x, 0, yukaPos.z);
 
-      // Use shared helper to move with collision detection
-      const newPosition = KinematicCharacterHelper.moveCharacter(
-        this.rigidBody,
-        this.collider,
-        this.characterController,
-        desiredMovement
-      );
-
-      // Sync Three.js
-      (this as THREE.Group).position.copy(newPosition);
+      // Sync Three.js position directly (much cheaper than character controller)
+      (this as THREE.Group).position.copy(this._tempPosition);
 
       // Update blob shadow position (stays on ground)
-      this.blobShadow.position.set(newPosition.x, 0.01, newPosition.z);
+      this.blobShadow.position.set(this._tempPosition.x, 0.01, this._tempPosition.z);
 
-      // Update Yuka position to match actual position (feedback collision response to AI)
-      this.yukaVehicle.position.set(newPosition.x, 0, newPosition.z);
+      // Sync physics body position for collision detection by player
+      this.rigidBody.setNextKinematicTranslation({ x: this._tempPosition.x, y: 0.5, z: this._tempPosition.z });
 
       // Instant rotation to face target (no smoothing - cops snap to face player)
       if (this.lastTarget) {
-        const dirX = this.lastTarget.x - newPosition.x;
-        const dirZ = this.lastTarget.z - newPosition.z;
+        const dirX = this.lastTarget.x - this._tempPosition.x;
+        const dirZ = this.lastTarget.z - this._tempPosition.z;
         const distSq = dirX * dirX + dirZ * dirZ;
 
         // Only rotate if target is not too close (avoid jitter)
@@ -657,14 +647,15 @@ export class Cop extends THREE.Group {
     const copPos = this.getPosition();
     copPos.y += 0.8; // Chest height
 
-    const targetWithHeight = targetPos.clone().setY(targetPos.y + 0.5);
-    const midPoint = new THREE.Vector3().lerpVectors(copPos, targetWithHeight, 0.5);
+    // Reuse pre-allocated vectors to avoid GC pressure
+    this._tempTargetWithHeight.copy(targetPos).setY(targetPos.y + 0.5);
+    this._tempMidPoint.lerpVectors(copPos, this._tempTargetWithHeight, 0.5);
 
     // Create reusable Float32Array buffer for 3 points (9 floats)
     this.taserBeamPositions = new Float32Array([
       copPos.x, copPos.y, copPos.z,
-      midPoint.x, midPoint.y, midPoint.z,
-      targetWithHeight.x, targetWithHeight.y, targetWithHeight.z
+      this._tempMidPoint.x, this._tempMidPoint.y, this._tempMidPoint.z,
+      this._tempTargetWithHeight.x, this._tempTargetWithHeight.y, this._tempTargetWithHeight.z
     ]);
 
     // Create geometry with the buffer
@@ -732,8 +723,12 @@ export class Cop extends THREE.Group {
    * Remove taser beam
    */
   removeTaserBeam(): void {
-    if (this.taserBeam && this.parentScene) {
-      this.parentScene.remove(this.taserBeam);
+    if (this.taserBeam) {
+      // Remove from scene if possible
+      if (this.parentScene) {
+        this.parentScene.remove(this.taserBeam);
+      }
+      // Always dispose geometry/material to prevent leaks
       this.taserBeam.geometry.dispose();
       (this.taserBeam.material as THREE.Material).dispose();
       this.taserBeam = null;

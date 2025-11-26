@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { preloader } from './Preloader';
+import { COLLISION_GROUPS } from '../constants';
 
 /**
  * PhysicsWorld - Wrapper around Rapier physics engine
@@ -10,17 +11,8 @@ export class PhysicsWorld {
   private world: RAPIER.World | null = null;
   private initialized = false;
 
-  // Collision groups (bit flags)
-  public readonly COLLISION_GROUPS = {
-    GROUND: 0x0001,
-    PLAYER: 0x0002,
-    PEDESTRIAN: 0x0004,
-    COP: 0x0008,
-    DEBRIS: 0x0010,
-    PROJECTILE: 0x0020,
-    BUILDING: 0x0040,
-    VEHICLE: 0x0080,
-  };
+  // Re-export collision groups for backward compatibility
+  public readonly COLLISION_GROUPS = COLLISION_GROUPS;
 
   constructor() {}
 

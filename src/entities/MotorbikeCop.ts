@@ -5,7 +5,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { BlobShadow, createBlobShadow } from '../rendering/BlobShadow';
-import { COP_BIKE_CONFIG, MOTORBIKE_COP_CONFIG } from '../constants';
+import { COP_BIKE_CONFIG, MOTORBIKE_COP_CONFIG, COLLISION_GROUPS } from '../constants';
 
 /**
  * AI State for motorbike cops
@@ -103,12 +103,7 @@ export class MotorbikeCop extends THREE.Group {
   private readonly _tempTargetWithHeight: THREE.Vector3 = new THREE.Vector3();
   private readonly _taserPositions: Float32Array = new Float32Array(9); // 3 points × 3 coords
 
-  // Collision groups
-  private static readonly COLLISION_GROUPS = {
-    GROUND: 0x0001,
-    BUILDING: 0x0040,
-    COP_BIKE: 0x0100, // New collision group for cop bikes
-  };
+  // Use centralized collision groups from constants
 
   constructor(
     position: THREE.Vector3,
@@ -194,8 +189,8 @@ export class MotorbikeCop extends THREE.Group {
     // Membership: COP_BIKE (0x0100)
     // Filter: GROUND | BUILDING (can't collide with player/peds - handled via game logic)
     const collisionGroups =
-      ((MotorbikeCop.COLLISION_GROUPS.GROUND | MotorbikeCop.COLLISION_GROUPS.BUILDING) << 16) |
-      MotorbikeCop.COLLISION_GROUPS.COP_BIKE;
+      ((COLLISION_GROUPS.GROUND | COLLISION_GROUPS.BUILDING) << 16) |
+      COLLISION_GROUPS.COP_BIKE;
 
     const colliderDesc = RAPIER.ColliderDesc.cuboid(
       COP_BIKE_CONFIG.colliderWidth,

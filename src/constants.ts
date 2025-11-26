@@ -365,3 +365,142 @@ export const MOTORBIKE_COP_CONFIG = {
   SPAWN_FLANK_OFFSET: 20,
   SPAWN_AHEAD_DISTANCE: 25,
 } as const;
+
+// ============================================================================
+// Gameplay Tuning Constants (Phase 2.5 - Code Quality)
+// Centralized magic numbers for easy balance tweaking
+// ============================================================================
+
+/**
+ * Camera configuration
+ */
+export const CAMERA_CONFIG = {
+  FRUSTUM_SIZE: 15, // Orthographic camera frustum (controls zoom level)
+  POSITION_X: 10, // Camera X offset from player
+  POSITION_Y: 25, // Camera Y offset (height)
+  POSITION_Z: 10, // Camera Z offset from player
+  SHAKE_DECAY: 5, // How fast camera shake diminishes
+} as const;
+
+/**
+ * Combat attack configurations per weapon type
+ */
+export const PLAYER_ATTACK_CONFIG = {
+  KNIFE: {
+    pedRadius: 2.5, // Radius for hitting pedestrians
+    copRadius: 4.5, // Larger radius for cops (easier to hit)
+    damage: 1,
+    coneAngle: Math.PI, // 180 degrees - half circle in front
+    comboThreshold: 10, // Combo level for unlimited kills
+    panicRadius: 10, // Radius to panic nearby pedestrians
+    particleCount: 30,
+    decalCount: 20,
+    cameraShakeMultiplier: 0.5,
+  },
+  BICYCLE: {
+    attackRadius: 3.0,
+    damage: 1,
+    coneAngle: Math.PI * 1.5, // 270 degrees - wider arc
+    comboThreshold: 10,
+    maxKills: 2, // Can hit 2 at once
+    panicRadius: 12,
+    particleCount: 30,
+    decalCount: 20,
+    cameraShakeMultiplier: 0.5,
+  },
+  MOTORBIKE: {
+    attackRadius: 10.0, // Drive-by shooting range
+    damage: 1,
+    coneAngle: Math.PI / 3, // 60 degrees - narrow forward cone
+    maxKills: 1, // One shot at a time
+    panicRadius: 15,
+    particleCount: 40,
+    decalCount: 30,
+    cameraShakeHit: 0.8,
+    cameraShakeMiss: 0.3,
+  },
+  VEHICLE_HIT: {
+    particleCount: 40,
+    panicRadius: 15,
+    cameraShake: 0.3,
+  },
+} as const;
+
+/**
+ * Score and combo system
+ */
+export const SCORING_CONFIG = {
+  // Base points per kill type
+  PEDESTRIAN_BASE: 10,
+  PEDESTRIAN_BICYCLE: 12,
+  PEDESTRIAN_MOTORBIKE: 15,
+  PEDESTRIAN_ROADKILL: 15,
+  COP_BASE: 50,
+  COP_MOTORBIKE: 75,
+
+  // Multipliers
+  PURSUIT_MULTIPLIER: 2, // Points doubled during pursuit
+  PANIC_MULTIPLIER: 2, // Points doubled for panicking pedestrians (stacks with pursuit)
+
+  // Combo system
+  COMBO_DURATION: 5.0, // Seconds before combo expires
+  COMBO_THRESHOLD_UNLIMITED: 10, // Combo level for unlimited kills
+
+  // Heat system
+  HEAT_MAX: 100,
+  HEAT_PER_PED_KILL: 10,
+  HEAT_PER_COP_KILL: 25,
+  HEAT_PER_MOTORBIKE_COP_KILL: 30,
+  HEAT_PER_MOTORBIKE_PED_KILL: 15,
+  HEAT_DEBUG_BOOST: 25,
+} as const;
+
+/**
+ * Vehicle interaction distances
+ */
+export const VEHICLE_INTERACTION = {
+  ENTER_DISTANCE: 15.0, // How close player must be to enter vehicle
+  EXIT_SPAWN_DISTANCE: 2.0, // How far player spawns from vehicle on exit
+} as const;
+
+/**
+ * Wanted stars thresholds (based on cop kills)
+ */
+export const WANTED_STARS = {
+  STAR_1: 1, // 1+ cop kills = 1 star
+  STAR_2: 3, // 3+ cop kills = 2 stars
+} as const;
+
+/**
+ * Rendering configuration
+ */
+export const RENDERING_CONFIG = {
+  GROUND_SIZE: 1000,
+  SHADOW_MAP_SIZE: 2048,
+  SHADOW_CAMERA_SIZE: 50,
+  SHADOW_CAMERA_NEAR: 0.5,
+  SHADOW_CAMERA_FAR: 200,
+} as const;
+
+// ============================================================================
+// Physics Collision Groups (Phase 2.5 - Code Quality)
+// Centralized bit flags for Rapier collision filtering
+// ============================================================================
+
+/**
+ * Collision group bit flags for Rapier physics
+ * Usage: colliderDesc.setCollisionGroups((membershipMask << 16) | filterMask)
+ * - Membership (high 16 bits): What group this collider belongs to
+ * - Filter (low 16 bits): What groups this collider can collide with
+ */
+export const COLLISION_GROUPS = {
+  GROUND: 0x0001,
+  PLAYER: 0x0002,
+  PEDESTRIAN: 0x0004,
+  COP: 0x0008,
+  DEBRIS: 0x0010,
+  PROJECTILE: 0x0020,
+  BUILDING: 0x0040,
+  VEHICLE: 0x0080,
+  COP_BIKE: 0x0100, // Motorbike cops
+} as const;

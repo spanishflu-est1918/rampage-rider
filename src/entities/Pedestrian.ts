@@ -24,7 +24,7 @@ import {
 export class Pedestrian extends THREE.Group {
   private rigidBody: RAPIER.RigidBody;
   private collider: RAPIER.Collider;
-  private characterController: RAPIER.KinematicCharacterController;
+  // Note: characterController removed - using simple position sync instead for performance
   private world: RAPIER.World;
   private mixer: THREE.AnimationMixer | null = null;
   private animations: THREE.AnimationClip[] = [];
@@ -46,6 +46,7 @@ export class Pedestrian extends THREE.Group {
 
   // Dead body knockback velocity (for ragdoll sliding)
   private deadVelocity: THREE.Vector3 = new THREE.Vector3();
+  private timeSinceDeath: number = 0; // Track time for raycast limiting
 
   // Pre-allocated vectors (reused every frame to avoid GC pressure)
   private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
@@ -104,7 +105,7 @@ export class Pedestrian extends THREE.Group {
 
     this.rigidBody = body;
     this.collider = collider;
-    this.characterController = controller;
+    // controller not stored - simple position sync used instead
 
     // Load character model
     this.loadModel(characterType);
@@ -278,6 +279,7 @@ export class Pedestrian extends THREE.Group {
 
     // Dead body ragdoll physics (bounce off car, buildings, and floor)
     if (this.isDead) {
+      this.timeSinceDeath += deltaTime;
       const speed = this.deadVelocity.length();
       if (speed > 0.5) {
         const currentPos = (this as THREE.Group).position;
@@ -286,7 +288,8 @@ export class Pedestrian extends THREE.Group {
         this.deadVelocity.y -= 25 * deltaTime;
 
         // Check for building collision via raycast (horizontal)
-        if (Math.abs(this.deadVelocity.x) + Math.abs(this.deadVelocity.z) > 1) {
+        // Only raycast for first 2 seconds after death to limit expense
+        if (this.timeSinceDeath < 2.0 && Math.abs(this.deadVelocity.x) + Math.abs(this.deadVelocity.z) > 1) {
           // Reuse pre-allocated ray to avoid per-frame allocation
           if (!this._deadBodyRay) {
             this._deadBodyRay = new RAPIER.Ray(
