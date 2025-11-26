@@ -47,6 +47,9 @@ export class Pedestrian extends THREE.Group {
   // Dead body knockback velocity (for ragdoll sliding)
   private deadVelocity: THREE.Vector3 = new THREE.Vector3();
 
+  // Pre-allocated vectors (reused every frame to avoid GC pressure)
+  private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
+
   // Instanced shadow system
   private shadowManager: InstancedBlobShadows;
   private shadowIndex: number = -1;
@@ -329,18 +332,19 @@ export class Pedestrian extends THREE.Group {
     // Pedestrians use Yuka's separation behavior to avoid each other
     // Buildings are avoided via flee behavior when they hit walls
     const yukaPos = this.yukaVehicle.position;
-    const newPosition = new THREE.Vector3(yukaPos.x, 0, yukaPos.z);
+    // Reuse pre-allocated vector instead of creating new one every frame
+    this._tempPosition.set(yukaPos.x, 0, yukaPos.z);
 
     // Sync Three.js position directly (much cheaper than character controller)
-    (this as THREE.Group).position.copy(newPosition);
+    (this as THREE.Group).position.copy(this._tempPosition);
 
     // Update instanced shadow position (stays on ground)
     if (this.shadowIndex >= 0) {
-      this.shadowManager.updateShadow(this.shadowIndex, newPosition.x, newPosition.z, this.shadowRadius);
+      this.shadowManager.updateShadow(this.shadowIndex, this._tempPosition.x, this._tempPosition.z, this.shadowRadius);
     }
 
     // Sync physics body position for collision detection by player
-    this.rigidBody.setNextKinematicTranslation({ x: newPosition.x, y: 0.5, z: newPosition.z });
+    this.rigidBody.setNextKinematicTranslation({ x: this._tempPosition.x, y: 0.5, z: this._tempPosition.z });
 
     // Sync rotation (Yuka handles orientation)
     if (this.yukaVehicle.velocity.length() > 0.1) {
