@@ -47,6 +47,12 @@ export class MotorbikeCop extends THREE.Group {
   // Yuka AI
   private yukaVehicle: YUKA.Vehicle;
   private yukaEntityManager: YUKA.EntityManager;
+  // Pre-allocated behaviors (reused, not recreated each frame)
+  private seekBehavior: YUKA.SeekBehavior;
+  private arriveBehavior: YUKA.ArriveBehavior;
+  private wanderBehavior: YUKA.WanderBehavior;
+  private separationBehavior: YUKA.SeparationBehavior;
+  private seekTarget: YUKA.Vector3; // Reusable target vector
 
   // State machine
   private state: MotorbikeCopState = MotorbikeCopState.PATROL;
@@ -120,6 +126,25 @@ export class MotorbikeCop extends THREE.Group {
     this.yukaVehicle.maxSpeed = this.maxSpeed;
     this.yukaVehicle.maxForce = MOTORBIKE_COP_CONFIG.MAX_FORCE;
     this.yukaVehicle.updateOrientation = false;
+
+    // Create steering behaviors ONCE (reused, weights adjusted per state)
+    this.seekTarget = new YUKA.Vector3(position.x, 0, position.z);
+
+    this.seekBehavior = new YUKA.SeekBehavior(this.seekTarget);
+    this.seekBehavior.weight = 0;
+    this.yukaVehicle.steering.add(this.seekBehavior);
+
+    this.arriveBehavior = new YUKA.ArriveBehavior(this.seekTarget);
+    this.arriveBehavior.weight = 0;
+    this.yukaVehicle.steering.add(this.arriveBehavior);
+
+    this.wanderBehavior = new YUKA.WanderBehavior();
+    this.wanderBehavior.weight = 0;
+    this.yukaVehicle.steering.add(this.wanderBehavior);
+
+    this.separationBehavior = new YUKA.SeparationBehavior();
+    this.separationBehavior.weight = 0.5;
+    this.yukaVehicle.steering.add(this.separationBehavior);
 
     this.yukaEntityManager.add(this.yukaVehicle);
 
@@ -293,13 +318,15 @@ export class MotorbikeCop extends THREE.Group {
 
   /**
    * Update AI behaviors based on current state
+   * NOTE: Behaviors created once in constructor, only weights/targets updated here
    */
   private updateBehaviors(deltaTime: number): void {
-    this.yukaVehicle.steering.clear();
-
     if (!this.lastTarget) return;
 
-    const flatTarget = new YUKA.Vector3(this.lastTarget.x, 0, this.lastTarget.z);
+    // Reset all weights first
+    this.seekBehavior.weight = 0;
+    this.arriveBehavior.weight = 0;
+    this.wanderBehavior.weight = 0;
 
     switch (this.state) {
       case MotorbikeCopState.PATROL:
@@ -307,39 +334,31 @@ export class MotorbikeCop extends THREE.Group {
         this.patrolTimer += deltaTime;
         this.patrolAngle = Math.sin(this.patrolTimer * 2) * 0.5;
 
-        const patrolTarget = flatTarget.clone();
-        patrolTarget.x += Math.sin(this.patrolAngle) * 10;
-        patrolTarget.z += Math.cos(this.patrolAngle) * 10;
-
-        const patrolSeek = new YUKA.SeekBehavior(patrolTarget);
-        patrolSeek.weight = 1.0;
-        this.yukaVehicle.steering.add(patrolSeek);
+        // Update seek target with patrol offset
+        this.seekTarget.set(
+          this.lastTarget.x + Math.sin(this.patrolAngle) * 10,
+          0,
+          this.lastTarget.z + Math.cos(this.patrolAngle) * 10
+        );
+        this.seekBehavior.weight = 1.0;
         break;
 
       case MotorbikeCopState.CHASE:
-        // Seek with flanking offset
-        const flankOffset = (Math.random() - 0.5) * 10;
-        const flankTarget = new YUKA.Vector3(
-          flatTarget.x + flankOffset,
+        // Seek with flanking offset (less random to avoid per-frame allocations)
+        const flankOffset = Math.sin(this.patrolTimer * 3) * 5;
+        this.seekTarget.set(
+          this.lastTarget.x + flankOffset,
           0,
-          flatTarget.z
+          this.lastTarget.z
         );
-
-        const seekBehavior = new YUKA.SeekBehavior(flankTarget);
-        seekBehavior.weight = 2.0;
-        this.yukaVehicle.steering.add(seekBehavior);
-
-        // Weave for unpredictability
-        const weaveBehavior = new YUKA.WanderBehavior();
-        weaveBehavior.weight = 0.3;
-        this.yukaVehicle.steering.add(weaveBehavior);
+        this.seekBehavior.weight = 2.0;
+        this.wanderBehavior.weight = 0.3;
         break;
 
       case MotorbikeCopState.RAM:
-        // Arrive at predicted position
-        const arriveBehavior = new YUKA.ArriveBehavior(flatTarget);
-        arriveBehavior.weight = 3.0;
-        this.yukaVehicle.steering.add(arriveBehavior);
+        // Arrive at player position
+        this.seekTarget.set(this.lastTarget.x, 0, this.lastTarget.z);
+        this.arriveBehavior.weight = 3.0;
         break;
 
       case MotorbikeCopState.STUNNED:
@@ -348,10 +367,7 @@ export class MotorbikeCop extends THREE.Group {
         break;
     }
 
-    // Separation from other cops
-    const separationBehavior = new YUKA.SeparationBehavior();
-    separationBehavior.weight = 0.5;
-    this.yukaVehicle.steering.add(separationBehavior);
+    // Separation always active (already set in constructor with weight 0.5)
   }
 
   /**
