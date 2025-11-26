@@ -163,13 +163,19 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 - [ ] Add game over screen with stats
 
 ### 6.3 Performance Optimization ✅
-- [x] Profile and optimize physics
 - [x] Implement animation LOD (skip distant entity animations)
 - [x] Optimize particle effects (Points instead of Sprites)
 - [x] Add blob shadows (cheaper than shadow maps)
 - [x] Implement object pooling (pedestrians)
-- [x] Fix per-frame allocations across all entities
+- [x] Eliminate per-frame Vector3/object allocations across all entities
+- [x] Pre-allocate RAPIER.Ray for dead body physics
+- [x] Pre-allocate YUKA flee behaviors for panic system
+- [x] Fix ParticleSystem using addScaledVector instead of clone().multiplyScalar()
+- [x] Simplify building model (379k → 78k vertices, ~80% reduction)
+- [x] Disable expensive interior point lights on buildings
 - [x] Optimize taser beam updates
+- [ ] Implement LOD system for meshes
+- [ ] Add quality settings
 
 ---
 
