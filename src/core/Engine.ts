@@ -246,10 +246,11 @@ export class Engine {
     this.ai.init();
     this.createTestGround();
 
+    // Initialize managers (pass shared AIManager to avoid duplicate Yuka updates)
     const world = this.physics.getWorld();
     if (world) {
-      this.crowd = new CrowdManager(this.scene, world);
-      this.cops = new CopManager(this.scene, world);
+      this.crowd = new CrowdManager(this.scene, world, this.ai);
+      this.cops = new CopManager(this.scene, world, this.ai);
       this.motorbikeCops = new MotorbikeCopManager(this.scene, world);
       this.buildings = new BuildingManager(this.scene, world);
       this.lampPosts = new LampPostManager(this.scene);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
-import * as YUKA from 'yuka';
 import { Cop } from '../entities/Cop';
+import { AIManager } from '../core/AIManager';
 
 /**
  * CopManager
@@ -15,16 +15,16 @@ export class CopManager {
   private cops: Cop[] = [];
   private scene: THREE.Scene;
   private world: RAPIER.World;
-  private entityManager: YUKA.EntityManager;
+  private aiManager: AIManager;
 
   private maxCops: number = 8;
   private spawnRadius: number = 15;
   private damageCallback: ((damage: number) => void) | null = null;
 
-  constructor(scene: THREE.Scene, world: RAPIER.World) {
+  constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
     this.world = world;
-    this.entityManager = new YUKA.EntityManager();
+    this.aiManager = aiManager;
   }
 
   /**
@@ -82,7 +82,7 @@ export class CopManager {
       playerPosition.z + Math.sin(angle) * distance
     );
 
-    const cop = new Cop(spawnPos, this.world, this.entityManager);
+    const cop = new Cop(spawnPos, this.world, this.aiManager.getEntityManager());
     cop.setParentScene(this.scene); // Enable visual effects
     if (this.damageCallback) {
       cop.setDamageCallback(this.damageCallback);
@@ -93,13 +93,10 @@ export class CopManager {
   }
 
   /**
-   * Update all cops
+   * Update all cops (Yuka AI updated by Engine's AIManager)
    * NOTE: Damage callback is set once via setDamageCallback(), not every frame
    */
   update(deltaTime: number, playerPosition: THREE.Vector3, wantedStars: number, playerCanBeTased: boolean): void {
-    // Update Yuka entity manager
-    this.entityManager.update(deltaTime);
-
     // Update all cops
     for (const cop of this.cops) {
       if (!cop.isDeadState()) {

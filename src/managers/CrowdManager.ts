@@ -3,6 +3,7 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
 import { Pedestrian } from '../entities/Pedestrian';
 import { InstancedBlobShadows } from '../rendering/InstancedBlobShadows';
+import { AIManager } from '../core/AIManager';
 
 /**
  * CrowdManager
@@ -17,7 +18,7 @@ export class CrowdManager {
   private pedestrianPool: Pedestrian[] = [];
   private scene: THREE.Scene;
   private world: RAPIER.World;
-  private entityManager: YUKA.EntityManager;
+  private aiManager: AIManager;
   private shadowManager: InstancedBlobShadows;
 
   // Deferred cleanup queue (clean AFTER physics step)
@@ -71,10 +72,10 @@ export class CrowdManager {
   // Pre-allocated vectors for per-frame operations (avoid GC pressure)
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
 
-  constructor(scene: THREE.Scene, world: RAPIER.World) {
+  constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
     this.world = world;
-    this.entityManager = new YUKA.EntityManager();
+    this.aiManager = aiManager;
 
     // Create instanced shadow manager (max 60 shadows for pedestrians)
     this.shadowManager = new InstancedBlobShadows(scene, 60);
@@ -133,7 +134,7 @@ export class CrowdManager {
       pedestrian = this.pedestrianPool.pop()!;
       pedestrian.reset(position, characterType);
     } else {
-      pedestrian = new Pedestrian(position, this.world, characterType, this.entityManager, this.shadowManager);
+      pedestrian = new Pedestrian(position, this.world, characterType, this.aiManager.getEntityManager(), this.shadowManager);
     }
 
     // Add to scene and list
@@ -285,12 +286,9 @@ export class CrowdManager {
   }
 
   /**
-   * Update all pedestrians and Yuka entity manager
+   * Update all pedestrians (Yuka AI updated by Engine's AIManager)
    */
   update(deltaTime: number, playerPosition: THREE.Vector3): void {
-    // Update Yuka entity manager (handles steering calculations)
-    this.entityManager.update(deltaTime);
-
     // Mark pedestrians for removal (don't remove during iteration)
     for (const pedestrian of this.pedestrians) {
       pedestrian.update(deltaTime);
@@ -355,8 +353,8 @@ export class CrowdManager {
     // Remove from scene
     this.scene.remove(pedestrian);
 
-    // Remove from Yuka entity manager
-    this.entityManager.remove(pedestrian.getYukaVehicle());
+    // Remove from Yuka entity manager via AIManager
+    this.aiManager.removeEntity(pedestrian.getYukaVehicle());
 
     // Add to pool for reuse
     this.pedestrianPool.push(pedestrian);
@@ -378,7 +376,7 @@ export class CrowdManager {
     this.pedestrianPool = [];
     this.deathTimers.clear();
     this.pedestriansToRemove = [];
-    this.entityManager.clear();
+    // Note: AIManager is shared, don't clear it here
 
     // Dispose shadow manager
     this.shadowManager.dispose();
