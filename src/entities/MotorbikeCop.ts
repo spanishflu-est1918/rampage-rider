@@ -270,61 +270,83 @@ export class MotorbikeCop extends THREE.Group {
    * Load a cop rider model and attach to the bike
    */
   private loadRider(): void {
-    const assetLoader = AssetLoader.getInstance();
-
-    // Pick a random cop model (same as foot cops)
-    const copModels = ['BlueSoldier_Male', 'Soldier_Male', 'BlueSoldier_Female', 'Soldier_Female'];
-    const randomCop = copModels[Math.floor(Math.random() * copModels.length)];
-    const modelPath = `/assets/pedestrians/${randomCop}.gltf`;
-
-    const cachedGltf = assetLoader.getModel(modelPath);
-    if (!cachedGltf) {
-      console.warn(`[MotorbikeCop] Rider model not in cache: ${modelPath}`);
-      return;
-    }
-
-    // Clone with skeleton for animation
-    const rider = SkeletonUtils.clone(cachedGltf.scene);
-
-    // Scale rider to match bike scale
-    const riderScale = 0.0032; // Slightly smaller than bike scale (0.004)
-    rider.scale.setScalar(riderScale);
-
-    // Position rider on the bike seat
-    rider.position.set(0, 0.55, -0.1); // Adjust Y for seat height, Z for forward/back
-    rider.rotation.y = 0; // Face forward
-
-    // Disable shadows (using blob shadow)
-    AnimationHelper.setupShadows(rider, false, false);
-
-    // Setup animation mixer and play SitDown animation
-    this.riderMixer = new THREE.AnimationMixer(rider);
-
-    // Find SitDown animation
-    const sitAnimation = cachedGltf.animations.find(
-      (clip: THREE.AnimationClip) => clip.name === 'SitDown'
-    );
-
-    if (sitAnimation) {
-      const action = this.riderMixer.clipAction(sitAnimation);
-      action.setLoop(THREE.LoopOnce, 1);
-      action.clampWhenFinished = true; // Stay in seated pose
-      action.play();
-      // Jump to end of animation to show seated pose
-      this.riderMixer.update(10); // Fast forward to seated pose
-    } else {
-      // Fallback to Idle if no SitDown
-      const idleAnimation = cachedGltf.animations.find(
-        (clip: THREE.AnimationClip) => clip.name === 'Idle'
-      );
-      if (idleAnimation) {
-        const action = this.riderMixer.clipAction(idleAnimation);
-        action.play();
+    try {
+      const assetLoader = AssetLoader.getInstance();
+      if (!assetLoader) {
+        console.warn('[MotorbikeCop] AssetLoader not available');
+        return;
       }
-    }
 
-    this.riderModel = rider;
-    this.modelContainer.add(rider);
+      // Pick a random cop model (same as foot cops)
+      const copModels = ['BlueSoldier_Male', 'Soldier_Male', 'BlueSoldier_Female', 'Soldier_Female'];
+      const randomCop = copModels[Math.floor(Math.random() * copModels.length)];
+      const modelPath = `/assets/pedestrians/${randomCop}.gltf`;
+
+      const cachedGltf = assetLoader.getModel(modelPath);
+      if (!cachedGltf || !cachedGltf.scene) {
+        console.warn(`[MotorbikeCop] Rider model not in cache: ${modelPath}`);
+        return;
+      }
+
+      // Clone with skeleton for animation - wrapped in try-catch for safety
+      let rider: THREE.Object3D;
+      try {
+        rider = SkeletonUtils.clone(cachedGltf.scene);
+      } catch (cloneError) {
+        console.warn('[MotorbikeCop] Failed to clone rider model:', cloneError);
+        return;
+      }
+
+      if (!rider) {
+        console.warn('[MotorbikeCop] Clone returned null');
+        return;
+      }
+
+      // Scale rider to match bike scale
+      const riderScale = 0.0032; // Slightly smaller than bike scale (0.004)
+      rider.scale.setScalar(riderScale);
+
+      // Position rider on the bike seat
+      rider.position.set(0, 0.55, -0.1); // Adjust Y for seat height, Z for forward/back
+      rider.rotation.y = 0; // Face forward
+
+      // Disable shadows (using blob shadow)
+      AnimationHelper.setupShadows(rider, false, false);
+
+      // Setup animation mixer and play SitDown animation
+      this.riderMixer = new THREE.AnimationMixer(rider);
+
+      // Find SitDown animation (only if animations exist)
+      if (cachedGltf.animations && cachedGltf.animations.length > 0) {
+        const sitAnimation = cachedGltf.animations.find(
+          (clip: THREE.AnimationClip) => clip.name === 'SitDown'
+        );
+
+        if (sitAnimation) {
+          const action = this.riderMixer.clipAction(sitAnimation);
+          action.setLoop(THREE.LoopOnce, 1);
+          action.clampWhenFinished = true; // Stay in seated pose
+          action.play();
+          // Jump to end of animation to show seated pose
+          this.riderMixer.update(10); // Fast forward to seated pose
+        } else {
+          // Fallback to Idle if no SitDown
+          const idleAnimation = cachedGltf.animations.find(
+            (clip: THREE.AnimationClip) => clip.name === 'Idle'
+          );
+          if (idleAnimation) {
+            const action = this.riderMixer.clipAction(idleAnimation);
+            action.play();
+          }
+        }
+      }
+
+      this.riderModel = rider;
+      this.modelContainer.add(rider);
+    } catch (error) {
+      console.error('[MotorbikeCop] Failed to load rider:', error);
+      // Don't rethrow - rider is optional, bike can work without it
+    }
   }
 
   private createFallbackMesh(): void {
