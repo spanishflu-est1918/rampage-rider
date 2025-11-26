@@ -59,6 +59,7 @@ export class Cop extends THREE.Group {
   private taserBeam: THREE.Line | null = null;
   private taserBeamActive: boolean = false;
   private taserBeamPositions: Float32Array | null = null; // Reusable buffer
+  private taserBeamUpdateCounter: number = 0; // Update every N frames for performance
   private bulletProjectile: THREE.Mesh | null = null;
   private bulletTarget: THREE.Vector3 | null = null;
   private bulletSpeed: number = 40; // units per second
@@ -369,9 +370,13 @@ export class Cop extends THREE.Group {
     // Update bullet projectile movement
     this.updateBulletProjectile(deltaTime);
 
-    // Update taser beam if active (follows cop and player)
+    // Update taser beam every 3 frames for performance (60fps → 20fps updates)
     if (this.taserBeamActive && this.lastTarget) {
-      this.updateTaserBeam(this.lastTarget);
+      this.taserBeamUpdateCounter++;
+      if (this.taserBeamUpdateCounter >= 3) {
+        this.updateTaserBeam(this.lastTarget);
+        this.taserBeamUpdateCounter = 0;
+      }
     }
 
     // Attack logic: if within range and cooldown ready, execute attack
@@ -694,24 +699,25 @@ export class Cop extends THREE.Group {
 
   /**
    * Update bullet projectile movement
-   * NOTE: Uses pre-allocated _tempDirection vector to avoid GC pressure
+   * NOTE: Uses pre-allocated _tempDirection vector AND squared distance to avoid GC pressure + sqrt
    */
   private updateBulletProjectile(deltaTime: number): void {
     if (!this.bulletProjectile || !this.bulletTarget) return;
 
-    // Use pre-allocated vector for direction
-    this._tempDirection
-      .subVectors(this.bulletTarget, this.bulletProjectile.position)
-      .normalize();
+    // Use pre-allocated vector for direction (avoids GC pressure)
+    this._tempDirection.subVectors(this.bulletTarget, this.bulletProjectile.position);
 
-    const distance = this.bulletProjectile.position.distanceTo(this.bulletTarget);
+    // Use squared distance to avoid expensive sqrt
+    const distanceSq = this._tempDirection.lengthSq();
     const moveDistance = this.bulletSpeed * deltaTime;
+    const moveDistanceSq = moveDistance * moveDistance;
 
-    if (distance <= moveDistance) {
+    if (distanceSq <= moveDistanceSq) {
       // Bullet reached target
       this.removeBulletProjectile();
     } else {
       // Move bullet toward target
+      this._tempDirection.normalize();
       this.bulletProjectile.position.add(this._tempDirection.multiplyScalar(moveDistance));
     }
   }

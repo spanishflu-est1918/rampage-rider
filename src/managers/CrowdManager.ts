@@ -107,8 +107,8 @@ export class CrowdManager {
     for (let i = 0; i < this.maxPedestrians; i++) {
       this.spawnPedestrian(playerPosition);
     }
-
-    this.setupFlocking();
+    // Note: Flocking behaviors (separation, alignment, cohesion) are set up
+    // in Pedestrian constructor, no need for separate setupFlocking()
   }
 
   /**
@@ -143,32 +143,6 @@ export class CrowdManager {
 
     // Set wander behavior
     pedestrian.setWanderBehavior();
-  }
-
-  /**
-   * Setup Yuka flocking behavior for all pedestrians
-   */
-  private setupFlocking(): void {
-    // Create alignment, cohesion, and separation behaviors
-    for (const pedestrian of this.pedestrians) {
-      const vehicle = pedestrian.getYukaVehicle();
-
-      // Alignment: steer towards average heading of neighbors
-      const alignmentBehavior = new YUKA.AlignmentBehavior();
-      alignmentBehavior.weight = 0.1;
-      vehicle.steering.add(alignmentBehavior);
-
-      // Cohesion: steer towards average position of neighbors
-      const cohesionBehavior = new YUKA.CohesionBehavior();
-      cohesionBehavior.weight = 0.1;
-      vehicle.steering.add(cohesionBehavior);
-
-      // Separation: avoid crowding neighbors (most important)
-      const separationBehavior = new YUKA.SeparationBehavior();
-      separationBehavior.weight = 1.5;
-      vehicle.steering.add(separationBehavior);
-    }
-
   }
 
   /**
