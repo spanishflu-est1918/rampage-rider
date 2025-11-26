@@ -265,7 +265,9 @@ export class CrowdManager {
   update(deltaTime: number, playerPosition: THREE.Vector3): void {
     // Mark pedestrians for removal (don't remove during iteration)
     for (const pedestrian of this.pedestrians) {
-      pedestrian.update(deltaTime);
+      // Calculate distance once for both removal check and animation LOD
+      const distance = (pedestrian as THREE.Group).position.distanceTo(playerPosition);
+      pedestrian.update(deltaTime, distance);
 
       // Track and remove dead pedestrians after death animation
       if (pedestrian.isDeadState()) {
@@ -285,8 +287,7 @@ export class CrowdManager {
         }
       }
 
-      // Mark pedestrians that wandered too far for removal
-      const distance = (pedestrian as THREE.Group).position.distanceTo(playerPosition);
+      // Mark pedestrians that wandered too far for removal (distance already calculated above)
       if (distance > 40 && !pedestrian.isDeadState()) {
         this.pedestriansToRemove.push(pedestrian);
       }

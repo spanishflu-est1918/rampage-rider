@@ -110,7 +110,9 @@ export class CopManager {
         cop.setChaseTarget(playerPosition);
       }
 
-      cop.update(deltaTime);
+      // Calculate distance for animation LOD
+      const distance = (cop as THREE.Group).position.distanceTo(playerPosition);
+      cop.update(deltaTime, distance);
     }
   }
 

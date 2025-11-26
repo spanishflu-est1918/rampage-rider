@@ -324,11 +324,14 @@ export class Cop extends THREE.Group {
   /**
    * Update cop AI and animation
    */
-  update(deltaTime: number): void {
+  update(deltaTime: number, distanceToPlayer?: number): void {
     if (!this.modelLoaded) return;
 
-    // Update animation mixer
-    if (this.mixer) {
+    // Skip expensive animation updates for distant cops (LOD optimization)
+    const skipAnimation = distanceToPlayer !== undefined && distanceToPlayer > 25;
+
+    // Update animation mixer (skip for distant entities)
+    if (this.mixer && !skipAnimation) {
       this.mixer.update(deltaTime);
     }
 

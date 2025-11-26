@@ -119,11 +119,14 @@ export class Engine {
   private cameraShakeDecay: number = 5;
   private cameraBasePosition: THREE.Vector3 = new THREE.Vector3();
   private cameraBaseQuaternion: THREE.Quaternion = new THREE.Quaternion();
+  private lastPlayerPosition: THREE.Vector3 = new THREE.Vector3();
+  private cameraMoveThreshold: number = 0.1; // Only update camera if player moved this much
 
   // Pre-allocated vectors for update loop (avoid GC pressure)
   private readonly _tempCameraPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempLookAt: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempScreenPos: THREE.Vector3 = new THREE.Vector3();
+
   private input: InputState = {
     up: false,
     down: false,
@@ -1412,40 +1415,50 @@ export class Engine {
         ? this.vehicle.getPosition()
         : this.player?.getPosition() || new THREE.Vector3();
 
-      // Isometric camera with fixed offset (reuse pre-allocated vector)
-      this._tempCameraPos.set(
-        targetPos.x + 2.5,
-        targetPos.y + 6.25,
-        targetPos.z + 2.5
-      );
+      // Only update camera if target moved significantly (performance optimization)
+      // Uses squared distance to avoid sqrt
+      const targetMoveDist = targetPos.distanceToSquared(this.lastPlayerPosition);
+      const shouldUpdateCamera = targetMoveDist > (this.cameraMoveThreshold * this.cameraMoveThreshold);
 
-      // Smooth lerp camera to follow target
-      this.camera.position.lerp(this._tempCameraPos, 0.1);
+      if (shouldUpdateCamera || this.shakeIntensity > 0) {
+        // Isometric camera with fixed offset (reuse pre-allocated vector)
+        this._tempCameraPos.set(
+          targetPos.x + 2.5,
+          targetPos.y + 6.25,
+          targetPos.z + 2.5
+        );
 
-      // Apply screen shake AFTER lerp (so it's not smoothed out)
-      if (this.shakeIntensity > 0) {
-        const shakeX = (Math.random() - 0.5) * this.shakeIntensity;
-        const shakeY = (Math.random() - 0.5) * this.shakeIntensity;
-        const shakeZ = (Math.random() - 0.5) * this.shakeIntensity;
+        // Smooth lerp camera to follow target
+        this.camera.position.lerp(this._tempCameraPos, 0.1);
 
-        this.camera.position.x += shakeX;
-        this.camera.position.y += shakeY;
-        this.camera.position.z += shakeZ;
+        // Apply screen shake AFTER lerp (so it's not smoothed out)
+        if (this.shakeIntensity > 0) {
+          const shakeX = (Math.random() - 0.5) * this.shakeIntensity;
+          const shakeY = (Math.random() - 0.5) * this.shakeIntensity;
+          const shakeZ = (Math.random() - 0.5) * this.shakeIntensity;
 
-        // Decay shake intensity
-        this.shakeIntensity -= dt * 2; // Decay over time instead of exponential
-        if (this.shakeIntensity < 0) {
-          this.shakeIntensity = 0;
+          this.camera.position.x += shakeX;
+          this.camera.position.y += shakeY;
+          this.camera.position.z += shakeZ;
+
+          // Decay shake intensity
+          this.shakeIntensity -= dt * 2; // Decay over time instead of exponential
+          if (this.shakeIntensity < 0) {
+            this.shakeIntensity = 0;
+          }
         }
+
+        // Only recalculate lookAt when target moved significantly (reuse pre-allocated vector)
+        if (shouldUpdateCamera) {
+          this._tempLookAt.set(targetPos.x, targetPos.y, targetPos.z);
+          this.camera.lookAt(this._tempLookAt);
+          this.lastPlayerPosition.copy(targetPos);
+        }
+
+        // Update base position AND rotation AFTER lookAt (so render() preserves both)
+        this.cameraBasePosition.copy(this.camera.position);
+        this.cameraBaseQuaternion.copy(this.camera.quaternion);
       }
-
-      // Camera always looks at target position (reuse pre-allocated vector)
-      this._tempLookAt.set(targetPos.x, targetPos.y, targetPos.z);
-      this.camera.lookAt(this._tempLookAt);
-
-      // Update base position AND rotation AFTER lookAt (so render() preserves both)
-      this.cameraBasePosition.copy(this.camera.position);
-      this.cameraBaseQuaternion.copy(this.camera.quaternion);
     }
 
     // Update cop health bars (project 3D positions to 2D screen space)
