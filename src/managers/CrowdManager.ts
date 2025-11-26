@@ -68,6 +68,9 @@ export class CrowdManager {
 
   private totalWeight: number;
 
+  // Pre-allocated vectors for per-frame operations (avoid GC pressure)
+  private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
     this.world = world;
@@ -211,8 +214,9 @@ export class CrowdManager {
         let inCone = true;
 
         if (direction) {
-          const toPedestrian = new THREE.Vector3().subVectors(pedPos, position).normalize();
-          const dotProduct = direction.dot(toPedestrian);
+          // Reuse pre-allocated vector for cone check
+          this._tempDirection.subVectors(pedPos, position).normalize();
+          const dotProduct = direction.dot(this._tempDirection);
           const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
           inCone = angle <= coneAngle / 2;
         }
@@ -270,11 +274,12 @@ export class CrowdManager {
       const distance = pedPos.distanceTo(playerPosition);
 
       if (distance < collisionRadius) {
-        const knockbackDir = new THREE.Vector3()
+        // Reuse pre-allocated vector for knockback direction
+        this._tempDirection
           .subVectors(pedPos, playerPosition)
           .setY(0);
 
-        pedestrian.applyKnockback(knockbackDir, knockbackForce);
+        pedestrian.applyKnockback(this._tempDirection, knockbackForce);
       }
     }
   }

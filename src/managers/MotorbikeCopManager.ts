@@ -39,8 +39,9 @@ export class MotorbikeCopManager {
   // Damage callback (set once, not every frame)
   private damageCallback: ((damage: number, isRam: boolean) => void) | null = null;
 
-  // Pre-allocated vector for distance calculations (avoid GC pressure)
+  // Pre-allocated vectors (avoid GC pressure)
   private readonly _tempCopPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
@@ -322,8 +323,9 @@ export class MotorbikeCopManager {
         let inCone = true;
 
         if (direction) {
-          const toCop = new THREE.Vector3().subVectors(copPos, position).normalize();
-          const dotProduct = direction.dot(toCop);
+          // Reuse pre-allocated vector for cone check
+          this._tempDirection.subVectors(copPos, position).normalize();
+          const dotProduct = direction.dot(this._tempDirection);
           const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
           inCone = angle <= coneAngle / 2;
         }
