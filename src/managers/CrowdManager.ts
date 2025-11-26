@@ -194,14 +194,17 @@ export class CrowdManager {
     let panicKillCount = 0;
     const killPositions: THREE.Vector3[] = [];
 
+    // Pre-calculate squared radius to avoid sqrt in hot loop
+    const radiusSq = radius * radius;
+
     for (const pedestrian of this.pedestrians) {
       if (pedestrian.isDeadState()) continue;
       if (killCount >= maxKills) break;
 
       const pedPos = (pedestrian as THREE.Group).position;
-      const distance = pedPos.distanceTo(position);
+      const distanceSq = pedPos.distanceToSquared(position);
 
-      if (distance < radius) {
+      if (distanceSq < radiusSq) {
         let inCone = true;
 
         if (direction) {
@@ -237,15 +240,17 @@ export class CrowdManager {
    * Only knocks back DEAD pedestrians - alive ones get killed by damageInRadius first
    */
   applyVehicleKnockback(carPosition: THREE.Vector3, carVelocity: THREE.Vector3, radius: number): void {
+    const radiusSq = radius * radius;
+
     for (const pedestrian of this.pedestrians) {
       // Only knock back dead pedestrians (ragdoll effect)
       // Alive pedestrians should be killed by damageInRadius, not pushed away
       if (!pedestrian.isDeadState()) continue;
 
       const pedPos = (pedestrian as THREE.Group).position;
-      const distance = pedPos.distanceTo(carPosition);
+      const distanceSq = pedPos.distanceToSquared(carPosition);
 
-      if (distance < radius) {
+      if (distanceSq < radiusSq) {
         pedestrian.applyVehicleKnockback(carPosition, carVelocity);
       }
     }
@@ -256,15 +261,16 @@ export class CrowdManager {
    */
   handlePlayerCollisions(playerPosition: THREE.Vector3): void {
     const collisionRadius = 1.2;
+    const collisionRadiusSq = collisionRadius * collisionRadius;
     const knockbackForce = 10.0;
 
     for (const pedestrian of this.pedestrians) {
       if (pedestrian.isDeadState()) continue;
 
       const pedPos = (pedestrian as THREE.Group).position;
-      const distance = pedPos.distanceTo(playerPosition);
+      const distanceSq = pedPos.distanceToSquared(playerPosition);
 
-      if (distance < collisionRadius) {
+      if (distanceSq < collisionRadiusSq) {
         // Reuse pre-allocated vector for knockback direction
         this._tempDirection
           .subVectors(pedPos, playerPosition)

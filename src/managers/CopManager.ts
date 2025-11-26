@@ -136,15 +136,16 @@ export class CopManager {
   } {
     let killCount = 0;
     const killPositions: THREE.Vector3[] = [];
+    const radiusSq = radius * radius;
 
     for (const cop of this.cops) {
       if (cop.isDeadState()) continue;
       if (killCount >= maxKills) break;
 
       const copPos = (cop as THREE.Group).position;
-      const distance = copPos.distanceTo(position);
+      const distanceSq = copPos.distanceToSquared(position);
 
-      if (distance < radius) {
+      if (distanceSq < radiusSq) {
         let inCone = true;
 
         if (direction) {
