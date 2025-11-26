@@ -56,11 +56,8 @@ export class CrowdManager {
     { type: 'Doctor_Female_Young', weight: 1 },
     { type: 'Doctor_Male_Young', weight: 1 },
 
-    // Rare: Military/Tactical (weight 0.5)
-    { type: 'BlueSoldier_Female', weight: 0.5 },
-    { type: 'BlueSoldier_Male', weight: 0.5 },
-    { type: 'Soldier_Female', weight: 0.5 },
-    { type: 'Soldier_Male', weight: 0.5 },
+    // Rare: Ninja characters (weight 0.5)
+    // NOTE: BlueSoldier and Soldier models are reserved for cops
     { type: 'Ninja_Female', weight: 0.5 },
     { type: 'Ninja_Male', weight: 0.5 },
     { type: 'Ninja_Sand', weight: 0.5 },
