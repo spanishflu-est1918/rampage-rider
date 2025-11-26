@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { BlobShadow, createBlobShadow } from '../rendering/BlobShadow';
@@ -77,6 +78,10 @@ export class MotorbikeCop extends THREE.Group {
   private sirenLight: THREE.PointLight | null = null;
   private sirenPhase: number = 0;
   private parentScene: THREE.Scene | null = null;
+
+  // Rider (cop on the bike)
+  private riderMixer: THREE.AnimationMixer | null = null;
+  private riderModel: THREE.Object3D | null = null;
 
   // Attack effects
   private taserBeam: THREE.Line | null = null;
@@ -251,11 +256,75 @@ export class MotorbikeCop extends THREE.Group {
         }
       });
 
+      // Load rider (cop on the bike)
+      this.loadRider();
+
       this.modelLoaded = true;
     } catch (error) {
       console.error('[MotorbikeCop] Failed to load model:', error);
       this.createFallbackMesh();
     }
+  }
+
+  /**
+   * Load a cop rider model and attach to the bike
+   */
+  private loadRider(): void {
+    const assetLoader = AssetLoader.getInstance();
+
+    // Pick a random cop model (same as foot cops)
+    const copModels = ['BlueSoldier_Male', 'Soldier_Male', 'BlueSoldier_Female', 'Soldier_Female'];
+    const randomCop = copModels[Math.floor(Math.random() * copModels.length)];
+    const modelPath = `/assets/pedestrians/${randomCop}.gltf`;
+
+    const cachedGltf = assetLoader.getModel(modelPath);
+    if (!cachedGltf) {
+      console.warn(`[MotorbikeCop] Rider model not in cache: ${modelPath}`);
+      return;
+    }
+
+    // Clone with skeleton for animation
+    const rider = SkeletonUtils.clone(cachedGltf.scene);
+
+    // Scale rider to match bike scale
+    const riderScale = 0.0032; // Slightly smaller than bike scale (0.004)
+    rider.scale.setScalar(riderScale);
+
+    // Position rider on the bike seat
+    rider.position.set(0, 0.55, -0.1); // Adjust Y for seat height, Z for forward/back
+    rider.rotation.y = 0; // Face forward
+
+    // Disable shadows (using blob shadow)
+    AnimationHelper.setupShadows(rider, false, false);
+
+    // Setup animation mixer and play SitDown animation
+    this.riderMixer = new THREE.AnimationMixer(rider);
+
+    // Find SitDown animation
+    const sitAnimation = cachedGltf.animations.find(
+      (clip: THREE.AnimationClip) => clip.name === 'SitDown'
+    );
+
+    if (sitAnimation) {
+      const action = this.riderMixer.clipAction(sitAnimation);
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true; // Stay in seated pose
+      action.play();
+      // Jump to end of animation to show seated pose
+      this.riderMixer.update(10); // Fast forward to seated pose
+    } else {
+      // Fallback to Idle if no SitDown
+      const idleAnimation = cachedGltf.animations.find(
+        (clip: THREE.AnimationClip) => clip.name === 'Idle'
+      );
+      if (idleAnimation) {
+        const action = this.riderMixer.clipAction(idleAnimation);
+        action.play();
+      }
+    }
+
+    this.riderModel = rider;
+    this.modelContainer.add(rider);
   }
 
   private createFallbackMesh(): void {
@@ -816,6 +885,12 @@ export class MotorbikeCop extends THREE.Group {
     if (this.sirenLight) {
       (this as THREE.Group).remove(this.sirenLight);
       this.sirenLight.dispose();
+    }
+
+    // Dispose rider mixer
+    if (this.riderMixer) {
+      this.riderMixer.stopAllAction();
+      this.riderMixer = null;
     }
 
     this.modelContainer.traverse((child) => {
