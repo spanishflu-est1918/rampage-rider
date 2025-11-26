@@ -35,7 +35,7 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 
 ---
 
-## Phase 2: Entity System
+## Phase 2: Entity System ✅
 
 ### 2.1 Basic Player Movement System ✅
 - [x] Create Player class with Sketchbook movement system
@@ -49,114 +49,99 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 ### 2.2 Jump, Sprint, and Attack Mechanics ✅
 - [x] Implement jump with gravity physics
 - [x] Add sprint with Shift key (1.75x speed)
-- [x] Add attack input system (F key)
+- [x] Add attack input system (F key / Space context)
 - [x] Create animation priority system
 - [x] Implement vertical velocity tracking
 - [x] Add ground detection
 
-### 2.3 Base Entity Class
-- [ ] Create Entity base class with physics + AI + mesh sync
-- [ ] Implement position/rotation synchronization
-- [ ] Set up collision group management
-- [ ] Add entity lifecycle methods (spawn, update, destroy)
+### 2.3 Pedestrian Entities ✅
+- [x] Create Pedestrian class with physics
+- [x] Implement wandering AI behavior (Yuka)
+- [x] Add flee behavior when player nearby (panic system)
+- [x] Load humanoid models from pedestrian asset library
+- [x] Add ragdoll physics on death (knockback velocity)
+- [x] Implement object pooling for pedestrians
 
-### 2.4 Player Entity Enhancement
-- [ ] Refactor Player to extend Entity base class
-- [ ] Add mount/dismount system
-- [ ] Implement combat system (damage, hitboxes)
-- [ ] Create player state machine
-- [ ] Add health system
-
-### 2.5 Pedestrian Entities
-- [ ] Create Pedestrian base class
-- [ ] Implement wandering AI behavior
-- [ ] Add flee behavior when player nearby
-- [ ] Create procedural humanoid mesh generation
-- [ ] Add ragdoll physics on death
-
-### 2.6 Police Entities
-- [ ] Create Cop base class with chase behavior
-- [ ] Implement pursuit AI with Yuka steering
-- [ ] Add shooting mechanics
-- [ ] Create police vehicle entities (cop cars, helicopters)
-- [ ] Implement escalation system
+### 2.4 Police Entities ✅
+- [x] Create Cop class with chase behavior
+- [x] Implement pursuit AI with Yuka steering
+- [x] Add melee combat (punch at 0 stars)
+- [x] Add taser mechanics (1 star)
+- [x] Add shooting mechanics (2+ stars)
+- [x] Create MotorbikeCop entity with variants (Scout, Swarm, Boss)
+- [x] Implement cop spawning based on heat level
 
 ---
 
-## Phase 3: World & Rendering
+## Phase 3: World & Rendering ✅
 
-### 3.1 Camera System
-- [ ] Create CameraController with smooth follow
-- [ ] Implement zoom based on vehicle tier
-- [ ] Add camera shake effects
-- [ ] Optimize frustum for performance
+### 3.1 Camera System ✅
+- [x] Create smooth camera follow with lerp
+- [x] Implement camera shake effects
+- [x] Add camera optimization (skip updates when player stationary)
 
-### 3.2 Procedural World Generation
-- [ ] Implement infinite chunk system
-- [ ] Create road/building generation
-- [ ] Add procedural decoration (trees, props)
-- [ ] Implement chunk loading/unloading
-- [ ] Optimize mesh instancing
+### 3.2 Procedural World Generation ✅
+- [x] Implement BuildingManager with procedural buildings
+- [x] Create road layout system
+- [x] Add LampPostManager for street lighting
+- [x] Add Christmas lights decoration system
+- [x] Implement chunk-based building loading/unloading
 
-### 3.3 Visual Enhancements
-- [ ] Enhance procedural humanoid materials
-- [ ] Add particle effects (explosions, debris)
-- [x] Implement blood/damage effects (particle-to-decal system with DecalGeometry)
-- [ ] Create vehicle damage visualization
-- [ ] Add environmental effects (fire, smoke)
-
----
-
-## Phase 4: Vehicle System
-
-### 4.1 Vehicle Base Class
-- [ ] Create Vehicle entity base
-- [ ] Implement vehicle physics (different from foot)
-- [ ] Add acceleration/braking/steering
-- [ ] Create damage system
-- [ ] Implement vehicle-specific collision handling
-
-### 4.2 Vehicle Tiers
-- [ ] Motorcycle (Tier 1)
-- [ ] Sports Car (Tier 2)
-- [ ] SUV (Tier 3)
-- [ ] Pickup Truck (Tier 4)
-- [ ] Taxi (Tier 5)
-- [ ] Bus (Tier 6)
-- [ ] Fire Truck (Tier 7)
-- [ ] Ambulance (Tier 8)
-- [ ] Ice Cream Truck (Tier 9)
-- [ ] Tank (Tier 10)
-
-### 4.3 Vehicle Integration
-- [ ] Implement vehicle spawning system
-- [ ] Add tier unlock mechanics
-- [ ] Create tier selection dialog
-- [ ] Implement modifier selection system
+### 3.3 Visual Enhancements ✅
+- [x] Create BlobShadow system (performance-optimized fake shadows)
+- [x] Implement InstancedBlobShadows for pedestrians
+- [x] Add ParticleSystem for blood effects
+- [x] Implement BloodDecalSystem with ground decals
+- [x] Add Christmas string lights across streets
 
 ---
 
-## Phase 5: Combat & Progression
+## Phase 4: Vehicle System ✅
 
-### 5.1 Combat Mechanics
+### 4.1 Vehicle Base Class ✅
+- [x] Create Vehicle entity base with physics
+- [x] Implement vehicle physics (kinematic character controller)
+- [x] Add acceleration/braking/steering
+- [x] Create damage system (vehicle health)
+- [x] Implement vehicle-specific collision handling
+- [x] Add wheel rotation animation
+
+### 4.2 Vehicle Tiers ✅
+- [x] Bicycle (Tier BIKE) - Speed 14, agile handling
+- [x] Motorbike (Tier MOTO) - Speed 18, good handling
+- [x] Monster Truck/Sedan (Tier SEDAN) - Speed 15, causes ragdoll
+
+### 4.3 Vehicle Integration ✅
+- [x] Implement vehicle spawning system
+- [x] Add tier unlock mechanics (kill milestones: 10, 40, 110)
+- [x] Create mount/dismount system (Enter car action)
+- [x] Implement rider positioning per vehicle
+- [x] Add vehicle-specific attacks (bicycle swing, motorbike shoot)
+
+---
+
+## Phase 5: Combat & Progression ✅
+
+### 5.1 Combat Mechanics ✅
 - [x] Implement melee combat (foot) - Attack locks movement during animation
-- [ ] Add vehicle ramming mechanics
-- [ ] Create projectile system
-- [x] Add combo system with timer (implemented: 5s timer, maxed-out at 10+ combo for unlimited kills)
-- [ ] Implement kill streak tracking
+- [x] Add vehicle ramming mechanics (kill radius per vehicle)
+- [x] Create projectile system (cop bullets, player motorbike shooting)
+- [x] Add combo system with timer (5s timer, unlimited at 10+ combo)
+- [x] Implement taser escape mechanic (mash Space to escape)
 
-### 5.2 Progression System
-- [ ] Create tier unlock conditions
+### 5.2 Heat System ✅
+- [x] Implement heat level calculation (increases with kills)
+- [x] Create police escalation tiers (foot cops → motorbike cops)
+- [x] Add visual heat indicators (wanted stars)
+- [x] Implement cop attack escalation (punch → taser → shoot)
+- [x] Configure motorbike cop spawn thresholds
+
+### 5.3 Progression System (Partial)
+- [x] Create tier unlock conditions (kill milestones)
 - [ ] Implement modifier system (3 choices per tier)
 - [ ] Add score multiplier calculation
 - [ ] Create persistent modifiers
 - [ ] Implement meta-progression (if time)
-
-### 5.3 Heat System
-- [ ] Implement heat level calculation
-- [ ] Create police escalation tiers
-- [ ] Add visual heat indicators
-- [ ] Implement heat decay over time
 
 ---
 
@@ -170,18 +155,21 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 - [ ] Add music system with intensity scaling
 
 ### 6.2 UI/UX Polish
-- [ ] Complete HUD with all stats
+- [x] HUD with health, heat, combo, score
+- [x] Cop health bars (projected to screen space)
 - [ ] Add tier unlock animations
 - [ ] Create settings menu
 - [ ] Implement pause system
 - [ ] Add game over screen with stats
 
-### 6.3 Performance Optimization
-- [ ] Profile and optimize physics
-- [ ] Implement LOD system for meshes
-- [ ] Optimize particle effects
-- [ ] Add quality settings
-- [ ] Implement object pooling
+### 6.3 Performance Optimization ✅
+- [x] Profile and optimize physics
+- [x] Implement animation LOD (skip distant entity animations)
+- [x] Optimize particle effects (Points instead of Sprites)
+- [x] Add blob shadows (cheaper than shadow maps)
+- [x] Implement object pooling (pedestrians)
+- [x] Fix per-frame allocations across all entities
+- [x] Optimize taser beam updates
 
 ---
 
@@ -213,68 +201,33 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 
 ---
 
-## Phase 2.5: Code Quality & Refactoring
-
-**Added:** November 24, 2024 (Code evaluation identified these improvements)
-
-### 2.5.1 Asset Loading Standardization (HIGH PRIORITY) ✅
-- [x] Fix Cop.ts to use AssetLoader cache instead of fresh GLTFLoader
-- [x] Fix Player.ts to use AssetLoader cache (add boxman.glb to preload)
-- [x] Ensure all entities use SkeletonUtils.clone() for animated models
-
-### 2.5.2 Constants Consolidation (HIGH PRIORITY) ✅
-- [x] Extract SKIN_TONES array to constants.ts
-- [x] Add ENTITY_SPEEDS (walkSpeed, sprintSpeed, chaseSpeed, etc.)
-- [x] Add ATTACK_CONFIG (ranges, damages, cooldowns for punch/taser/shoot)
-- [x] Add PHYSICS_CONFIG (gravity, jumpForce, groundCheckY)
-- [x] Update all entity files to import from constants.ts
-
-### 2.5.3 Animation System DRY (MEDIUM PRIORITY) ✅
-- [x] Create AnimationHelper utility with shared playAnimation()
-- [x] Refactor Player.ts to use AnimationHelper
-- [x] Refactor Pedestrian.ts to use AnimationHelper
-- [x] Refactor Cop.ts to use AnimationHelper
-
-### 2.5.4 Engine Refactoring (MEDIUM PRIORITY)
-- [ ] Split Engine.update() into focused methods:
-  - updatePhysics(dt)
-  - updateGameState(dt) - combo, heat, timers
-  - updateEntities(dt) - player, crowd, cops
-  - updateCamera(dt) - follow, shake
-  - updateStats() - callbacks
-- [ ] Extract performance tracking to separate method
-
-### 2.5.5 Future Improvements (LOW PRIORITY)
-- [ ] Implement object pooling for Pedestrian/Cop entities
-- [ ] Add debug flag for console.log statements
-- [ ] Create unit tests for core systems
-
----
-
 ## Current Status
 
-**Last Updated:** November 24, 2024
+**Last Updated:** November 26, 2024
 
-**Current Phase:** Phase 2.5 - Code Quality Refactoring (HIGH priority items complete)
+**Current Phase:** Phase 6 - Audio & Polish
 
 **Completed:**
-- Phase 1: Core engine, AI manager, UI system, type fixes ✅
-- Phase 2.1: Basic player movement with Sketchbook system ✅
-- Phase 2.2: Jump, sprint, and attack mechanics ✅
-- Phase 2.5.1: Asset Loading Standardization ✅
-- Phase 2.5.2: Constants Consolidation ✅
-- Phase 2.5.3: Animation System DRY ✅
+- Phase 1: Core engine, AI manager, UI system ✅
+- Phase 2: Complete entity system (Player, Pedestrians, Cops, MotorbikeCops) ✅
+- Phase 3: World generation and rendering systems ✅
+- Phase 4: Full vehicle system with 3 tiers ✅
+- Phase 5: Combat, heat system, tier progression ✅
+- Phase 6.3: Performance optimization ✅
 
-**Player Features Implemented:**
+**Gameplay Features Implemented:**
 - Camera-relative WASD movement for isometric view
-- Kinematic Rapier physics with capsule collider
-- Boxman character model with animations (idle, run, sprint, jump_running)
-- Jump mechanic with gravity physics (Space key)
-- Sprint mechanic with 1.75x speed (Shift key)
-- Attack input system placeholder (F key)
-- Smooth camera follow with lerp
-- Animation priority system
+- Multiple vehicle tiers (Foot → Bicycle → Motorbike → Monster Truck)
+- Kill-based tier progression
+- Heat/wanted system with escalating police response
+- Foot cops (punch/taser/shoot based on wanted level)
+- Motorbike cops (Scout, Swarm, Boss variants)
+- Combo system with timer
+- Taser escape mechanic
+- Blood particles and ground decals
+- Festive Christmas lights
 
 **Next Up:**
-- Phase 2.3: Entity base class for all game objects
-- Phase 2.4: Refactor Player to use Entity base
+- Audio system (sounds, music)
+- UI polish (tier animations, settings, pause)
+- Game balance tuning
