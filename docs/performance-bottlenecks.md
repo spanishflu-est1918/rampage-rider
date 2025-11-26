@@ -160,10 +160,11 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Fix**: Pre-build lookup table
 - **Impact**: Very Low - only on spawn
 
-### 20. Performance Stats History Arrays
-**Location**: `src/core/Engine.ts:617-644`
+### 20. Performance Stats History Arrays ✅ FIXED
+**Location**: `src/core/Engine.ts:84-94`
 - **Issue**: Array push/shift operations every frame
 - **Fix**: Use circular buffer
+- **Status**: ✅ Fixed - All 11 history arrays now use `CircularBuffer` class with O(1) push and built-in average()
 - **Impact**: Low
 
 ### 21. SkeletonUtils.clone() Cost
@@ -269,11 +270,11 @@ This document identifies all performance bottlenecks in the Rampage Rider codeba
 - **Status**: INTENTIONAL - Only roof materials (`lambert1`) are cloned because each building needs independent opacity for proximity-based fade effect (lines 358-362). Base model materials remain shared. With only 4 buildings in pool, this is 4 roof materials per building = minimal overhead.
 - **Impact**: Acceptable - only ~16 cloned materials total (vs 40+ originally estimated)
 
-### 32. Bullet/Taser Geometry Per Instance ✅ PARTIALLY FIXED
-**Location**: `src/entities/Cop.ts:667-678, 753-764`
+### 32. Bullet/Taser Geometry Per Instance ✅ FIXED
+**Location**: `src/entities/Cop.ts`, `src/entities/MotorbikeCop.ts`
 - **Issue**: New geometry created for every bullet and taser beam
 - **Fix**: Share geometry across instances
-- **Status**: ✅ Fixed for bullets - now uses static `sharedBulletGeometry` and `sharedBulletMaterial`
+- **Status**: ✅ Fixed - Both Cop.ts and MotorbikeCop.ts now use static `sharedBulletGeometry` and `sharedBulletMaterial`. Taser beams still create geometry per-fire (needed for dynamic updates) but use pre-allocated vectors for calculation.
 - **Impact**: Memory churn during combat
 
 ---
