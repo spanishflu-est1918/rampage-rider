@@ -119,6 +119,11 @@ export class Engine {
   private cameraShakeDecay: number = 5;
   private cameraBasePosition: THREE.Vector3 = new THREE.Vector3();
   private cameraBaseQuaternion: THREE.Quaternion = new THREE.Quaternion();
+
+  // Pre-allocated vectors for update loop (avoid GC pressure)
+  private readonly _tempCameraPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempLookAt: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempScreenPos: THREE.Vector3 = new THREE.Vector3();
   private input: InputState = {
     up: false,
     down: false,
@@ -1406,15 +1411,15 @@ export class Engine {
         ? this.vehicle.getPosition()
         : this.player?.getPosition() || new THREE.Vector3();
 
-      // Isometric camera with fixed offset
-      const targetCameraPos = new THREE.Vector3(
+      // Isometric camera with fixed offset (reuse pre-allocated vector)
+      this._tempCameraPos.set(
         targetPos.x + 2.5,
         targetPos.y + 6.25,
         targetPos.z + 2.5
       );
 
       // Smooth lerp camera to follow target
-      this.camera.position.lerp(targetCameraPos, 0.1);
+      this.camera.position.lerp(this._tempCameraPos, 0.1);
 
       // Apply screen shake AFTER lerp (so it's not smoothed out)
       if (this.shakeIntensity > 0) {
@@ -1433,9 +1438,9 @@ export class Engine {
         }
       }
 
-      // Camera always looks at target position
-      const lookAtTarget = new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z);
-      this.camera.lookAt(lookAtTarget);
+      // Camera always looks at target position (reuse pre-allocated vector)
+      this._tempLookAt.set(targetPos.x, targetPos.y, targetPos.z);
+      this.camera.lookAt(this._tempLookAt);
 
       // Update base position AND rotation AFTER lookAt (so render() preserves both)
       this.cameraBasePosition.copy(this.camera.position);
@@ -1448,14 +1453,15 @@ export class Engine {
       this.stats.copHealthBars = copData.map(cop => {
         // Project 3D world position to 2D screen coordinates
         // Just offset up from cop's actual position for head height
-        const screenPos = cop.position.clone();
-        screenPos.y += 1.5; // Offset up to above head
-        screenPos.project(this.camera);
+        // Reuse pre-allocated vector instead of clone()
+        this._tempScreenPos.copy(cop.position);
+        this._tempScreenPos.y += 1.5; // Offset up to above head
+        this._tempScreenPos.project(this.camera);
 
         // Convert normalized device coordinates to screen pixels
         const canvas = this.renderer.domElement;
-        const x = (screenPos.x * 0.5 + 0.5) * canvas.clientWidth;
-        const y = (-(screenPos.y * 0.5) + 0.5) * canvas.clientHeight;
+        const x = (this._tempScreenPos.x * 0.5 + 0.5) * canvas.clientWidth;
+        const y = (-(this._tempScreenPos.y * 0.5) + 0.5) * canvas.clientHeight;
 
         return {
           x,
