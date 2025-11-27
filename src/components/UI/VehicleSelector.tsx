@@ -11,7 +11,8 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({ onSelect, currentVehi
     { type: null, icon: '🚶', label: 'Foot' },
     { type: VehicleType.BICYCLE, icon: '🚲', label: 'Bicycle' },
     { type: VehicleType.MOTORBIKE, icon: '🏍️', label: 'Motorbike' },
-    { type: VehicleType.SEDAN, icon: '🚗', label: 'Truck' },
+    { type: VehicleType.SEDAN, icon: '🚗', label: 'Car' },
+    { type: VehicleType.TRUCK, icon: '🚛', label: '18-Wheeler' },
   ];
 
   return (

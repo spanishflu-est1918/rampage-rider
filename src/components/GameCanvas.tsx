@@ -16,9 +16,10 @@ interface GameCanvasProps {
   onKillNotification?: (notification: KillNotification) => void;
   gameActive: boolean;
   onEngineReady?: (controls: EngineControls) => void;
+  onPauseToggle?: () => void; // ESC key handler
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKillNotification, gameActive, onEngineReady }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKillNotification, gameActive, onEngineReady, onPauseToggle }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const [engineReady, setEngineReady] = useState(false);
@@ -123,6 +124,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
 
     const handleKey = (e: KeyboardEvent, isDown: boolean) => {
       if (!engineRef.current) return;
+
+      // ESC to pause
+      if (isDown && e.code === 'Escape') {
+        onPauseToggle?.();
+        return;
+      }
 
       // Camera rotation with Q/E/W/S
       if (isDown) {
