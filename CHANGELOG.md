@@ -10,6 +10,135 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2024-11-27]
+
+### ESC to Pause
+
+**Added:**
+- ESC key toggles pause state
+- Pause overlay shows "PAUSED" with "Press ESC to resume"
+- Game loop stops when paused (no physics/entity updates)
+
+**Files Modified:**
+- `src/components/GameCanvas.tsx` - Added `onPauseToggle` prop, ESC key handler
+- `src/App.tsx` - Added `togglePause` callback, PAUSED state UI overlay
+
+### Vehicle Switching Fix
+
+**Fixed:**
+- Player can now switch from current vehicle to awaiting vehicle while riding
+- Added `SWITCH_VEHICLE` action type (separate from `ENTER_CAR`)
+- ActionController now checks `isNearAwaitingVehicle` context
+
+**Files Modified:**
+- `src/core/ActionController.ts` - Added `SWITCH_VEHICLE` action, `isNearAwaitingVehicle` context
+- `src/core/Engine.ts` - Updated action handling to use new SWITCH_VEHICLE action
+
+### 18-Wheeler Truck Tier
+
+**Added:**
+- **New Tier: TRUCK (Tier 5)** - "Road Destroyer"
+  - Unlocks at 10,000 score
+  - Speed: 12 (slow but unstoppable)
+  - Turn speed: 2.5 (very wide turns - it's an 18-wheeler!)
+  - Health: 300 (tank-level)
+  - Kill radius: 5.0 (massive)
+  - **DESTROYS BUILDINGS!**
+
+- **VehicleType.TRUCK** - New vehicle type with config
+  - Model path: `/assets/vehicles/truck.glb` (needs model file)
+  - Large collider: 1.5 × 1.2 × 4.0 (long boi)
+
+- **Building destruction mechanic**
+  - Truck collisions check against buildings
+  - Destroyed buildings hide for 5 seconds, then respawn
+  - 500 base points per building destroyed
+  - Big camera shake (5.0 intensity)
+  - Massive particle explosion (200 particles)
+  - +50 heat per building
+  - Messages: "DEMOLISHED!", "WRECKED!", "CRUSHED!", "LEVELED!", "OBLITERATED!"
+
+- **Debug selector updated** - Truck icon (🚛) added
+
+**Score Thresholds (Updated):**
+- BIKE: 150 score
+- MOTO: 1000 score
+- SEDAN: 4000 score
+- TRUCK: 10000 score
+
+**Files Modified:**
+- `src/types.ts` - Added `Tier.TRUCK`
+- `src/constants.ts` - Added `VehicleType.TRUCK`, `TIER_CONFIGS[Tier.TRUCK]`, `VEHICLE_CONFIGS[VehicleType.TRUCK]`, `TIER_VEHICLE_MAP[Tier.TRUCK]`
+- `src/core/Engine.ts` - Added SEDAN→TRUCK progression check, `handleBuildingDestruction()`, truck collision detection
+- `src/core/AssetLoader.ts` - Added truck.glb to preload list
+- `src/managers/BuildingManager.ts` - Added `getBuildingAtPosition()`, `destroyBuilding()`, `checkTruckCollision()`
+- `src/components/UI/VehicleSelector.tsx` - Added truck to debug selector
+
+**TODO:**
+- Download 18-wheeler GLB model from Sketchfab (Free Low Poly Vehicles Pack has "Truck with trailer")
+- Place at `/public/assets/vehicles/truck.glb`
+- Adjust `modelScale` and `modelOffsetY` based on actual model dimensions
+
+---
+
+## [2024-11-26]
+
+### Vehicle Upgrade System
+
+**Added:**
+- **Awaiting vehicle system** - Next tier vehicles now spawn separately when milestone is reached
+  - When player is in a vehicle and reaches next tier milestone, upgrade spawns nearby
+  - Player approaches the glowing vehicle and presses Space to switch
+  - Old vehicle remains for 3 seconds before cleanup (performance optimization)
+
+- **Vehicle glow effect** - Awaiting vehicles pulse with cyan-green glow
+  - Uses emissive material properties (performant, no extra lights)
+  - Pulsing animation: 0.5-1.5 intensity at 3Hz
+  - Glow clears when player enters the vehicle
+  - Reuses existing damage flash pattern from `Vehicle.flashDamage()`
+
+- **Vehicle switching mechanic**
+  - Space key now switches to awaiting vehicle when near (priority over attack)
+  - Works for all tier upgrades: BIKE→MOTO, MOTO→SEDAN
+  - Smooth transition: exit current vehicle → enter new vehicle
+  - Camera shake on vehicle switch
+
+- **Tier progression logic refactor**
+  - `checkTierProgression()` - Determines next tier based on current tier (not just kills)
+  - First vehicle (BIKE at 10 kills) spawns directly for player to enter
+  - Subsequent upgrades spawn as "awaiting" vehicles
+  - Prevents double-spawning (checks for existing awaiting vehicle)
+
+**Files Modified:**
+- `src/core/Engine.ts` - Added awaiting vehicle system, glow effects, vehicle switching
+  - New properties: `awaitingVehicle`, `awaitingVehicleTier`, `awaitingVehicleGlowTime`, `vehiclesToCleanup`
+  - New methods: `checkTierProgression()`, `spawnAwaitingVehicle()`, `setVehicleGlow()`, `updateAwaitingVehicleGlow()`, `switchToAwaitingVehicle()`, `updateVehicleCleanup()`, `isPlayerNearAwaitingVehicle()`
+
+- `CLAUDE.md` - Added performance requirement for effects
+  - "CRITICAL: All effects must be super performant"
+  - "Any new effect must reuse existing patterns"
+
+### Score-Based Tier Progression
+
+**Changed:**
+- **Tier unlocks now based on SCORE instead of kills**
+  - Score incorporates combo multipliers, pursuit bonuses, kill types
+  - Rewards skilled play: maintaining combos, pursuit kills (2x), cop kills (50-75 pts)
+  - UI updated to show "pts" remaining instead of "Kills"
+
+**Score Thresholds:**
+- BIKE: 150 score (~10 kills with basic combo)
+- MOTO: 1000 score (~40 kills with pursuit/combo bonuses)
+- SEDAN: 4000 score (~110 kills with high multipliers)
+
+**Files Modified:**
+- `src/types.ts` - Changed `TierConfig.minKills` to `TierConfig.minScore`
+- `src/constants.ts` - Updated TIER_CONFIGS with score thresholds
+- `src/core/Engine.ts` - Updated `checkTierProgression()` to use score
+- `src/components/UI/Overlay.tsx` - Updated progress bar and "NEXT UNLOCK" display
+
+---
+
 ## [2024-11-25]
 
 ### Performance Optimizations

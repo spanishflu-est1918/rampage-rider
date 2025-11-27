@@ -118,6 +118,20 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 - [x] Implement rider positioning per vehicle
 - [x] Add vehicle-specific attacks (bicycle swing, motorbike shoot)
 
+### 4.4 Vehicle Upgrade System ✅
+- [x] Implement awaiting vehicle system (next tier spawns separately from current)
+- [x] Add pulsing glow effect to awaiting vehicles (visible from distance)
+- [x] Implement Space key switching between vehicles (approach + press)
+- [x] Delayed cleanup of old vehicles (3 seconds after switching)
+- [x] Ensure safe spawn positions (streets only, raycast validation)
+
+### 4.5 Truck Tier (Building Destroyer) ✅
+- [x] Add TRUCK tier (Tier 5) - unlocks at 10,000 score
+- [x] Configure truck vehicle (slow, wide turns, huge kill radius)
+- [x] Implement building destruction mechanic (truck-only ability)
+- [x] Add truck to debug vehicle selector
+- [ ] Add 18-wheeler GLB model (download from Sketchfab)
+
 ---
 
 ## Phase 5: Combat & Progression ✅
@@ -136,10 +150,11 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 - [x] Implement cop attack escalation (punch → taser → shoot)
 - [x] Configure motorbike cop spawn thresholds
 
-### 5.3 Progression System (Partial)
-- [x] Create tier unlock conditions (kill milestones)
+### 5.3 Progression System ✅
+- [x] Create tier unlock conditions (score-based, not kills)
+- [x] Score thresholds: BIKE=150, MOTO=1000, SEDAN=4000
+- [x] Score incorporates combo multipliers, pursuit bonuses, kill types
 - [ ] Implement modifier system (3 choices per tier)
-- [ ] Add score multiplier calculation
 - [ ] Create persistent modifiers
 - [ ] Implement meta-progression (if time)
 
@@ -157,9 +172,9 @@ This document outlines the complete implementation roadmap for Rampage Rider. Wh
 ### 6.2 UI/UX Polish
 - [x] HUD with health, heat, combo, score
 - [x] Cop health bars (projected to screen space)
+- [x] Implement pause system (ESC key)
 - [ ] Add tier unlock animations
 - [ ] Create settings menu
-- [ ] Implement pause system
 - [ ] Add game over screen with stats
 
 ### 6.3 Performance Optimization ✅

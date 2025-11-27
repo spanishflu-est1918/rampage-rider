@@ -286,8 +286,12 @@ src/
 
 ## Performance Considerations
 
+**CRITICAL: All effects must be super performant.** This is a hard requirement for any visual effect, particle system, or shader added to the game.
+
 - Target: 60fps desktop, 30fps mobile
 - Physics step runs at display refresh rate (not fixed timestep currently)
+- **Any new effect must reuse existing patterns** - check what's already implemented before adding new effects
+- Prefer simple additive blending, emissive materials, and animated uniforms over complex particle systems
 - Future: Implement object pooling for entities and particles
 - Future: LOD system for distant entities (>20u: reduce polys, >40u: cull)
 - Future: InstancedMesh for repeated objects (debris, trash cans)
