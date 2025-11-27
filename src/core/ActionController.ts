@@ -7,6 +7,7 @@ export enum ActionType {
   NONE = 'NONE',
   ATTACK = 'ATTACK',
   ENTER_CAR = 'ENTER_CAR',
+  SWITCH_VEHICLE = 'SWITCH_VEHICLE', // Switch from current vehicle to awaiting vehicle
   ESCAPE_TASER = 'ESCAPE_TASER',
 }
 
@@ -16,6 +17,7 @@ export enum ActionType {
 export interface ActionContext {
   isTased: boolean;
   isNearCar: boolean;
+  isNearAwaitingVehicle: boolean; // Near an upgrade vehicle while in current vehicle
   isInVehicle: boolean;
 }
 
@@ -24,8 +26,9 @@ export interface ActionContext {
  *
  * Priority order (highest first):
  * 1. Escape taser (when tased)
- * 2. Enter car (when near car and not in vehicle)
- * 3. Attack (default when on foot)
+ * 2. Switch vehicle (when in vehicle and near awaiting upgrade)
+ * 3. Enter car (when near car and not in vehicle)
+ * 4. Attack (default)
  */
 export class ActionController {
   private lastActionPressed: boolean = false;
@@ -48,12 +51,17 @@ export class ActionController {
       return { action: ActionType.ESCAPE_TASER, isNewPress };
     }
 
-    // Priority 2: Enter car (only on new press)
+    // Priority 2: Switch vehicle (when in vehicle and near awaiting upgrade)
+    if (context.isInVehicle && context.isNearAwaitingVehicle) {
+      return { action: ActionType.SWITCH_VEHICLE, isNewPress };
+    }
+
+    // Priority 3: Enter car (only on new press, when not in vehicle)
     if (context.isNearCar && !context.isInVehicle) {
       return { action: ActionType.ENTER_CAR, isNewPress };
     }
 
-    // Priority 3: Attack (works on foot AND in vehicle - Engine handles vehicle attacks)
+    // Priority 4: Attack (works on foot AND in vehicle - Engine handles vehicle attacks)
     return { action: ActionType.ATTACK, isNewPress };
   }
 

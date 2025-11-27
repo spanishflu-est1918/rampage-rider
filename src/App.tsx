@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
-import Overlay from './components/ui/Overlay';
-import NotificationSystem, { NotificationController } from './components/ui/NotificationSystem';
-import SnowOverlay from './components/ui/SnowOverlay';
-import VehicleSelector from './components/ui/VehicleSelector';
-import AnimationSelector from './components/ui/AnimationSelector';
-import { MainMenu, GameOver } from './components/ui/Menus';
+import Overlay from './components/UI/Overlay';
+import NotificationSystem, { NotificationController } from './components/UI/NotificationSystem';
+import SnowOverlay from './components/UI/SnowOverlay';
+import VehicleSelector from './components/UI/VehicleSelector';
+import AnimationSelector from './components/UI/AnimationSelector';
+import { MainMenu, GameOver } from './components/UI/Menus';
 import { GameState, GameStats, Tier, KillNotification } from './types';
 import { VehicleType } from './constants';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -72,6 +72,14 @@ function App() {
     setGameState(GameState.PLAYING);
   };
 
+  const togglePause = useCallback(() => {
+    if (gameState === GameState.PLAYING) {
+      setGameState(GameState.PAUSED);
+    } else if (gameState === GameState.PAUSED) {
+      setGameState(GameState.PLAYING);
+    }
+  }, [gameState]);
+
   // Debug vehicle spawning
   const engineControlsRef = useRef<EngineControls | null>(null);
   const [currentVehicle, setCurrentVehicle] = useState<VehicleType | null>(null);
@@ -128,6 +136,7 @@ function App() {
           onGameOver={handleGameOver}
           onKillNotification={handleKillNotification}
           onEngineReady={handleEngineReady}
+          onPauseToggle={togglePause}
         />
       </ErrorBoundary>
 
@@ -156,6 +165,15 @@ function App() {
             />
           </div>
         </>
+      )}
+
+      {gameState === GameState.PAUSED && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-white retro mb-8">PAUSED</h1>
+            <p className="text-white/60 text-sm retro">Press ESC to resume</p>
+          </div>
+        </div>
       )}
 
       {gameState === GameState.GAME_OVER && (
