@@ -5,6 +5,8 @@ import { AIManager } from './AIManager';
 import { CrowdManager } from '../managers/CrowdManager';
 import { CopManager } from '../managers/CopManager';
 import { MotorbikeCopManager } from '../managers/MotorbikeCopManager';
+import { BikeCopManager } from '../managers/BikeCopManager';
+import { CopCarManager } from '../managers/CopCarManager';
 import { BuildingManager } from '../managers/BuildingManager';
 import { LampPostManager } from '../managers/LampPostManager';
 import { Player } from '../entities/Player';
@@ -42,6 +44,8 @@ export class Engine {
   public crowd: CrowdManager | null = null;
   public cops: CopManager | null = null;
   public motorbikeCops: MotorbikeCopManager | null = null;
+  public bikeCops: BikeCopManager | null = null;
+  public copCars: CopCarManager | null = null;
   public buildings: BuildingManager | null = null;
   public lampPosts: LampPostManager | null = null;
   public particles: ParticleEmitter;
@@ -240,6 +244,10 @@ export class Engine {
   private vehicleSpawned: boolean = false;
   private currentVehicleTier: Tier | null = null;
 
+  // Vehicle respawn cooldown after destruction
+  private vehicleRespawnCooldown: number = 0;
+  private static readonly VEHICLE_RESPAWN_COOLDOWN_TIME = 15; // 15 seconds before can get new vehicle
+
   // Awaiting vehicle (next tier upgrade, spawns when milestone reached)
   private awaitingVehicle: Vehicle | null = null;
   private awaitingVehicleTier: Tier | null = null;
@@ -319,7 +327,9 @@ export class Engine {
     if (world) {
       this.crowd = new CrowdManager(this.scene, world, this.ai);
       this.cops = new CopManager(this.scene, world, this.ai);
-      // this.motorbikeCops = new MotorbikeCopManager(this.scene, world, this.ai); // Disabled for performance
+      this.motorbikeCops = new MotorbikeCopManager(this.scene, world, this.ai);
+      this.bikeCops = new BikeCopManager(this.scene, world, this.ai);
+      this.copCars = new CopCarManager(this.scene, world, this.ai);
       this.buildings = new BuildingManager(this.scene, world);
       this.lampPosts = new LampPostManager(this.scene);
     }
@@ -438,6 +448,7 @@ export class Engine {
     }
     this.isInVehicle = false;
     this.vehicleSpawned = false;
+    this.vehicleRespawnCooldown = 0; // Reset cooldown on new game
     this.actionController.reset();
 
     if (this.crowd) {
@@ -475,6 +486,21 @@ export class Engine {
       });
     }
 
+    if (this.bikeCops) {
+      this.bikeCops.clear();
+      // Bike cops ram attack damages vehicle, then player if dismounted
+      this.bikeCops.setDamageCallback((damage: number) => {
+        if (this.isInVehicle && this.vehicle) {
+          // Damage the bicycle
+          this.vehicle.takeDamage(damage);
+          this.shakeCamera(0.5);
+        } else if (this.player) {
+          // If player dismounted, damage player directly
+          this.player.takeDamage(damage);
+        }
+      });
+    }
+
     if (this.motorbikeCops) {
       this.motorbikeCops.clear();
       // Set damage callback once (not every frame)
@@ -508,6 +534,20 @@ export class Engine {
                 this.callbacks.onGameOver({ ...this.stats });
               }
             });
+          }
+        }
+      });
+    }
+
+    if (this.copCars) {
+      this.copCars.clear();
+      // Cop cars ram damage to vehicle (with directional check for truck)
+      this.copCars.setDamageCallback((damage: number, attackerPosition: THREE.Vector3) => {
+        if (this.isInVehicle && this.vehicle) {
+          // Use directional damage - truck only takes damage from sides/back
+          const tookDamage = this.vehicle.takeDamageFromPosition(damage, attackerPosition);
+          if (tookDamage) {
+            this.shakeCamera(1.5);
           }
         }
       });
@@ -804,8 +844,8 @@ export class Engine {
     // If we should unlock a tier and no vehicle is spawned yet (first unlock)
     // OR if we have a current vehicle but need to spawn an upgrade
     if (nextTier !== null) {
-      if (!this.vehicleSpawned) {
-        // First vehicle - spawn as current vehicle (not awaiting)
+      if (!this.vehicleSpawned && this.vehicleRespawnCooldown <= 0) {
+        // First vehicle (or respawn after cooldown) - spawn as current vehicle
         this.spawnVehicle(nextTier);
       } else if (this.isInVehicle) {
         // Player is in a vehicle - spawn the upgrade as awaiting
@@ -933,9 +973,14 @@ export class Engine {
   }
 
   /**
-   * Update vehicles pending cleanup
+   * Update vehicles pending cleanup and respawn cooldown
    */
   private updateVehicleCleanup(dt: number): void {
+    // Update vehicle respawn cooldown
+    if (this.vehicleRespawnCooldown > 0) {
+      this.vehicleRespawnCooldown -= dt;
+    }
+
     for (let i = this.vehiclesToCleanup.length - 1; i >= 0; i--) {
       const entry = this.vehiclesToCleanup[i];
       entry.timer -= dt;
@@ -985,6 +1030,9 @@ export class Engine {
     this.isInVehicle = false;
     this.vehicleSpawned = false;
     this.stats.tier = Tier.FOOT;
+
+    // Start vehicle respawn cooldown
+    this.vehicleRespawnCooldown = Engine.VEHICLE_RESPAWN_COOLDOWN_TIME;
 
     this.shakeCamera(2.0);
     this.particles.emitBlood(vehiclePos, 100);
@@ -1037,6 +1085,10 @@ export class Engine {
       if (this.cops) {
         this.cops.applyKnockbackInRadius(position, radius, force);
         this.cops.clearTaserBeams();
+      }
+      if (this.bikeCops) {
+        this.bikeCops.applyKnockbackInRadius(position, radius, force);
+        this.bikeCops.clearTaserBeams();
       }
       if (this.particles) {
         this.particles.emitBlood(position, 50);
@@ -1141,9 +1193,11 @@ export class Engine {
     }
     const pedDamageTime = performance.now() - pedDamageStart;
 
-    // --- Cop damage ---
+    // --- Cop damage (foot cops, bike cops, motorbike cops) ---
     const copDamageStart = performance.now();
     let copKills = 0;
+
+    // Foot cops
     if (this.cops) {
       const copResult = this.cops.damageInRadius(
         attackPosition,
@@ -1153,7 +1207,7 @@ export class Engine {
         attackDirection,
         coneAngle
       );
-      copKills = copResult.kills;
+      copKills += copResult.kills;
 
       if (copResult.kills > 0) {
         const basePoints = SCORING_CONFIG.COP_BASE;
@@ -1167,6 +1221,35 @@ export class Engine {
         allKillPositions.push(...copResult.positions);
 
         for (let i = 0; i < copResult.kills; i++) {
+          this.triggerKillNotification(Engine.randomFrom(Engine.COP_KILL_MESSAGES), true, pointsPerKill);
+        }
+      }
+    }
+
+    // Bike cops
+    if (this.bikeCops) {
+      const bikeResult = this.bikeCops.damageInRadius(
+        attackPosition,
+        copAttackRadius,
+        damage,
+        maxKills - copKills,
+        attackDirection,
+        coneAngle
+      );
+      copKills += bikeResult.kills;
+
+      if (bikeResult.kills > 0) {
+        const basePoints = SCORING_CONFIG.COP_BASE;
+        const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
+        this.stats.score += bikeResult.kills * pointsPerKill;
+        this.stats.copKills += bikeResult.kills;
+        this.updateWantedStars();
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (bikeResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
+
+        totalKills += bikeResult.kills;
+        allKillPositions.push(...bikeResult.positions);
+
+        for (let i = 0; i < bikeResult.kills; i++) {
           this.triggerKillNotification(Engine.randomFrom(Engine.COP_KILL_MESSAGES), true, pointsPerKill);
         }
       }
@@ -1244,6 +1327,7 @@ export class Engine {
       }
     }
 
+    // Foot cops
     if (this.cops) {
       const copResult = this.cops.damageInRadius(
         attackPosition,
@@ -1265,6 +1349,33 @@ export class Engine {
         allKillPositions.push(...copResult.positions);
 
         for (let i = 0; i < copResult.kills; i++) {
+          this.triggerKillNotification('COP CYCLIST!', true, pointsPerKill);
+        }
+      }
+    }
+
+    // Bike cops
+    if (this.bikeCops) {
+      const bikeResult = this.bikeCops.damageInRadius(
+        attackPosition,
+        attackRadius + 1,
+        damage,
+        maxKills - totalKills,
+        this._tempVehicleDir,
+        coneAngle
+      );
+
+      if (bikeResult.kills > 0) {
+        const basePoints = SCORING_CONFIG.COP_BASE;
+        const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
+        this.stats.score += bikeResult.kills * pointsPerKill;
+        this.stats.copKills += bikeResult.kills;
+        this.updateWantedStars();
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (bikeResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
+        totalKills += bikeResult.kills;
+        allKillPositions.push(...bikeResult.positions);
+
+        for (let i = 0; i < bikeResult.kills; i++) {
           this.triggerKillNotification('COP CYCLIST!', true, pointsPerKill);
         }
       }
@@ -1322,6 +1433,7 @@ export class Engine {
       }
     }
 
+    // Foot cops
     if (this.cops) {
       const copResult = this.cops.damageInRadius(
         attackPosition,
@@ -1343,6 +1455,31 @@ export class Engine {
         allKillPositions.push(...copResult.positions);
 
         this.triggerKillNotification('COP KILLER!', true, pointsPerKill);
+      }
+    }
+
+    // Motorbike cops
+    if (this.motorbikeCops) {
+      const motoResult = this.motorbikeCops.damageInRadius(
+        attackPosition,
+        attackRadius,
+        damage,
+        maxKills - totalKills,
+        this._tempVehicleDir,
+        coneAngle
+      );
+
+      if (motoResult.kills > 0) {
+        const basePoints = SCORING_CONFIG.COP_MOTORBIKE;
+        const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
+        this.stats.score += motoResult.kills * pointsPerKill + motoResult.points;
+        this.stats.copKills += motoResult.kills;
+        this.updateWantedStars();
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (motoResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_COP_KILL));
+        totalKills += motoResult.kills;
+        allKillPositions.push(...motoResult.positions);
+
+        this.triggerKillNotification('BIKER DOWN!', true, pointsPerKill);
       }
     }
 
@@ -1703,32 +1840,64 @@ export class Engine {
       ? this.vehicle.getVelocity()
       : this._zeroVelocity;
 
-    // Cops (foot cops and motorbike cops)
+    // Cops - spawn type depends on player's current vehicle tier
     const copsStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
-    // Regular foot cops (damage callback set once in resetGame, not every frame)
+    const playerCanBeTased = !this.isInVehicle && this.player ? this.player.canBeTased() : false;
+
+    // Regular foot cops - only when player is on foot (not spawning or updating when in any vehicle)
     if (this.cops) {
-      this.cops.updateSpawns(this.stats.heat, currentPos);
-
-      const playerCanBeTased = !this.isInVehicle && this.player ? this.player.canBeTased() : false;
-
-      this.cops.update(dt, currentPos, this.stats.wantedStars, playerCanBeTased);
+      if (!this.isInVehicle) {
+        this.cops.updateSpawns(this.stats.heat, currentPos);
+        this.cops.update(dt, currentPos, this.stats.wantedStars, playerCanBeTased);
+      }
     }
 
-    // Motorbike cops (heat-based pursuit system)
+    // Bike cops - only when player is on bicycle
+    if (this.bikeCops) {
+      if (this.isInVehicle && this.currentVehicleTier === Tier.BIKE) {
+        this.bikeCops.updateSpawns(this.stats.heat, currentPos, dt);
+      }
+      this.bikeCops.update(dt, currentPos, playerCanBeTased);
+    }
+
+    // Motorbike cops - only when player is on motorbike or higher
     if (this.motorbikeCops) {
-      this.motorbikeCops.updateSpawns(this.stats.heat, currentPos, playerVelocity, dt);
-
-      const playerCanBeTased = !this.isInVehicle && this.player ? this.player.canBeTased() : false;
-
-      // NOTE: Damage callback is set once in resetGame(), not every frame
+      if (this.isInVehicle && this.currentVehicleTier !== null &&
+          this.currentVehicleTier !== Tier.FOOT && this.currentVehicleTier !== Tier.BIKE) {
+        this.motorbikeCops.updateSpawns(this.stats.heat, currentPos, playerVelocity, dt);
+      }
       this.motorbikeCops.update(dt, currentPos, playerVelocity, this.stats.wantedStars, playerCanBeTased);
+    }
+
+    // Cop cars - only when player is in sedan or truck
+    if (this.copCars) {
+      if (this.isInVehicle && this.currentVehicleTier !== null &&
+          (this.currentVehicleTier === Tier.SEDAN || this.currentVehicleTier === Tier.TRUCK)) {
+        this.copCars.updateSpawns(this.stats.heat, currentPos, playerVelocity, dt);
+
+        // Truck tramples cop cars
+        if (this.currentVehicleTier === Tier.TRUCK && this.vehicle) {
+          const trampleResult = this.copCars.trampleInRadius(currentPos, 6.0);
+          if (trampleResult.kills > 0) {
+            this.stats.score += trampleResult.points;
+            this.stats.copKills += trampleResult.kills;
+            this.shakeCamera(2.0);
+            for (const pos of trampleResult.positions) {
+              this.particles.emitBlood(pos, 80);
+              this.showKillMessage('COP CAR CRUSHED!', pos, true);
+            }
+          }
+        }
+      }
+      this.copCars.update(dt, currentPos);
     }
     if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.cops = performance.now() - copsStart;
 
     // Update inPursuit based on total cop count
     const footCopCount = this.cops?.getActiveCopCount() || 0;
-    const bikeCopCount = this.motorbikeCops?.getActiveCopCount() || 0;
-    this.stats.inPursuit = footCopCount + bikeCopCount > 0;
+    const bikeCopCount = (this.bikeCops?.getActiveCopCount() || 0) + (this.motorbikeCops?.getActiveCopCount() || 0);
+    const carCopCount = this.copCars?.getActiveCopCount() || 0;
+    this.stats.inPursuit = footCopCount + bikeCopCount + carCopCount > 0;
 
     this.ai.update(dt);
     this.particles.update(dt);
@@ -1790,15 +1959,26 @@ export class Engine {
 
     // Update cop health bars every 3 frames (project 3D positions to 2D screen space)
     this.healthBarUpdateCounter++;
-    if (this.cops && this.healthBarUpdateCounter >= 3) {
+    if (this.healthBarUpdateCounter >= 3) {
       this.healthBarUpdateCounter = 0;
-      const copData = this.cops.getCopData();
       const canvas = this.renderer.domElement;
 
       // Reset and reuse pre-allocated array
       this._healthBarResult.length = 0;
 
-      for (const cop of copData) {
+      // Collect cop data from all cop managers
+      const allCopData: Array<{ position: THREE.Vector3; health: number; maxHealth: number }> = [];
+      if (this.cops) {
+        allCopData.push(...this.cops.getCopData());
+      }
+      if (this.bikeCops) {
+        allCopData.push(...this.bikeCops.getCopData());
+      }
+      if (this.copCars) {
+        allCopData.push(...this.copCars.getCopData());
+      }
+
+      for (const cop of allCopData) {
         // Project 3D world position to 2D screen coordinates
         // Just offset up from cop's actual position for head height
         this._tempScreenPos.copy(cop.position);
