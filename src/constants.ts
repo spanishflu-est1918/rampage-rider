@@ -28,7 +28,7 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   },
   [Tier.MOTO]: {
     name: "Moto Maniac",
-    minScore: 1000, // ~40 kills with pursuit/combo bonuses
+    minScore: 2000, // ~80 kills - harder to unlock (was 1000)
     speedMultiplier: 2.2,
     maxHealth: 100,
     color: 0xff3333, // Aggressive Red
@@ -402,6 +402,42 @@ export const MOTORBIKE_COP_CONFIG = {
   SPAWN_BEHIND_DISTANCE: 40,
   SPAWN_FLANK_OFFSET: 20,
   SPAWN_AHEAD_DISTANCE: 25,
+} as const;
+
+/**
+ * Cop car configuration (uses player's car model with police colors)
+ */
+export const COP_CAR_CONFIG = {
+  modelPath: '/assets/vehicles/car.glb',
+  modelScale: 0.01, // Slightly smaller than player's monster truck
+  modelRotationY: -Math.PI / 2,
+  modelOffsetY: -0.2,
+  colliderWidth: 0.8,
+  colliderHeight: 0.5,
+  colliderLength: 1.5,
+
+  // AI behavior
+  CHASE_DISTANCE: 30,
+  RAM_DISTANCE: 5,
+
+  // Movement
+  MAX_SPEED: 20, // Fast but not as fast as truck (24)
+  ACCELERATION: 25,
+  DECELERATION: 35,
+  MAX_FORCE: 30.0,
+
+  // Combat
+  HEALTH: 3,
+  RAM_DAMAGE: 25, // Heavy ram damage
+  RAM_COOLDOWN: 2.0,
+  HIT_STUN_DURATION: 1.0,
+  POINT_VALUE: 100,
+
+  // Spawning (only when player is in sedan or truck)
+  MAX_CARS: 3,
+  SPAWN_HEAT_THRESHOLD: 50, // Need 50%+ heat
+  SPAWN_BEHIND_DISTANCE: 50,
+  SPAWN_COOLDOWN: 5.0,
 } as const;
 
 // ============================================================================

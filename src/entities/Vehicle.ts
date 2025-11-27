@@ -401,6 +401,40 @@ export class Vehicle extends THREE.Group {
   }
 
   /**
+   * Take damage from a specific position (for directional vulnerability)
+   * Truck only takes damage from sides and back
+   */
+  takeDamageFromPosition(amount: number, attackerPosition: THREE.Vector3): boolean {
+    if (this.isDestroyed) return false;
+
+    // For truck, check if attack comes from vulnerable direction
+    if (this.config.canCrushBuildings) {
+      const vehiclePos = this.getPosition();
+      const toAttacker = new THREE.Vector3()
+        .subVectors(attackerPosition, vehiclePos)
+        .normalize();
+
+      // Get vehicle's forward direction
+      const forward = new THREE.Vector3(0, 0, -1);
+      forward.applyQuaternion((this as THREE.Group).quaternion);
+
+      // Dot product: 1 = same direction (front), -1 = opposite (back), 0 = perpendicular (side)
+      const dot = forward.dot(toAttacker);
+
+      // Only take damage if attack is from sides (|dot| < 0.5) or back (dot < -0.3)
+      const isVulnerable = Math.abs(dot) < 0.5 || dot < -0.3;
+
+      if (!isVulnerable) {
+        // Attack from front - no damage, but show blocked effect
+        return false;
+      }
+    }
+
+    this.takeDamage(amount);
+    return true;
+  }
+
+  /**
    * Flash red when damaged
    */
   private flashDamage(): void {

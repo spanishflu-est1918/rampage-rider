@@ -308,12 +308,13 @@ export class MotorbikeCop extends THREE.Group {
         return;
       }
 
-      // Scale rider to match bike scale
-      const riderScale = 0.0032; // Slightly smaller than bike scale (0.004)
+      // Scale rider to match bike scale (bike is 0.004, rider needs to be proportional)
+      const riderScale = 0.0035;
       rider.scale.setScalar(riderScale);
 
       // Position rider on the bike seat
-      rider.position.set(0, 0.55, -0.1); // Adjust Y for seat height, Z for forward/back
+      // Note: modelContainer already has bike positioned, rider sits relative to that
+      rider.position.set(0, 0.7, 0); // Seat height on motorbike
       rider.rotation.y = 0; // Face forward
 
       // Disable shadows (using blob shadow)
