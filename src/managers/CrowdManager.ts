@@ -238,19 +238,24 @@ export class CrowdManager {
   }
 
   /**
-   * Damage pedestrians in oriented box (for truck - uses actual vehicle shape, not circle)
+   * Damage pedestrians in oriented box with swept collision (for truck)
+   * Checks multiple rotation samples between previousRotation and currentRotation
+   * to catch pedestrians that the box sweeps through during rapid rotation.
+   *
    * @param position - Center of the vehicle
    * @param halfWidth - Half the vehicle width
    * @param halfLength - Half the vehicle length
-   * @param rotation - Vehicle rotation in radians (Y axis)
+   * @param rotation - Current vehicle rotation in radians (Y axis)
    * @param damage - Damage to apply
+   * @param previousRotation - Previous frame's rotation (for swept collision)
    */
   damageInBox(
     position: THREE.Vector3,
     halfWidth: number,
     halfLength: number,
     rotation: number,
-    damage: number
+    damage: number,
+    previousRotation?: number
   ): {
     kills: number;
     panicKills: number;
@@ -260,42 +265,58 @@ export class CrowdManager {
     let panicKillCount = 0;
     const killPositions: THREE.Vector3[] = [];
 
-    // Pre-calculate rotation sin/cos for transforming to local space
-    const cos = Math.cos(-rotation);
-    const sin = Math.sin(-rotation);
+    // Kill zone extends beyond physics collision box at front/back only
+    // Sides don't need extra margin since rotation sweep handles that
+    const killMarginLength = 2.5; // Front/back margin
+    const killMarginWidth = 0.5;  // Minimal side margin
+    const killWidth = halfWidth + killMarginWidth;
+    const killLength = halfLength + killMarginLength;
 
-    // Add margin to account for rotation during frame and pedestrian radius
-    // Without this, rapid rotation can cause pedestrians to "tunnel" through
-    const killMargin = 1.0;
-    const effectiveWidth = halfWidth + killMargin;
-    const effectiveLength = halfLength + killMargin;
+    // Calculate rotation delta for swept collision
+    const prevRot = previousRotation ?? rotation;
+    let rotationDelta = rotation - prevRot;
+    // Normalize to [-PI, PI]
+    while (rotationDelta > Math.PI) rotationDelta -= Math.PI * 2;
+    while (rotationDelta < -Math.PI) rotationDelta += Math.PI * 2;
+
+    // Number of samples based on rotation speed (more samples = more accurate but slower)
+    // At least 1 sample, up to 8 for very fast rotation
+    const numSamples = Math.max(1, Math.min(8, Math.ceil(Math.abs(rotationDelta) / 0.1)));
 
     for (const pedestrian of this.pedestrians) {
       if (pedestrian.isDeadState()) continue;
 
       const pedPos = (pedestrian as THREE.Group).position;
 
-      // Transform pedestrian position to vehicle's local space
+      // Transform pedestrian position relative to vehicle center
       const dx = pedPos.x - position.x;
       const dz = pedPos.z - position.z;
 
-      // Rotate to align with vehicle's local axes
-      const localX = dx * cos - dz * sin;
-      const localZ = dx * sin + dz * cos;
+      // Quick distance check - skip if too far (optimization)
+      const distSq = dx * dx + dz * dz;
+      const maxDist = Math.max(killWidth, killLength) + 2; // Extra margin
+      if (distSq > maxDist * maxDist) continue;
 
-      // Check if within box bounds (AABB test in local space with margin)
-      const inXBounds = Math.abs(localX) <= effectiveWidth;
-      const inZBounds = Math.abs(localZ) <= effectiveLength;
+      // Check multiple rotation samples for swept collision
+      let isHit = false;
+      for (let i = 0; i < numSamples && !isHit; i++) {
+        const t = numSamples === 1 ? 1 : i / (numSamples - 1);
+        const sampleRotation = prevRot + rotationDelta * t;
 
-      // DEBUG: Log closest pedestrians
-      const distToCenter = Math.sqrt(dx * dx + dz * dz);
-      if (distToCenter < 8) {
-        const xStatus = inXBounds ? 'IN' : 'OUT';
-        const zStatus = inZBounds ? 'IN' : 'OUT';
-        console.log(`[TRUCK] Ped at dx=${dx.toFixed(2)}, dz=${dz.toFixed(2)} → |localX|=${Math.abs(localX).toFixed(2)} ${xStatus} (need≤${halfWidth}), |localZ|=${Math.abs(localZ).toFixed(2)} ${zStatus} (need≤${halfLength})`);
+        const cos = Math.cos(-sampleRotation);
+        const sin = Math.sin(-sampleRotation);
+
+        // Rotate to align with vehicle's local axes at this rotation sample
+        const localX = dx * cos - dz * sin;
+        const localZ = dx * sin + dz * cos;
+
+        // Check if within kill zone
+        if (Math.abs(localX) <= killWidth && Math.abs(localZ) <= killLength) {
+          isHit = true;
+        }
       }
-      if (inXBounds && inZBounds) {
-        console.log(`[TRUCK] HIT! localX=${localX.toFixed(2)}, localZ=${localZ.toFixed(2)}`);
+
+      if (isHit) {
         const wasPanicking = pedestrian.isPanickingState();
         pedestrian.takeDamage(damage);
 

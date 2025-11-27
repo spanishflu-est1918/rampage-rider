@@ -100,13 +100,10 @@ export class KinematicCharacterHelper {
   }
 
   /**
-   * Get collision filter for pedestrian (collides with GROUND, BUILDING, PLAYER, COP)
-   * NOTE: Does not include VEHICLE because pedestrians use Yuka AI for movement,
-   * not physics-based character controller. Vehicle collisions are handled via
-   * damageInBox/damageInRadius checks in CrowdManager.
+   * Get collision filter for pedestrian (collides with GROUND, BUILDING, PLAYER, COP, VEHICLE)
    */
   static getPedestrianCollisionFilter(): number {
-    return COLLISION_GROUPS.GROUND | COLLISION_GROUPS.BUILDING | COLLISION_GROUPS.PLAYER | COLLISION_GROUPS.COP;
+    return COLLISION_GROUPS.GROUND | COLLISION_GROUPS.BUILDING | COLLISION_GROUPS.PLAYER | COLLISION_GROUPS.COP | COLLISION_GROUPS.VEHICLE;
   }
 
   /**
