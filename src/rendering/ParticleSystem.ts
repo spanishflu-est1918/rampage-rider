@@ -21,6 +21,26 @@ export class ParticleEmitter {
   private pointsGeometry: THREE.BufferGeometry;
   private pointsObject: THREE.Points;
 
+  // Debris particle system (separate from blood for different colors)
+  private debrisTexture: THREE.Texture;
+  private debrisMaterial: THREE.PointsMaterial;
+  private debrisGeometry: THREE.BufferGeometry;
+  private debrisObject: THREE.Points;
+  private debrisPositions: Float32Array;
+  private debrisSizes: Float32Array;
+  private debrisAlphas: Float32Array;
+  private debrisColors: Float32Array;
+  private readonly MAX_DEBRIS = 100;
+  private debrisParticles: Array<{
+    index: number;
+    velocity: THREE.Vector3;
+    life: number;
+    maxLife: number;
+    rotationSpeed: number;
+  }> = [];
+  private debrisFreeIndices: number[] = [];
+  private activeDebris: number = 0;
+
   // Buffer attributes
   private positions: Float32Array;
   private sizes: Float32Array;
@@ -95,6 +115,94 @@ export class ParticleEmitter {
     // Create Points object
     this.pointsObject = new THREE.Points(this.pointsGeometry, this.pointsMaterial);
     this.scene.add(this.pointsObject);
+
+    // Initialize debris particle system
+    this.initDebrisSystem();
+  }
+
+  /**
+   * Initialize the debris particle system (for building destruction)
+   */
+  private initDebrisSystem(): void {
+    this.debrisTexture = this.createDebrisTexture();
+
+    // Initialize debris buffer arrays
+    this.debrisPositions = new Float32Array(this.MAX_DEBRIS * 3);
+    this.debrisSizes = new Float32Array(this.MAX_DEBRIS);
+    this.debrisAlphas = new Float32Array(this.MAX_DEBRIS);
+    this.debrisColors = new Float32Array(this.MAX_DEBRIS * 3);
+
+    // Initialize debris free indices pool
+    for (let i = 0; i < this.MAX_DEBRIS; i++) {
+      this.debrisFreeIndices.push(i);
+      this.debrisAlphas[i] = 0;
+    }
+
+    // Create debris geometry
+    this.debrisGeometry = new THREE.BufferGeometry();
+    this.debrisGeometry.setAttribute('position', new THREE.BufferAttribute(this.debrisPositions, 3));
+    this.debrisGeometry.setAttribute('size', new THREE.BufferAttribute(this.debrisSizes, 1));
+    this.debrisGeometry.setAttribute('alpha', new THREE.BufferAttribute(this.debrisAlphas, 1));
+    this.debrisGeometry.setAttribute('color', new THREE.BufferAttribute(this.debrisColors, 3));
+
+    // Create debris material with vertex colors
+    this.debrisMaterial = new THREE.PointsMaterial({
+      map: this.debrisTexture,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      sizeAttenuation: true,
+      vertexColors: true,
+    });
+
+    // Enable custom alpha per particle
+    this.debrisMaterial.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        'void main() {',
+        `
+        attribute float alpha;
+        varying float vAlpha;
+        void main() {
+          vAlpha = alpha;
+        `
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'void main() {',
+        `
+        varying float vAlpha;
+        void main() {
+        `
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'gl_FragColor = vec4( outgoingLight, diffuseColor.a * opacity );',
+        'gl_FragColor = vec4( outgoingLight, diffuseColor.a * opacity * vAlpha );'
+      );
+    };
+
+    this.debrisObject = new THREE.Points(this.debrisGeometry, this.debrisMaterial);
+    this.scene.add(this.debrisObject);
+  }
+
+  /**
+   * Create debris texture (chunky rock/wood pieces)
+   */
+  private createDebrisTexture(): THREE.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d')!;
+
+    // Rough square chunk shape
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(4, 4, 24, 24);
+
+    // Add some noise/texture
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(8, 8, 8, 8);
+    ctx.fillRect(18, 18, 8, 8);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
   }
 
   /**
@@ -310,6 +418,136 @@ export class ParticleEmitter {
       this.pointsGeometry.attributes.position.needsUpdate = true;
       this.pointsGeometry.attributes.alpha.needsUpdate = true;
     }
+
+    // Update debris particles
+    this.updateDebris(deltaTime);
+  }
+
+  /**
+   * Emit debris particles (for building destruction)
+   */
+  emitDebris(position: THREE.Vector3, count: number = 30): void {
+    const actualCount = Math.min(count, 25);
+
+    for (let i = 0; i < actualCount; i++) {
+      if (this.debrisFreeIndices.length === 0) continue;
+
+      const index = this.debrisFreeIndices.pop()!;
+      this.activeDebris++;
+
+      const size = 15 + Math.random() * 35; // Big chunky pieces
+      const baseIdx = index * 3;
+
+      // Spawn around building center with spread
+      this.debrisPositions[baseIdx] = position.x + (Math.random() - 0.5) * 4;
+      this.debrisPositions[baseIdx + 1] = position.y + Math.random() * 3;
+      this.debrisPositions[baseIdx + 2] = position.z + (Math.random() - 0.5) * 4;
+
+      this.debrisSizes[index] = size;
+      this.debrisAlphas[index] = 1;
+
+      // Random earthy colors (browns, grays, tans)
+      const colorChoice = Math.random();
+      if (colorChoice < 0.3) {
+        // Dark brown (wood)
+        this.debrisColors[baseIdx] = 0.4;
+        this.debrisColors[baseIdx + 1] = 0.25;
+        this.debrisColors[baseIdx + 2] = 0.15;
+      } else if (colorChoice < 0.6) {
+        // Gray (concrete/stone)
+        const gray = 0.4 + Math.random() * 0.2;
+        this.debrisColors[baseIdx] = gray;
+        this.debrisColors[baseIdx + 1] = gray;
+        this.debrisColors[baseIdx + 2] = gray;
+      } else if (colorChoice < 0.8) {
+        // Tan/beige
+        this.debrisColors[baseIdx] = 0.6;
+        this.debrisColors[baseIdx + 1] = 0.5;
+        this.debrisColors[baseIdx + 2] = 0.35;
+      } else {
+        // Red brick
+        this.debrisColors[baseIdx] = 0.5;
+        this.debrisColors[baseIdx + 1] = 0.2;
+        this.debrisColors[baseIdx + 2] = 0.15;
+      }
+
+      // Explosive outward velocity
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 4 + Math.random() * 8;
+      const upSpeed = 3 + Math.random() * 6;
+
+      const velocity = new THREE.Vector3(
+        Math.cos(angle) * speed,
+        upSpeed,
+        Math.sin(angle) * speed
+      );
+
+      this.debrisParticles.push({
+        index,
+        velocity,
+        life: 1.5 + Math.random() * 1.0,
+        maxLife: 2.5,
+        rotationSpeed: (Math.random() - 0.5) * 10,
+      });
+    }
+
+    // Mark buffers for update
+    this.debrisGeometry.attributes.position.needsUpdate = true;
+    this.debrisGeometry.attributes.size.needsUpdate = true;
+    this.debrisGeometry.attributes.alpha.needsUpdate = true;
+    this.debrisGeometry.attributes.color.needsUpdate = true;
+  }
+
+  /**
+   * Update debris particles
+   */
+  private updateDebris(deltaTime: number): void {
+    if (this.debrisParticles.length === 0) return;
+
+    const gravity = -15; // Heavier debris falls faster
+    let needsUpdate = false;
+
+    for (let i = this.debrisParticles.length - 1; i >= 0; i--) {
+      const particle = this.debrisParticles[i];
+      const index = particle.index;
+      const baseIdx = index * 3;
+
+      particle.life -= deltaTime;
+
+      if (particle.life <= 0 || this.debrisPositions[baseIdx + 1] < -2) {
+        // Return to pool
+        this.debrisAlphas[index] = 0;
+        this.debrisFreeIndices.push(index);
+        this.activeDebris--;
+        this.debrisParticles.splice(i, 1);
+        needsUpdate = true;
+        continue;
+      }
+
+      // Apply gravity and update position
+      particle.velocity.y += gravity * deltaTime;
+      this.debrisPositions[baseIdx] += particle.velocity.x * deltaTime;
+      this.debrisPositions[baseIdx + 1] += particle.velocity.y * deltaTime;
+      this.debrisPositions[baseIdx + 2] += particle.velocity.z * deltaTime;
+
+      // Bounce off ground with energy loss
+      if (this.debrisPositions[baseIdx + 1] < 0.1 && particle.velocity.y < 0) {
+        particle.velocity.y *= -0.3; // Bounce with energy loss
+        particle.velocity.x *= 0.7; // Friction
+        particle.velocity.z *= 0.7;
+        this.debrisPositions[baseIdx + 1] = 0.1;
+      }
+
+      // Fade based on life
+      const lifePercent = particle.life / particle.maxLife;
+      this.debrisAlphas[index] = lifePercent;
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+      this.debrisGeometry.attributes.position.needsUpdate = true;
+      this.debrisGeometry.attributes.alpha.needsUpdate = true;
+    }
   }
 
   /**
@@ -321,14 +559,23 @@ export class ParticleEmitter {
     }
     this.particles = [];
 
+    // Clear debris too
+    for (const particle of this.debrisParticles) {
+      this.debrisAlphas[particle.index] = 0;
+      this.debrisFreeIndices.push(particle.index);
+    }
+    this.debrisParticles = [];
+    this.activeDebris = 0;
+
     // Update buffers to hide all particles
     this.pointsGeometry.attributes.alpha.needsUpdate = true;
+    this.debrisGeometry.attributes.alpha.needsUpdate = true;
   }
 
   /**
    * Get particle count (for debugging)
    */
   getParticleCount(): number {
-    return this.activeParticles;
+    return this.activeParticles + this.activeDebris;
   }
 }

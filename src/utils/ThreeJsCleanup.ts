@@ -7,25 +7,44 @@ import * as THREE from 'three';
  * to prevent memory leaks (geometries, materials, textures)
  */
 
+// Interface for materials with texture maps (covers MeshStandardMaterial, MeshPhongMaterial, etc.)
+interface MaterialWithMaps {
+  map?: THREE.Texture | null;
+  lightMap?: THREE.Texture | null;
+  bumpMap?: THREE.Texture | null;
+  normalMap?: THREE.Texture | null;
+  specularMap?: THREE.Texture | null;
+  envMap?: THREE.Texture | null;
+  alphaMap?: THREE.Texture | null;
+  aoMap?: THREE.Texture | null;
+  displacementMap?: THREE.Texture | null;
+  emissiveMap?: THREE.Texture | null;
+  gradientMap?: THREE.Texture | null;
+  metalnessMap?: THREE.Texture | null;
+  roughnessMap?: THREE.Texture | null;
+}
+
 /**
  * Dispose a material and all its textures
  */
 export function disposeMaterial(material: THREE.Material): void {
+  // Type-safe access to texture maps
+  const mat = material as THREE.Material & MaterialWithMaps;
+
   // Dispose textures if they exist
-  const mat = material as any;
-  if (mat.map) mat.map.dispose();
-  if (mat.lightMap) mat.lightMap.dispose();
-  if (mat.bumpMap) mat.bumpMap.dispose();
-  if (mat.normalMap) mat.normalMap.dispose();
-  if (mat.specularMap) mat.specularMap.dispose();
-  if (mat.envMap) mat.envMap.dispose();
-  if (mat.alphaMap) mat.alphaMap.dispose();
-  if (mat.aoMap) mat.aoMap.dispose();
-  if (mat.displacementMap) mat.displacementMap.dispose();
-  if (mat.emissiveMap) mat.emissiveMap.dispose();
-  if (mat.gradientMap) mat.gradientMap.dispose();
-  if (mat.metalnessMap) mat.metalnessMap.dispose();
-  if (mat.roughnessMap) mat.roughnessMap.dispose();
+  mat.map?.dispose();
+  mat.lightMap?.dispose();
+  mat.bumpMap?.dispose();
+  mat.normalMap?.dispose();
+  mat.specularMap?.dispose();
+  mat.envMap?.dispose();
+  mat.alphaMap?.dispose();
+  mat.aoMap?.dispose();
+  mat.displacementMap?.dispose();
+  mat.emissiveMap?.dispose();
+  mat.gradientMap?.dispose();
+  mat.metalnessMap?.dispose();
+  mat.roughnessMap?.dispose();
 
   // Dispose the material itself
   material.dispose();

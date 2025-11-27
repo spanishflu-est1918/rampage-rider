@@ -69,6 +69,7 @@ export class AssetLoader {
       '/assets/vehicles/bicycle.glb',
       '/assets/vehicles/motorbike.glb',
       '/assets/vehicles/car.glb',
+      '/assets/vehicles/truck.glb', // 18-wheeler
 
       // Props
       '/assets/props/christmas-market.glb',
