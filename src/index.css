@@ -1,7 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./components/ui/8bit/styles/retro.css";
+@import "./components/UI/8bit/styles/retro.css";
 
 @custom-variant dark (&:is(.dark *));
 
