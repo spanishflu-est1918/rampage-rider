@@ -1,15 +1,29 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { GameStats } from "../../types";
 import { TIER_CONFIGS } from "../../constants";
-import { Button } from "@/components/ui/8bit/button";
+import { Button } from "@/components/UI/8bit/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/8bit/card";
-import { Badge } from "@/components/ui/8bit/badge";
+} from "@/components/UI/8bit/card";
+import { Badge } from "@/components/UI/8bit/badge";
+
+const TAGLINES = [
+  "YOUR UBER RATING: ZERO STARS.",
+  "MORALLY QUESTIONABLE CARDIO SIMULATOR.",
+  "WALK. BIKE. DRIVE. DESTROY.",
+  "CLIMB THE FOOD CHAIN. LITERALLY.",
+  "EVERY KILL IS A PROMOTION.",
+  "CARDIO WITH CONSEQUENCES.",
+  "EMPLOYEE OF THE MONTH. EVERY MONTH. FOREVER.",
+  "YOUR INSURANCE DOESN'T COVER THIS.",
+  "ANGER MANAGEMENT SPEEDRUN.",
+  "NETWORKING, BUT VIOLENTLY.",
+  "THE FLOOR IS LAVA. YOU ARE THE LAVA.",
+];
 
 interface MainMenuProps {
   onStart: () => void;
@@ -20,15 +34,26 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onStart,
   isLoading = false,
 }) => {
+  const [taglineIndex, setTaglineIndex] = useState(() =>
+    Math.floor(Math.random() * TAGLINES.length)
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTaglineIndex((prev) => (prev + 1) % TAGLINES.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50">
       <div className="text-center p-10 scale-75 origin-center">
         <h1 className="text-7xl font-bold mb-5 text-destructive retro">
-          CHRISTMAS MARKET MAYHEM
+          HOLIDAY MAYHEM
         </h1>
 
-        <p className="text-lg mb-10 text-muted-foreground retro">
-          START ON FOOT. KILL TO UPGRADE. SURVIVE THE CHAOS.
+        <p className="text-lg mb-10 text-muted-foreground retro transition-opacity duration-500">
+          {TAGLINES[taglineIndex]}
         </p>
 
         <Button
