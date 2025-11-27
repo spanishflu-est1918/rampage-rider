@@ -36,6 +36,9 @@ export class Vehicle extends THREE.Group {
 
   private onDestroyedCallback: (() => void) | null = null;
 
+  // Track previous rotation for swept collision detection
+  private previousRotationY: number = 0;
+
   // Pre-allocated vectors (reused every frame to avoid GC pressure)
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempVelocity: THREE.Vector3 = new THREE.Vector3();
@@ -131,19 +134,34 @@ export class Vehicle extends THREE.Group {
       this.modelContainer.add(model);
       this.modelLoaded = true;
 
-      // DEBUG: Add solid red box showing collision bounds at EXACT collision center
+      // DEBUG: Add solid red box showing PHYSICS collision bounds
       // Added directly to Vehicle group (not modelContainer) to show true collision area
       if (this.config.canCrushBuildings) {
-        const boxGeom = new THREE.BoxGeometry(
+        // Must match CrowdManager.damageInBox margins!
+        const killMarginLength = 2.5; // Front/back
+        const killMarginWidth = 0.5;  // Sides
+
+        // RED = Physics collision box (what pushes pedestrians)
+        const physicsBoxGeom = new THREE.BoxGeometry(
           this.config.colliderWidth * 2,  // Full width (config is half-extent)
           this.config.colliderHeight * 2, // Full height
           this.config.colliderLength * 2  // Full length
         );
-        const solidMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 });
-        const debugBox = new THREE.Mesh(boxGeom, solidMat);
-        debugBox.position.y = this.config.colliderHeight; // Center vertically
-        // Add directly to Vehicle group so it's at collision center (0,0,0 in local space)
-        (this as THREE.Group).add(debugBox);
+        const physicsMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3 });
+        const physicsBox = new THREE.Mesh(physicsBoxGeom, physicsMat);
+        physicsBox.position.y = this.config.colliderHeight; // Center vertically
+        (this as THREE.Group).add(physicsBox);
+
+        // YELLOW = Kill zone (larger at front/back, minimal on sides)
+        const killBoxGeom = new THREE.BoxGeometry(
+          (this.config.colliderWidth + killMarginWidth) * 2,
+          0.2, // Thin so it doesn't obscure view
+          (this.config.colliderLength + killMarginLength) * 2
+        );
+        const killMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.4 });
+        const killBox = new THREE.Mesh(killBoxGeom, killMat);
+        killBox.position.y = 0.1; // On ground
+        (this as THREE.Group).add(killBox);
 
         // DEBUG: Add bright green sphere at exact collision center (0,0,0 in vehicle space)
         const sphereGeom = new THREE.SphereGeometry(0.5);
@@ -275,6 +293,9 @@ export class Vehicle extends THREE.Group {
    */
   update(deltaTime: number): void {
     if (!this.rigidBody || this.isDestroyed) return;
+
+    // Store previous rotation for swept collision detection
+    this.previousRotationY = (this as THREE.Group).rotation.y;
 
     const translation = this.rigidBody.translation();
     const moveVector = this.getMovementDirection();
@@ -443,6 +464,13 @@ export class Vehicle extends THREE.Group {
    */
   getRotationY(): number {
     return (this as THREE.Group).rotation.y;
+  }
+
+  /**
+   * Get previous frame's rotation Y (for swept collision)
+   */
+  getPreviousRotationY(): number {
+    return this.previousRotationY;
   }
 
   /**

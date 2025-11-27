@@ -1669,11 +1669,11 @@ export class Engine {
           let result: { kills: number; panicKills: number; positions: THREE.Vector3[] };
 
           if (isTruck) {
-            // Truck uses box collision (actual vehicle shape)
+            // Truck uses box collision with swept detection for rotation
             const dims = this.vehicle.getColliderDimensions();
             const rotation = this.vehicle.getRotationY();
-            console.log(`[ENGINE] Truck dims: width=${dims.width}, length=${dims.length}, rotation=${rotation.toFixed(2)}`);
-            result = this.crowd.damageInBox(currentPos, dims.width, dims.length, rotation, 999);
+            const prevRotation = this.vehicle.getPreviousRotationY();
+            result = this.crowd.damageInBox(currentPos, dims.width, dims.length, rotation, 999, prevRotation);
 
             if (this.vehicle.causesRagdoll()) {
               this.crowd.applyBoxKnockback(currentPos, vehicleVelocity, dims.width, dims.length, rotation);
