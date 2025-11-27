@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { BitProgressProps, Progress } from "@/components/ui/8bit/progress";
+import { BitProgressProps, Progress } from "@/components/UI/8bit/progress";
 
 interface HeatBarProps extends ComponentProps<"div"> {
   className?: string;

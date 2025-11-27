@@ -11,7 +11,7 @@ import {
   CardFooter as ShadcnCardFooter,
   CardHeader as ShadcnCardHeader,
   CardTitle as ShadcnCardTitle,
-} from "@/components/ui/card";
+} from "@/components/UI/card";
 
 import "./styles/retro.css";
 
