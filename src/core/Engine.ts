@@ -24,6 +24,7 @@ import {
   WANTED_STARS,
   RENDERING_CONFIG,
   COLLISION_GROUPS,
+  DEBUG_PERFORMANCE_PANEL,
 } from '../constants';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
 import { GameState, Tier, InputState, GameStats, KillNotification } from '../types';
@@ -151,6 +152,10 @@ export class Engine {
   // Pre-allocated vectors for update loop (avoid GC pressure)
   private readonly _tempCameraPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempLookAt: THREE.Vector3 = new THREE.Vector3();
+  // Current camera offset (smoothly lerps to target for truck zoom)
+  private readonly _currentCameraOffset: THREE.Vector3 = new THREE.Vector3(2.5, 6.25, 2.5);
+  // Current camera zoom (frustum size) - smoothly lerps for truck
+  private currentCameraZoom: number = CAMERA_CONFIG.FRUSTUM_SIZE;
   private readonly _tempScreenPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempAttackDir: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempVehicleDir: THREE.Vector3 = new THREE.Vector3();
@@ -176,6 +181,9 @@ export class Engine {
     new THREE.Vector3(3, 0, 3), new THREE.Vector3(-3, 0, -3),
     new THREE.Vector3(3, 0, -3), new THREE.Vector3(-3, 0, 3),
   ];
+
+  // Pre-allocated array for cop health bar projection (max 16 cops: 8 foot + 8 bike)
+  private _healthBarResult: Array<{ x: number; y: number; health: number; maxHealth: number }> = [];
 
   // Pre-allocated Rapier rays for spawn tests (initialized lazily)
   private _horizontalRay: RAPIER.Ray | null = null;
@@ -226,10 +234,17 @@ export class Engine {
   private groundMesh: THREE.Mesh | null = null;
   private player: Player | null = null;
 
+  // Current vehicle (the one player is riding or can enter)
   private vehicle: Vehicle | null = null;
   private isInVehicle: boolean = false;
   private vehicleSpawned: boolean = false;
   private currentVehicleTier: Tier | null = null;
+
+  // Awaiting vehicle (next tier upgrade, spawns when milestone reached)
+  private awaitingVehicle: Vehicle | null = null;
+  private awaitingVehicleTier: Tier | null = null;
+  private awaitingVehicleGlowTime: number = 0; // For pulsing glow animation
+  private vehiclesToCleanup: Array<{ vehicle: Vehicle; timer: number }> = [];
 
   private actionController: ActionController = new ActionController();
   private static readonly KILL_MESSAGES = ['SPLAT!', 'CRUSHED!', 'DEMOLISHED!', 'OBLITERATED!', 'TERMINATED!'];
@@ -313,10 +328,13 @@ export class Engine {
     const world = this.physics.getWorld();
     if (world) {
       this.crowd = new CrowdManager(this.scene, world, this.ai);
-      this.cops = new CopManager(this.scene, world, this.ai);
+      // DISABLED: Cops for truck debugging
+      // this.cops = new CopManager(this.scene, world, this.ai);
       // DISABLED: Motorbike cops for performance testing
       // this.motorbikeCops = new MotorbikeCopManager(this.scene, world, this.ai);
-      this.buildings = new BuildingManager(this.scene, world);
+      // DEBUG: Disable buildings to debug truck collision
+      // this.buildings = new BuildingManager(this.scene, world);
+      this.buildings = null;
       // this.lampPosts = new LampPostManager(this.scene);
     }
   }
@@ -590,13 +608,26 @@ export class Engine {
   debugSpawnVehicle(vehicleType: VehicleType | null): void {
     if (this.isInVehicle) return;
 
+    // Clean up current vehicle if any
     if (this.vehicle) {
       this.scene.remove(this.vehicle);
       this.vehicle.dispose();
       this.vehicle = null;
-      this.vehicleSpawned = false;
-      this.currentVehicleTier = null;
     }
+
+    // Clean up awaiting vehicle if any
+    if (this.awaitingVehicle) {
+      this.scene.remove(this.awaitingVehicle);
+      this.awaitingVehicle.dispose();
+      this.awaitingVehicle = null;
+      this.awaitingVehicleTier = null;
+      this.awaitingVehicleGlowTime = 0;
+      this.awaitingVehicleMaterials = [];
+    }
+
+    // Reset vehicle state ALWAYS (ensures clean state for spawning)
+    this.vehicleSpawned = false;
+    this.currentVehicleTier = null;
 
     if (!vehicleType) {
       this.stats.tier = Tier.FOOT;
@@ -607,6 +638,7 @@ export class Engine {
     if (vehicleType === VehicleType.BICYCLE) targetTier = Tier.BIKE;
     else if (vehicleType === VehicleType.MOTORBIKE) targetTier = Tier.MOTO;
     else if (vehicleType === VehicleType.SEDAN) targetTier = Tier.SEDAN;
+    else if (vehicleType === VehicleType.TRUCK) targetTier = Tier.TRUCK;
 
     if (targetTier) {
       this.spawnVehicle(targetTier);
@@ -720,14 +752,215 @@ export class Engine {
     this.shakeCamera(1.0);
   }
 
+  // Pre-calculated squared enter distance (avoid sqrt in comparison)
+  private readonly ENTER_DISTANCE_SQ = VEHICLE_INTERACTION.ENTER_DISTANCE * VEHICLE_INTERACTION.ENTER_DISTANCE;
+
   private isPlayerNearVehicle(): boolean {
     if (!this.player || !this.vehicle) return false;
 
     const playerPos = this.player.getPosition();
     const vehiclePos = this.vehicle.getPosition();
-    const distance = playerPos.distanceTo(vehiclePos);
+    const distanceSq = playerPos.distanceToSquared(vehiclePos);
 
-    return distance < VEHICLE_INTERACTION.ENTER_DISTANCE;
+    return distanceSq < this.ENTER_DISTANCE_SQ;
+  }
+
+  private isPlayerNearAwaitingVehicle(): boolean {
+    if (!this.player || !this.awaitingVehicle) return false;
+
+    const playerPos = this.player.getPosition();
+    const vehiclePos = this.awaitingVehicle.getPosition();
+    const distanceSq = playerPos.distanceToSquared(vehiclePos);
+
+    return distanceSq < this.ENTER_DISTANCE_SQ;
+  }
+
+  /**
+   * Check if player should receive next tier vehicle based on SCORE
+   * Score incorporates combo multipliers, pursuit bonuses, and kill types
+   */
+  private checkTierProgression(): void {
+    if (!this.player) return;
+
+    // Determine current effective tier (what player is riding or has access to)
+    const effectiveTier = this.isInVehicle ? this.currentVehicleTier :
+                          this.vehicleSpawned ? this.currentVehicleTier : Tier.FOOT;
+
+    // Don't spawn awaiting vehicle if one already exists
+    if (this.awaitingVehicle) return;
+
+    // Check for next tier unlock based on current tier and SCORE
+    let nextTier: Tier | null = null;
+
+    if (effectiveTier === Tier.FOOT || effectiveTier === null) {
+      // On foot: check for bike unlock (150 score)
+      if (this.stats.score >= TIER_CONFIGS[Tier.BIKE].minScore) {
+        nextTier = Tier.BIKE;
+      }
+    } else if (effectiveTier === Tier.BIKE) {
+      // On bike: check for moto unlock (1000 score)
+      if (this.stats.score >= TIER_CONFIGS[Tier.MOTO].minScore) {
+        nextTier = Tier.MOTO;
+      }
+    } else if (effectiveTier === Tier.MOTO) {
+      // On moto: check for sedan unlock (4000 score)
+      if (this.stats.score >= TIER_CONFIGS[Tier.SEDAN].minScore) {
+        nextTier = Tier.SEDAN;
+      }
+    } else if (effectiveTier === Tier.SEDAN) {
+      // On sedan: check for truck unlock (10000 score)
+      if (this.stats.score >= TIER_CONFIGS[Tier.TRUCK].minScore) {
+        nextTier = Tier.TRUCK;
+      }
+    }
+    // Truck is max tier, no more upgrades
+
+    // If we should unlock a tier and no vehicle is spawned yet (first unlock)
+    // OR if we have a current vehicle but need to spawn an upgrade
+    if (nextTier !== null) {
+      if (!this.vehicleSpawned) {
+        // First vehicle - spawn as current vehicle (not awaiting)
+        this.spawnVehicle(nextTier);
+      } else if (this.isInVehicle) {
+        // Player is in a vehicle - spawn the upgrade as awaiting
+        this.spawnAwaitingVehicle(nextTier);
+      }
+    }
+  }
+
+  /**
+   * Spawn awaiting vehicle (next tier upgrade)
+   */
+  private spawnAwaitingVehicle(tier: Tier): void {
+    if (!this.player || this.awaitingVehicle) return;
+
+    const vehicleType = TIER_VEHICLE_MAP[tier];
+    if (!vehicleType) return;
+
+    const vehicleConfig = VEHICLE_CONFIGS[vehicleType];
+    const world = this.physics.getWorld();
+    if (!world) return;
+
+    // Get spawn position based on player's current position (or vehicle if in one)
+    const sourcePos = this.isInVehicle && this.vehicle
+      ? this.vehicle.getPosition()
+      : this.player.getPosition();
+    const spawnPos = this.findSafeVehicleSpawnPosition(sourcePos);
+
+    this.awaitingVehicle = new Vehicle(vehicleConfig);
+    this.awaitingVehicle.createPhysicsBody(world, spawnPos);
+    this.scene.add(this.awaitingVehicle);
+
+    this.awaitingVehicleTier = tier;
+    this.awaitingVehicleGlowTime = 0;
+
+    // Start the glow effect and cache materials for efficient per-frame updates
+    this.setVehicleGlow(this.awaitingVehicle, 1.0, 0x00ffaa, true); // Bright cyan-green, cache=true
+
+    const tierConfig = TIER_CONFIGS[tier];
+    this.triggerKillNotification(`${tierConfig.name.toUpperCase()} UNLOCKED!`, true, 0);
+  }
+
+  // Cache for awaiting vehicle materials (avoid traverse every frame)
+  private awaitingVehicleMaterials: THREE.MeshStandardMaterial[] = [];
+
+  /**
+   * Set glow effect on a vehicle using emissive material
+   * Also caches materials for efficient per-frame updates
+   */
+  private setVehicleGlow(vehicle: Vehicle, intensity: number, color: number, cacheForUpdates: boolean = false): void {
+    if (cacheForUpdates) {
+      this.awaitingVehicleMaterials = [];
+    }
+
+    (vehicle as THREE.Group).traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const mat = child.material as THREE.MeshStandardMaterial;
+        if (mat.emissive) {
+          mat.emissive.setHex(color);
+          mat.emissiveIntensity = intensity;
+          if (cacheForUpdates) {
+            this.awaitingVehicleMaterials.push(mat);
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Update awaiting vehicle glow effect (pulsing animation)
+   * Uses cached materials to avoid expensive traverse() every frame
+   */
+  private updateAwaitingVehicleGlow(dt: number): void {
+    if (!this.awaitingVehicle || this.awaitingVehicleMaterials.length === 0) return;
+
+    this.awaitingVehicleGlowTime += dt;
+
+    // Pulsing glow: oscillate between 0.5 and 1.5 intensity
+    const pulseSpeed = 3; // Hz
+    const intensity = 0.8 + 0.5 * Math.sin(this.awaitingVehicleGlowTime * pulseSpeed * Math.PI * 2);
+
+    // Update cached materials directly (O(n) materials, not O(n) traverse)
+    for (const mat of this.awaitingVehicleMaterials) {
+      mat.emissiveIntensity = intensity;
+    }
+  }
+
+  /**
+   * Switch from current vehicle to awaiting vehicle
+   */
+  private switchToAwaitingVehicle(): void {
+    if (!this.awaitingVehicle || !this.player) return;
+
+    // Exit current vehicle if in one
+    if (this.isInVehicle && this.vehicle) {
+      // Remove player from current vehicle
+      if ((this.player as THREE.Group).parent === this.vehicle) {
+        (this.vehicle as THREE.Group).remove(this.player);
+        this.scene.add(this.player);
+        this.scene.add(this.player.getBlobShadow());
+      }
+      this.player.setVisible(true);
+
+      // Queue old vehicle for cleanup (delayed destruction for performance)
+      this.vehiclesToCleanup.push({ vehicle: this.vehicle, timer: 3.0 }); // 3 seconds
+      this.vehicle = null;
+      this.isInVehicle = false;
+    }
+
+    // Clear glow from awaiting vehicle
+    this.setVehicleGlow(this.awaitingVehicle, 0, 0x000000);
+
+    // Make awaiting vehicle the current vehicle
+    this.vehicle = this.awaitingVehicle;
+    this.currentVehicleTier = this.awaitingVehicleTier;
+    this.vehicleSpawned = true;
+
+    // Clear awaiting state
+    this.awaitingVehicle = null;
+    this.awaitingVehicleTier = null;
+    this.awaitingVehicleGlowTime = 0;
+    this.awaitingVehicleMaterials = []; // Clear cached materials
+
+    // Enter the new vehicle
+    this.enterVehicle();
+  }
+
+  /**
+   * Update vehicles pending cleanup
+   */
+  private updateVehicleCleanup(dt: number): void {
+    for (let i = this.vehiclesToCleanup.length - 1; i >= 0; i--) {
+      const entry = this.vehiclesToCleanup[i];
+      entry.timer -= dt;
+
+      if (entry.timer <= 0) {
+        // Remove and dispose
+        this.scene.remove(entry.vehicle);
+        entry.vehicle.dispose();
+        this.vehiclesToCleanup.splice(i, 1);
+      }
+    }
   }
 
   private exitVehicle(): void {
@@ -964,21 +1197,6 @@ export class Engine {
 
     const totalTime = performance.now() - attackStart;
 
-    // Start attack tracking on kill - will log continuously until settled
-    if (totalKills > 0) {
-      const r = this.renderer.info;
-      // DISABLED: Attack tracking (uncomment for debugging)
-      // this.attackTrackingActive = true;
-      // this.attackTrackingFrames = 0;
-      // this.attackStartParticles = this.particles.getParticleCount();
-      // this.attackStartDecals = this.bloodDecals.getDecalCount();
-      // this.attackStartGeom = r.memory.geometries;
-      // this.attackStartTex = r.memory.textures;
-      // console.log(
-      //   `[STAB] START Kills:${totalKills} (ped:${pedKills} cop:${copKills}) | ` +
-      //   `Total:${totalTime.toFixed(1)}ms (PedDmg:${pedDamageTime.toFixed(1)} CopDmg:${copDamageTime.toFixed(1)} Particles:${particlesTime.toFixed(1)})`
-      // );
-    }
   }
 
   private handleBicycleAttack(): void {
@@ -1184,6 +1402,29 @@ export class Engine {
     this.shakeCamera(cfg.cameraShake);
   }
 
+  private static readonly BUILDING_DESTROY_MESSAGES = ['DEMOLISHED!', 'WRECKED!', 'CRUSHED!', 'LEVELED!', 'OBLITERATED!'];
+
+  private handleBuildingDestruction(position: THREE.Vector3): void {
+    // Big points for destroying a building!
+    const basePoints = 500;
+    let points = basePoints;
+    if (this.stats.inPursuit) points *= SCORING_CONFIG.PURSUIT_MULTIPLIER;
+
+    this.stats.score += points;
+    this.stats.combo++;
+    this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+    this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + 50); // Big heat boost!
+
+    // Debris explosion (not blood!)
+    this.particles.emitDebris(position, 30);
+
+    // Camera shake (same as vehicle kill)
+    this.shakeCamera(1.0);
+
+    const message = Engine.randomFrom(Engine.BUILDING_DESTROY_MESSAGES);
+    this.triggerKillNotification(message, true, points);
+  }
+
   resize(width: number, height: number): void {
     const aspect = width / height;
     const frustumSize = CAMERA_CONFIG.FRUSTUM_SIZE;
@@ -1202,142 +1443,105 @@ export class Engine {
 
     this.animationId = requestAnimationFrame(this.animate);
 
-    const frameStart = performance.now();
+    const frameStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
     const deltaTime = this.clock.getDelta();
     this.update(deltaTime);
 
-    const renderStart = performance.now();
+    const renderStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
     this.render();
-    const renderEnd = performance.now();
 
-    this.performanceStats.rendering = renderEnd - renderStart;
-    this.performanceStats.frameTime = renderEnd - frameStart;
-    this.performanceStats.fps = 1000 / (frameStart - this.performanceStats.lastFrameTime);
-    this.performanceStats.lastFrameTime = frameStart;
+    // Performance tracking (only when DEBUG_PERFORMANCE_PANEL is enabled)
+    if (DEBUG_PERFORMANCE_PANEL) {
+      const renderEnd = performance.now();
 
-    // Capture Three.js renderer stats (draw calls, triangles, memory)
-    const info = this.renderer.info;
-    this.performanceStats.renderer = {
-      drawCalls: info.render.calls,
-      triangles: info.render.triangles,
-      points: info.render.points,
-      lines: info.render.lines,
-      geometries: info.memory.geometries,
-      textures: info.memory.textures,
-    };
+      this.performanceStats.rendering = renderEnd - renderStart;
+      this.performanceStats.frameTime = renderEnd - frameStart;
+      this.performanceStats.fps = 1000 / (frameStart - this.performanceStats.lastFrameTime);
+      this.performanceStats.lastFrameTime = frameStart;
 
-    this.performanceStats.counts = {
-      cops: this.cops?.getActiveCopCount() || 0,
-      pedestrians: this.crowd?.getPedestrianCount() || 0,
-      particles: this.particles?.getParticleCount() || 0,
-      bloodDecals: this.bloodDecals?.getDecalCount() || 0,
-      buildings: this.buildings?.getBuildingCount() || 0
-    };
-
-    // Push to circular buffers (O(1) - no shift needed, auto-overwrites old values)
-    const history = this.performanceStats.history;
-    history.frameTime.push(this.performanceStats.frameTime);
-    history.physics.push(this.performanceStats.physics);
-    history.entities.push(this.performanceStats.entities);
-    history.player.push(this.performanceStats.player);
-    history.cops.push(this.performanceStats.cops);
-    history.pedestrians.push(this.performanceStats.pedestrians);
-    history.world.push(this.performanceStats.world);
-    history.rendering.push(this.performanceStats.rendering);
-    history.drawCalls.push(this.performanceStats.renderer.drawCalls);
-
-    // Calculate averages using circular buffer's built-in average()
-    this.performanceStats.avgFrameTime = history.frameTime.average();
-    this.performanceStats.avgPhysics = history.physics.average();
-    this.performanceStats.avgEntities = history.entities.average();
-    this.performanceStats.avgPlayer = history.player.average();
-    this.performanceStats.avgCops = history.cops.average();
-    this.performanceStats.avgPedestrians = history.pedestrians.average();
-    this.performanceStats.avgWorld = history.world.average();
-    this.performanceStats.avgRendering = history.rendering.average();
-    this.performanceStats.avgDrawCalls = history.drawCalls.average();
-
-    // DISABLED: Performance logging (uncomment for debugging)
-    // Log performance stats every 15 frames (~0.25 seconds)
-    // if (history.frameTime.length % 15 === 0) {
-    //   const r = this.performanceStats.renderer;
-    //   const p = this.performanceStats;
-    //   console.log(
-    //     `[3PERF] FPS:${p.fps.toFixed(0)} Frame:${p.avgFrameTime.toFixed(1)}ms | ` +
-    //     `Render:${p.avgRendering.toFixed(1)}ms | ` +
-    //     `DrawCalls:${r.drawCalls} Tris:${(r.triangles/1000).toFixed(1)}k | ` +
-    //     `Geom:${r.geometries} Tex:${r.textures} | ` +
-    //     `Peds:${p.counts.pedestrians} Cops:${p.counts.cops} Parts:${p.counts.particles} Blood:${p.counts.bloodDecals}`
-    //   );
-    // }
-
-    // DISABLED: Attack tracking (uncomment for debugging)
-    // if (this.attackTrackingActive) {
-    //   this.attackTrackingFrames++;
-    //   const r = this.renderer.info;
-    //   const p = this.performanceStats;
-    //   const currentParts = this.particles.getParticleCount();
-    //   const currentDecals = this.bloodDecals.getDecalCount();
-    //   const deltaParts = currentParts - this.attackStartParticles;
-    //   const deltaDecals = currentDecals - this.attackStartDecals;
-    //   const deltaGeom = r.memory.geometries - this.attackStartGeom;
-    //   const deltaTex = r.memory.textures - this.attackStartTex;
-    //
-    //   console.log(
-    //     `[STAB] f${this.attackTrackingFrames} | ` +
-    //     `FPS:${p.fps.toFixed(0)} Frame:${p.frameTime.toFixed(1)}ms | ` +
-    //     `DrawCalls:${r.render.calls} Tris:${(r.render.triangles/1000).toFixed(1)}k | ` +
-    //     `Geom:${r.memory.geometries}(+${deltaGeom}) Tex:${r.memory.textures}(+${deltaTex}) | ` +
-    //     `Parts:${currentParts}(+${deltaParts}) Decals:${currentDecals}(+${deltaDecals})`
-    //   );
-    //
-    //   if (this.attackTrackingFrames >= 60) {
-    //     this.attackTrackingActive = false;
-    //     console.log(`[STAB] END`);
-    //   }
-    // }
-
-    if (this.performanceStats.frameTime > this.performanceStats.worstFrame.frameTime) {
-      const { physics, entities, player, cops, pedestrians, world, rendering, renderer } = this.performanceStats;
-
-      let bottleneck: typeof this.performanceStats.worstFrame.bottleneck = 'none';
-      let maxTime = 0;
-
-      if (physics > maxTime) { maxTime = physics; bottleneck = 'physics'; }
-      if (player > maxTime) { maxTime = player; bottleneck = 'player'; }
-      if (cops > maxTime) { maxTime = cops; bottleneck = 'cops'; }
-      if (pedestrians > maxTime) { maxTime = pedestrians; bottleneck = 'pedestrians'; }
-      if (world > maxTime) { maxTime = world; bottleneck = 'world'; }
-      if (rendering > maxTime) { maxTime = rendering; bottleneck = 'rendering'; }
-
-      this.performanceStats.worstFrame = {
-        frameTime: this.performanceStats.frameTime,
-        physics,
-        entities,
-        player,
-        cops,
-        pedestrians,
-        world,
-        particles: this.performanceStats.particles,
-        bloodDecals: this.performanceStats.bloodDecals,
-        rendering,
-        bottleneck,
-        counts: { ...this.performanceStats.counts },
-        renderer: {
-          drawCalls: renderer.drawCalls,
-          triangles: renderer.triangles,
-        }
+      // Capture Three.js renderer stats (draw calls, triangles, memory)
+      const info = this.renderer.info;
+      this.performanceStats.renderer = {
+        drawCalls: info.render.calls,
+        triangles: info.render.triangles,
+        points: info.render.points,
+        lines: info.render.lines,
+        geometries: info.memory.geometries,
+        textures: info.memory.textures,
       };
 
+      this.performanceStats.counts = {
+        cops: this.cops?.getActiveCopCount() || 0,
+        pedestrians: this.crowd?.getPedestrianCount() || 0,
+        particles: this.particles?.getParticleCount() || 0,
+        bloodDecals: this.bloodDecals?.getDecalCount() || 0,
+        buildings: this.buildings?.getBuildingCount() || 0
+      };
+
+      // Push to circular buffers (O(1) - no shift needed, auto-overwrites old values)
+      const history = this.performanceStats.history;
+      history.frameTime.push(this.performanceStats.frameTime);
+      history.physics.push(this.performanceStats.physics);
+      history.entities.push(this.performanceStats.entities);
+      history.player.push(this.performanceStats.player);
+      history.cops.push(this.performanceStats.cops);
+      history.pedestrians.push(this.performanceStats.pedestrians);
+      history.world.push(this.performanceStats.world);
+      history.rendering.push(this.performanceStats.rendering);
+      history.drawCalls.push(this.performanceStats.renderer.drawCalls);
+
+      // Calculate averages using circular buffer's built-in average()
+      this.performanceStats.avgFrameTime = history.frameTime.average();
+      this.performanceStats.avgPhysics = history.physics.average();
+      this.performanceStats.avgEntities = history.entities.average();
+      this.performanceStats.avgPlayer = history.player.average();
+      this.performanceStats.avgCops = history.cops.average();
+      this.performanceStats.avgPedestrians = history.pedestrians.average();
+      this.performanceStats.avgWorld = history.world.average();
+      this.performanceStats.avgRendering = history.rendering.average();
+      this.performanceStats.avgDrawCalls = history.drawCalls.average();
+
+      if (this.performanceStats.frameTime > this.performanceStats.worstFrame.frameTime) {
+        const { physics, entities, player, cops, pedestrians, world, rendering, renderer } = this.performanceStats;
+
+        let bottleneck: typeof this.performanceStats.worstFrame.bottleneck = 'none';
+        let maxTime = 0;
+
+        if (physics > maxTime) { maxTime = physics; bottleneck = 'physics'; }
+        if (player > maxTime) { maxTime = player; bottleneck = 'player'; }
+        if (cops > maxTime) { maxTime = cops; bottleneck = 'cops'; }
+        if (pedestrians > maxTime) { maxTime = pedestrians; bottleneck = 'pedestrians'; }
+        if (world > maxTime) { maxTime = world; bottleneck = 'world'; }
+        if (rendering > maxTime) { maxTime = rendering; bottleneck = 'rendering'; }
+
+        this.performanceStats.worstFrame = {
+          frameTime: this.performanceStats.frameTime,
+          physics,
+          entities,
+          player,
+          cops,
+          pedestrians,
+          world,
+          particles: this.performanceStats.particles,
+          bloodDecals: this.performanceStats.bloodDecals,
+          rendering,
+          bottleneck,
+          counts: { ...this.performanceStats.counts },
+          renderer: {
+            drawCalls: renderer.drawCalls,
+            triangles: renderer.triangles,
+          }
+        };
+      }
     }
   };
 
   private update(dt: number): void {
-    const physicsStart = performance.now();
+    const physicsStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
     if (this.physics.isReady()) {
       this.physics.step(dt);
     }
-    this.performanceStats.physics = performance.now() - physicsStart;
+    if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.physics = performance.now() - physicsStart;
 
     this.stats.gameTime += dt;
 
@@ -1357,25 +1561,28 @@ export class Engine {
     }
 
     // --- Entity Updates ---
-    const entitiesStart = performance.now();
+    const entitiesStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
 
     // Player
-    const playerStart = performance.now();
-    if (!this.vehicleSpawned && this.player) {
-      if (this.stats.kills >= TIER_CONFIGS[Tier.SEDAN].minKills) {
-        this.spawnVehicle(Tier.SEDAN);
-      } else if (this.stats.kills >= TIER_CONFIGS[Tier.MOTO].minKills) {
-        this.spawnVehicle(Tier.MOTO);
-      } else if (this.stats.kills >= TIER_CONFIGS[Tier.BIKE].minKills) {
-        this.spawnVehicle(Tier.BIKE);
-      }
-    }
+    const playerStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
+
+    // --- Tier Progression System ---
+    // Check if player should receive next tier vehicle
+    this.checkTierProgression();
+
+    // Update awaiting vehicle glow effect
+    this.updateAwaitingVehicleGlow(dt);
+
+    // Update vehicles pending cleanup
+    this.updateVehicleCleanup(dt);
 
     const taserState = this.player?.getTaserState() || { isTased: false, escapeProgress: 0 };
-    const isNearVehicle = this.isPlayerNearVehicle();
+    const isNearCurrentVehicle = this.isPlayerNearVehicle();
+    const isNearAwaitingVehicle = this.isPlayerNearAwaitingVehicle();
     const actionContext = {
       isTased: taserState.isTased,
-      isNearCar: this.vehicleSpawned && !this.isInVehicle && isNearVehicle,
+      isNearCar: this.vehicleSpawned && isNearCurrentVehicle,
+      isNearAwaitingVehicle: this.awaitingVehicle !== null && isNearAwaitingVehicle,
       isInVehicle: this.isInVehicle,
     };
     const { action, isNewPress } = this.actionController.resolve(this.input, actionContext);
@@ -1384,6 +1591,9 @@ export class Engine {
       switch (action) {
         case ActionType.ENTER_CAR:
           this.enterVehicle();
+          break;
+        case ActionType.SWITCH_VEHICLE:
+          this.switchToAwaitingVehicle();
           break;
         case ActionType.ESCAPE_TASER:
           this.player?.handleEscapePress();
@@ -1412,8 +1622,9 @@ export class Engine {
 
     if (this.player) {
       if (!this.isInVehicle) {
-        const cameraDirection = this.camera.position.clone().normalize();
-        this.player.setCameraDirection(cameraDirection);
+        // Reuse pre-allocated vector for camera direction (avoid per-frame clone)
+        this._tempCameraPos.copy(this.camera.position).normalize();
+        this.player.setCameraDirection(this._tempCameraPos);
         this.player.update(dt);
 
         const taserState = this.player.getTaserState();
@@ -1423,7 +1634,7 @@ export class Engine {
         this.player.updateAnimations(dt);
       }
     }
-    this.performanceStats.player = performance.now() - playerStart;
+    if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.player = performance.now() - playerStart;
 
     // Get current position (reuse pre-allocated vector for fallback)
     const playerPos = this.isInVehicle && this.vehicle
@@ -1432,31 +1643,57 @@ export class Engine {
     const currentPos = playerPos || this._tempCurrentPos.set(0, 0, 0);
 
     // World elements (buildings, lampposts)
-    const worldStart = performance.now();
+    const worldStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
     if (this.buildings) {
       this.buildings.update(currentPos);
+      this.buildings.updateDestructionAnimations();
     }
     if (this.lampPosts) {
       this.lampPosts.update(currentPos);
     }
-    this.performanceStats.world = performance.now() - worldStart;
+    if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.world = performance.now() - worldStart;
 
     // Pedestrians
-    const pedestriansStart = performance.now();
+    const pedestriansStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
     if (this.crowd) {
       this.crowd.update(dt, currentPos);
 
       const isBicycle = this.getCurrentVehicleType() === VehicleType.BICYCLE;
+      const isTruck = this.getCurrentVehicleType() === VehicleType.TRUCK;
       if (this.isInVehicle && this.vehicle && !isBicycle) {
-        const vehicleKillRadius = this.vehicle.getKillRadius();
         const vehicleVelocity = this.vehicle.getVelocity();
-
         const speed = vehicleVelocity.length();
-        if (speed > 1) {
-          const result = this.crowd.damageInRadius(currentPos, vehicleKillRadius, 999, Infinity);
 
-          if (this.vehicle.causesRagdoll()) {
-            this.crowd.applyVehicleKnockback(currentPos, vehicleVelocity, vehicleKillRadius);
+        // Truck kills even when stationary (it's massive), other vehicles need speed > 1
+        if (isTruck || speed > 1) {
+          let result: { kills: number; panicKills: number; positions: THREE.Vector3[] };
+
+          if (isTruck) {
+            // Truck uses box collision (actual vehicle shape)
+            const dims = this.vehicle.getColliderDimensions();
+            const rotation = this.vehicle.getRotationY();
+            console.log(`[ENGINE] Truck dims: width=${dims.width}, length=${dims.length}, rotation=${rotation.toFixed(2)}`);
+            result = this.crowd.damageInBox(currentPos, dims.width, dims.length, rotation, 999);
+
+            if (this.vehicle.causesRagdoll()) {
+              this.crowd.applyBoxKnockback(currentPos, vehicleVelocity, dims.width, dims.length, rotation);
+            }
+
+            // Truck building destruction
+            if (this.buildings) {
+              const destroyedPos = this.buildings.checkTruckCollision(currentPos, Math.max(dims.width, dims.length));
+              if (destroyedPos) {
+                this.handleBuildingDestruction(destroyedPos);
+              }
+            }
+          } else {
+            // Other vehicles use circular radius
+            const vehicleKillRadius = this.vehicle.getKillRadius();
+            result = this.crowd.damageInRadius(currentPos, vehicleKillRadius, 999, Infinity);
+
+            if (this.vehicle.causesRagdoll()) {
+              this.crowd.applyVehicleKnockback(currentPos, vehicleVelocity, vehicleKillRadius);
+            }
           }
 
           const regularKills = result.kills - result.panicKills;
@@ -1473,7 +1710,7 @@ export class Engine {
 
       this.crowd.cleanup(currentPos);
     }
-    this.performanceStats.pedestrians = performance.now() - pedestriansStart;
+    if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.pedestrians = performance.now() - pedestriansStart;
 
     // Get player velocity for cop AI prediction (reuse pre-allocated zero vector for fallback)
     const playerVelocity = this.isInVehicle && this.vehicle
@@ -1481,7 +1718,7 @@ export class Engine {
       : this._zeroVelocity;
 
     // Cops (foot cops and motorbike cops)
-    const copsStart = performance.now();
+    const copsStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
     // Regular foot cops (damage callback set once in resetGame, not every frame)
     if (this.cops) {
       this.cops.updateSpawns(this.stats.heat, currentPos);
@@ -1500,7 +1737,7 @@ export class Engine {
       // NOTE: Damage callback is set once in resetGame(), not every frame
       this.motorbikeCops.update(dt, currentPos, playerVelocity, this.stats.wantedStars, playerCanBeTased);
     }
-    this.performanceStats.cops = performance.now() - copsStart;
+    if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.cops = performance.now() - copsStart;
 
     // Update inPursuit based on total cop count
     const footCopCount = this.cops?.getActiveCopCount() || 0;
@@ -1514,38 +1751,55 @@ export class Engine {
     this.updateExplosionEffects(dt);
 
     // Total entities update time
-    this.performanceStats.entities = performance.now() - entitiesStart;
+    if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.entities = performance.now() - entitiesStart;
 
     // Camera follow player/car (unless manual control is active)
     if (!this.disableCameraFollow) {
       // Get target position (reuse currentPos already calculated above)
       const targetPos = currentPos;
 
-      // Only update camera if target moved significantly (performance optimization)
-      // Uses squared distance to avoid sqrt
-      const targetMoveDist = targetPos.distanceToSquared(this.lastPlayerPosition);
-      const shouldUpdateCamera = targetMoveDist > (this.cameraMoveThreshold * this.cameraMoveThreshold);
+      // Camera offset depends on vehicle - truck needs higher/further view
+      const isTruck = this.isInVehicle && this.currentVehicleTier === Tier.TRUCK;
+      const targetOffsetX = isTruck ? 5 : 2.5;
+      const targetOffsetY = isTruck ? 14 : 6.25;
+      const targetOffsetZ = isTruck ? 5 : 2.5;
+      // Truck needs 2x zoom out (larger frustum = more visible area)
+      const targetZoom = isTruck ? CAMERA_CONFIG.FRUSTUM_SIZE * 2 : CAMERA_CONFIG.FRUSTUM_SIZE;
 
-      if (shouldUpdateCamera) {
-        // Isometric camera with fixed offset (reuse pre-allocated vector)
-        this._tempCameraPos.set(
-          targetPos.x + 2.5,
-          targetPos.y + 6.25,
-          targetPos.z + 2.5
-        );
+      // Smoothly lerp camera offset (for truck zoom in/out transitions)
+      this._currentCameraOffset.x += (targetOffsetX - this._currentCameraOffset.x) * 0.05;
+      this._currentCameraOffset.y += (targetOffsetY - this._currentCameraOffset.y) * 0.05;
+      this._currentCameraOffset.z += (targetOffsetZ - this._currentCameraOffset.z) * 0.05;
 
-        // Smooth lerp camera to follow target
-        this.camera.position.lerp(this._tempCameraPos, 0.1);
+      // Smoothly lerp camera zoom (frustum size for orthographic camera)
+      this.currentCameraZoom += (targetZoom - this.currentCameraZoom) * 0.05;
 
-        // Update lookAt (reuse pre-allocated vector)
-        this._tempLookAt.set(targetPos.x, targetPos.y, targetPos.z);
-        this.camera.lookAt(this._tempLookAt);
-        this.lastPlayerPosition.copy(targetPos);
+      // Update orthographic camera frustum for zoom effect
+      const aspect = this.renderer.domElement.width / this.renderer.domElement.height;
+      this.camera.left = (this.currentCameraZoom * aspect) / -2;
+      this.camera.right = (this.currentCameraZoom * aspect) / 2;
+      this.camera.top = this.currentCameraZoom / 2;
+      this.camera.bottom = this.currentCameraZoom / -2;
+      this.camera.updateProjectionMatrix();
 
-        // Update base position AND rotation AFTER lookAt (so render() applies shake from this base)
-        this.cameraBasePosition.copy(this.camera.position);
-        this.cameraBaseQuaternion.copy(this.camera.quaternion);
-      }
+      // Isometric camera with smoothly-interpolated offset
+      this._tempCameraPos.set(
+        targetPos.x + this._currentCameraOffset.x,
+        targetPos.y + this._currentCameraOffset.y,
+        targetPos.z + this._currentCameraOffset.z
+      );
+
+      // Smooth lerp camera to follow target
+      this.camera.position.lerp(this._tempCameraPos, 0.1);
+
+      // Update lookAt (reuse pre-allocated vector)
+      this._tempLookAt.set(targetPos.x, targetPos.y, targetPos.z);
+      this.camera.lookAt(this._tempLookAt);
+      this.lastPlayerPosition.copy(targetPos);
+
+      // Update base position AND rotation AFTER lookAt (so render() applies shake from this base)
+      this.cameraBasePosition.copy(this.camera.position);
+      this.cameraBaseQuaternion.copy(this.camera.quaternion);
     }
 
     // Update cop health bars every 3 frames (project 3D positions to 2D screen space)
@@ -1553,26 +1807,31 @@ export class Engine {
     if (this.cops && this.healthBarUpdateCounter >= 3) {
       this.healthBarUpdateCounter = 0;
       const copData = this.cops.getCopData();
-      this.stats.copHealthBars = copData.map(cop => {
+      const canvas = this.renderer.domElement;
+
+      // Reset and reuse pre-allocated array
+      this._healthBarResult.length = 0;
+
+      for (const cop of copData) {
         // Project 3D world position to 2D screen coordinates
         // Just offset up from cop's actual position for head height
-        // Reuse pre-allocated vector instead of clone()
         this._tempScreenPos.copy(cop.position);
         this._tempScreenPos.y += 1.5; // Offset up to above head
         this._tempScreenPos.project(this.camera);
 
         // Convert normalized device coordinates to screen pixels
-        const canvas = this.renderer.domElement;
         const x = (this._tempScreenPos.x * 0.5 + 0.5) * canvas.clientWidth;
         const y = (-(this._tempScreenPos.y * 0.5) + 0.5) * canvas.clientHeight;
 
-        return {
+        this._healthBarResult.push({
           x,
           y,
           health: cop.health,
           maxHealth: cop.maxHealth
-        };
-      });
+        });
+      }
+
+      this.stats.copHealthBars = this._healthBarResult;
     }
 
     // Send stats update (including performance data and vehicle state)
@@ -1593,7 +1852,7 @@ export class Engine {
       this.callbacks.onStatsUpdate({
         ...this.stats,
         ...vehicleStats,
-        performance: this.performanceStats
+        performance: DEBUG_PERFORMANCE_PANEL ? this.performanceStats : undefined
       });
     }
   }

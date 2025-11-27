@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
-import { VehicleConfig, COLLISION_GROUPS } from '../constants';
+import { VehicleConfig, COLLISION_GROUPS, makeCollisionGroups } from '../constants';
 
 export class Vehicle extends THREE.Group {
   private config: VehicleConfig;
@@ -25,9 +25,7 @@ export class Vehicle extends THREE.Group {
   private readonly acceleration: number = 15;
   private readonly deceleration: number = 20;
 
-  private movementCollisionFilter: number =
-    ((COLLISION_GROUPS.GROUND | COLLISION_GROUPS.BUILDING) << 16) |
-    COLLISION_GROUPS.VEHICLE;
+  private movementCollisionFilter: number = 0; // Set in constructor based on config
 
   private input = {
     up: false,
@@ -50,6 +48,18 @@ export class Vehicle extends THREE.Group {
     this.maxHealth = config.maxHealth;
     this.maxSpeed = config.speed;
 
+    // Set collision filter - trucks that crush buildings don't collide with them
+    if (config.canCrushBuildings) {
+      // Only collide with ground (not buildings)
+      this.movementCollisionFilter =
+        (COLLISION_GROUPS.GROUND << 16) | COLLISION_GROUPS.VEHICLE;
+    } else {
+      // Normal vehicles collide with ground and buildings
+      this.movementCollisionFilter =
+        ((COLLISION_GROUPS.GROUND | COLLISION_GROUPS.BUILDING) << 16) |
+        COLLISION_GROUPS.VEHICLE;
+    }
+
     this.modelContainer = new THREE.Group();
     this.modelContainer.position.y = 0;
     (this as THREE.Group).add(this.modelContainer);
@@ -63,6 +73,16 @@ export class Vehicle extends THREE.Group {
 
   getKillRadius(): number {
     return this.config.killRadius;
+  }
+
+  /**
+   * Get collision box dimensions (half-extents) for box-based collision
+   */
+  getColliderDimensions(): { width: number; length: number } {
+    return {
+      width: this.config.colliderWidth,
+      length: this.config.colliderLength,
+    };
   }
 
   causesRagdoll(): boolean {
@@ -110,6 +130,28 @@ export class Vehicle extends THREE.Group {
 
       this.modelContainer.add(model);
       this.modelLoaded = true;
+
+      // DEBUG: Add solid red box showing collision bounds at EXACT collision center
+      // Added directly to Vehicle group (not modelContainer) to show true collision area
+      if (this.config.canCrushBuildings) {
+        const boxGeom = new THREE.BoxGeometry(
+          this.config.colliderWidth * 2,  // Full width (config is half-extent)
+          this.config.colliderHeight * 2, // Full height
+          this.config.colliderLength * 2  // Full length
+        );
+        const solidMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 });
+        const debugBox = new THREE.Mesh(boxGeom, solidMat);
+        debugBox.position.y = this.config.colliderHeight; // Center vertically
+        // Add directly to Vehicle group so it's at collision center (0,0,0 in local space)
+        (this as THREE.Group).add(debugBox);
+
+        // DEBUG: Add bright green sphere at exact collision center (0,0,0 in vehicle space)
+        const sphereGeom = new THREE.SphereGeometry(0.5);
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const centerMarker = new THREE.Mesh(sphereGeom, sphereMat);
+        centerMarker.position.y = 1; // Slightly above ground so it's visible
+        (this as THREE.Group).add(centerMarker);
+      }
 
       // Find wheel objects for rotation animation
       this.wheels = [];
@@ -161,12 +203,11 @@ export class Vehicle extends THREE.Group {
     // Membership: VEHICLE group
     // Filter: can collide with GROUND, PEDESTRIAN, BUILDING
     const vehicleFilter = COLLISION_GROUPS.GROUND | COLLISION_GROUPS.PEDESTRIAN | COLLISION_GROUPS.BUILDING;
-    const collisionGroups = (vehicleFilter << 16) | COLLISION_GROUPS.VEHICLE;
     const colliderDesc = RAPIER.ColliderDesc.cuboid(
       this.config.colliderWidth,
       this.config.colliderHeight,
       this.config.colliderLength
-    ).setCollisionGroups(collisionGroups);
+    ).setCollisionGroups(makeCollisionGroups(COLLISION_GROUPS.VEHICLE, vehicleFilter));
 
     this.collider = world.createCollider(colliderDesc, this.rigidBody);
 
@@ -310,8 +351,8 @@ export class Vehicle extends THREE.Group {
       const rotationAngle = distance / wheelRadius;
 
       for (const wheel of this.wheels) {
-        // Rotate around Y axis
-        wheel.rotation.y += rotationAngle;
+        // Rotate around X axis (wheels roll forward/backward)
+        wheel.rotation.x += rotationAngle;
       }
     }
   }

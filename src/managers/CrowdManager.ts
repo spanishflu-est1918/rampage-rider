@@ -238,6 +238,111 @@ export class CrowdManager {
   }
 
   /**
+   * Damage pedestrians in oriented box (for truck - uses actual vehicle shape, not circle)
+   * @param position - Center of the vehicle
+   * @param halfWidth - Half the vehicle width
+   * @param halfLength - Half the vehicle length
+   * @param rotation - Vehicle rotation in radians (Y axis)
+   * @param damage - Damage to apply
+   */
+  damageInBox(
+    position: THREE.Vector3,
+    halfWidth: number,
+    halfLength: number,
+    rotation: number,
+    damage: number
+  ): {
+    kills: number;
+    panicKills: number;
+    positions: THREE.Vector3[]
+  } {
+    let killCount = 0;
+    let panicKillCount = 0;
+    const killPositions: THREE.Vector3[] = [];
+
+    // Pre-calculate rotation sin/cos for transforming to local space
+    const cos = Math.cos(-rotation);
+    const sin = Math.sin(-rotation);
+
+    // Add margin to account for rotation during frame and pedestrian radius
+    // Without this, rapid rotation can cause pedestrians to "tunnel" through
+    const killMargin = 1.0;
+    const effectiveWidth = halfWidth + killMargin;
+    const effectiveLength = halfLength + killMargin;
+
+    for (const pedestrian of this.pedestrians) {
+      if (pedestrian.isDeadState()) continue;
+
+      const pedPos = (pedestrian as THREE.Group).position;
+
+      // Transform pedestrian position to vehicle's local space
+      const dx = pedPos.x - position.x;
+      const dz = pedPos.z - position.z;
+
+      // Rotate to align with vehicle's local axes
+      const localX = dx * cos - dz * sin;
+      const localZ = dx * sin + dz * cos;
+
+      // Check if within box bounds (AABB test in local space with margin)
+      const inXBounds = Math.abs(localX) <= effectiveWidth;
+      const inZBounds = Math.abs(localZ) <= effectiveLength;
+
+      // DEBUG: Log closest pedestrians
+      const distToCenter = Math.sqrt(dx * dx + dz * dz);
+      if (distToCenter < 8) {
+        const xStatus = inXBounds ? 'IN' : 'OUT';
+        const zStatus = inZBounds ? 'IN' : 'OUT';
+        console.log(`[TRUCK] Ped at dx=${dx.toFixed(2)}, dz=${dz.toFixed(2)} → |localX|=${Math.abs(localX).toFixed(2)} ${xStatus} (need≤${halfWidth}), |localZ|=${Math.abs(localZ).toFixed(2)} ${zStatus} (need≤${halfLength})`);
+      }
+      if (inXBounds && inZBounds) {
+        console.log(`[TRUCK] HIT! localX=${localX.toFixed(2)}, localZ=${localZ.toFixed(2)}`);
+        const wasPanicking = pedestrian.isPanickingState();
+        pedestrian.takeDamage(damage);
+
+        if (pedestrian.isDeadState()) {
+          killCount++;
+          killPositions.push(pedPos.clone());
+          if (wasPanicking) {
+            panicKillCount++;
+          }
+        }
+      }
+    }
+
+    return { kills: killCount, panicKills: panicKillCount, positions: killPositions };
+  }
+
+  /**
+   * Apply knockback in oriented box (for truck)
+   */
+  applyBoxKnockback(
+    position: THREE.Vector3,
+    velocity: THREE.Vector3,
+    halfWidth: number,
+    halfLength: number,
+    rotation: number
+  ): void {
+    const cos = Math.cos(-rotation);
+    const sin = Math.sin(-rotation);
+
+    for (const pedestrian of this.pedestrians) {
+      if (!pedestrian.isDeadState()) continue;
+
+      const pedPos = (pedestrian as THREE.Group).position;
+
+      const dx = pedPos.x - position.x;
+      const dz = pedPos.z - position.z;
+
+      const localX = dx * cos - dz * sin;
+      const localZ = dx * sin + dz * cos;
+
+      if (Math.abs(localX) <= halfWidth && Math.abs(localZ) <= halfLength) {
+        pedestrian.applyVehicleKnockback(position, velocity);
+      }
+    }
+  }
+
+  /**
    * Apply violent knockback to pedestrians hit by vehicle
    * Only knocks back DEAD pedestrians - alive ones get killed by damageInRadius first
    */
@@ -283,15 +388,19 @@ export class CrowdManager {
     }
   }
 
+  // Pre-calculated squared distance for removal threshold (40^2 = 1600)
+  private static readonly REMOVAL_DISTANCE_SQ = 1600;
+
   /**
    * Update all pedestrians (Yuka AI updated by Engine's AIManager)
    */
   update(deltaTime: number, playerPosition: THREE.Vector3): void {
     // Mark pedestrians for removal (don't remove during iteration)
     for (const pedestrian of this.pedestrians) {
-      // Calculate distance once for both removal check and animation LOD
-      const distance = (pedestrian as THREE.Group).position.distanceTo(playerPosition);
-      pedestrian.update(deltaTime, distance);
+      // Calculate squared distance once for both removal check and animation LOD
+      // Avoids sqrt() for 40+ pedestrians per frame
+      const distanceSq = (pedestrian as THREE.Group).position.distanceToSquared(playerPosition);
+      pedestrian.update(deltaTime, distanceSq);
 
       // Track and remove dead pedestrians after death animation
       if (pedestrian.isDeadState()) {
@@ -311,8 +420,8 @@ export class CrowdManager {
         }
       }
 
-      // Mark pedestrians that wandered too far for removal (distance already calculated above)
-      if (distance > 40 && !pedestrian.isDeadState()) {
+      // Mark pedestrians that wandered too far for removal
+      if (distanceSq > CrowdManager.REMOVAL_DISTANCE_SQ && !pedestrian.isDeadState()) {
         this.pedestriansToRemove.push(pedestrian);
       }
     }

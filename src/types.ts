@@ -19,11 +19,12 @@ export enum Tier {
   BIKE = 2,
   MOTO = 3,
   SEDAN = 4,
+  TRUCK = 5, // 18-wheeler - destroys buildings!
 }
 
 export interface TierConfig {
   name: string;
-  minKills: number;
+  minScore: number; // Score threshold to unlock this tier
   speedMultiplier: number;
   maxHealth: number;
   color: number;

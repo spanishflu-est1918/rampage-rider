@@ -431,4 +431,207 @@ export class BuildingManager {
   getBuildingCount(): number {
     return this.buildings.length;
   }
+
+  /**
+   * Check if a position is inside any building collider
+   * Used by truck to detect building collisions
+   */
+  getBuildingAtPosition(position: THREE.Vector3, radius: number): BuildingInstance | null {
+    for (const building of this.buildings) {
+      if (!building.mesh.visible) continue; // Skip destroyed buildings
+
+      const worldX = building.gridX * this.cellWidth;
+      const worldZ = building.gridZ * this.cellDepth;
+
+      // Simple AABB check with radius
+      const halfW = this.scaledWidth / 2 + radius;
+      const halfD = this.scaledDepth / 2 + radius;
+
+      if (
+        position.x >= worldX - halfW &&
+        position.x <= worldX + halfW &&
+        position.z >= worldZ - halfD &&
+        position.z <= worldZ + halfD
+      ) {
+        return building;
+      }
+    }
+    return null;
+  }
+
+  // Track buildings being destroyed (for animation)
+  private destroyingBuildings: Map<BuildingInstance, {
+    startTime: number;
+    originalY: number;
+    originalScale: number;
+    originalX: number;
+    originalZ: number;
+    shakeOffsetX: number;
+    shakeOffsetZ: number;
+  }> = new Map();
+
+  // Destruction animation constants
+  private readonly DESTROY_DURATION = 1.2; // seconds (longer for more dramatic effect)
+  private readonly SINK_DEPTH = 6; // How far building sinks
+  private readonly SHAKE_DURATION = 0.3; // Initial shake before collapse
+  private readonly SHAKE_INTENSITY = 0.3; // How much it shakes
+
+  /**
+   * Destroy a building with collapse animation
+   * Returns true if building was destroyed, false if already destroyed
+   */
+  destroyBuilding(building: BuildingInstance): boolean {
+    if (!building.mesh.visible) return false;
+    if (this.destroyingBuildings.has(building)) return false;
+
+    // Start destruction animation
+    this.destroyingBuildings.set(building, {
+      startTime: performance.now() / 1000,
+      originalY: building.mesh.position.y,
+      originalScale: building.mesh.scale.x,
+      originalX: building.mesh.position.x,
+      originalZ: building.mesh.position.z,
+      shakeOffsetX: 0,
+      shakeOffsetZ: 0,
+    });
+
+    // Hide shadow immediately
+    building.shadow.visible = false;
+
+    // Flash the building white on impact
+    building.mesh.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const mat = child.material as THREE.MeshStandardMaterial;
+        if (mat.emissive) {
+          mat.emissive.setHex(0xffffff);
+          mat.emissiveIntensity = 2;
+        }
+      }
+    });
+
+    return true;
+  }
+
+  /**
+   * Update destruction animations
+   */
+  updateDestructionAnimations(): void {
+    const now = performance.now() / 1000;
+
+    for (const [building, state] of this.destroyingBuildings.entries()) {
+      const elapsed = now - state.startTime;
+      const progress = Math.min(1, elapsed / this.DESTROY_DURATION);
+
+      // Phase 1: Shake (first SHAKE_DURATION seconds)
+      const shakeProgress = Math.min(1, elapsed / this.SHAKE_DURATION);
+      if (shakeProgress < 1) {
+        // Intense shaking that decreases over time
+        const shakeAmount = this.SHAKE_INTENSITY * (1 - shakeProgress * 0.5);
+        state.shakeOffsetX = (Math.random() - 0.5) * 2 * shakeAmount;
+        state.shakeOffsetZ = (Math.random() - 0.5) * 2 * shakeAmount;
+        building.mesh.position.x = state.originalX + state.shakeOffsetX;
+        building.mesh.position.z = state.originalZ + state.shakeOffsetZ;
+
+        // Fade out the white flash during shake
+        const flashFade = shakeProgress;
+        building.mesh.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            const mat = child.material as THREE.MeshStandardMaterial;
+            if (mat.emissive) {
+              mat.emissiveIntensity = 2 * (1 - flashFade);
+            }
+          }
+        });
+      } else {
+        // Reset X/Z position after shake
+        building.mesh.position.x = state.originalX;
+        building.mesh.position.z = state.originalZ;
+      }
+
+      // Phase 2: Collapse (after shake)
+      const collapseStart = this.SHAKE_DURATION / this.DESTROY_DURATION;
+      if (progress > collapseStart) {
+        const collapseProgress = (progress - collapseStart) / (1 - collapseStart);
+
+        // Easing function for dramatic collapse (ease-in cubic)
+        const eased = collapseProgress * collapseProgress * collapseProgress;
+
+        // Sink into ground
+        building.mesh.position.y = state.originalY - (this.SINK_DEPTH * eased);
+
+        // Scale down as it collapses
+        const scale = state.originalScale * (1 - eased * 0.4);
+        building.mesh.scale.setScalar(scale);
+
+        // Rotate chaotically as it falls
+        building.mesh.rotation.x = eased * 0.3 * (Math.sin(elapsed * 10) * 0.5 + 0.5);
+        building.mesh.rotation.z = eased * 0.25 * (Math.cos(elapsed * 8) * 0.5 + 0.5);
+
+        // Fade out in the last 30%
+        if (collapseProgress > 0.7) {
+          const fadeProgress = (collapseProgress - 0.7) / 0.3;
+          building.mesh.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material) {
+              const mat = child.material as THREE.MeshStandardMaterial;
+              if (!mat.transparent) {
+                mat.transparent = true;
+              }
+              mat.opacity = 1 - fadeProgress;
+            }
+          });
+        }
+      }
+
+      // Animation complete
+      if (progress >= 1) {
+        building.mesh.visible = false;
+
+        // Reset for respawn
+        building.mesh.position.set(state.originalX, state.originalY, state.originalZ);
+        building.mesh.scale.setScalar(state.originalScale);
+        building.mesh.rotation.x = 0;
+        building.mesh.rotation.z = 0;
+
+        // Reset materials
+        building.mesh.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            const mat = child.material as THREE.MeshStandardMaterial;
+            mat.opacity = 1;
+            mat.transparent = false;
+            if (mat.emissive) {
+              mat.emissive.setHex(0x000000);
+              mat.emissiveIntensity = 0;
+            }
+          }
+        });
+
+        this.destroyingBuildings.delete(building);
+
+        // Schedule rebuild after 5 seconds
+        setTimeout(() => {
+          building.mesh.visible = true;
+          building.shadow.visible = true;
+        }, 5000);
+      }
+    }
+  }
+
+  // Pre-allocated vector for building destruction position (avoid per-frame allocations)
+  private _destroyedBuildingPos = new THREE.Vector3();
+
+  /**
+   * Check for truck collision and destroy building
+   * Returns world position of destroyed building, or null if no destruction
+   */
+  checkTruckCollision(truckPosition: THREE.Vector3, truckRadius: number): THREE.Vector3 | null {
+    const building = this.getBuildingAtPosition(truckPosition, truckRadius);
+    if (building && this.destroyBuilding(building)) {
+      // Return building center position (reuse pre-allocated vector)
+      const worldX = building.gridX * this.cellWidth;
+      const worldZ = building.gridZ * this.cellDepth;
+      this._destroyedBuildingPos.set(worldX, this.scaledHeight / 2, worldZ);
+      return this._destroyedBuildingPos;
+    }
+    return null;
+  }
 }

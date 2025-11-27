@@ -1,10 +1,10 @@
 import React from 'react';
 import { GameStats, TierConfig, Tier } from '../../types';
-import { TIER_CONFIGS } from '../../constants';
-import { Badge } from '@/components/ui/8bit/badge';
-import HealthBar from '@/components/ui/8bit/health-bar';
-import HeatBar from '@/components/ui/8bit/heat-bar';
-import { Progress } from '@/components/ui/8bit/progress';
+import { TIER_CONFIGS, DEBUG_PERFORMANCE_PANEL } from '../../constants';
+import { Badge } from '@/components/UI/8bit/badge';
+import HealthBar from '@/components/UI/8bit/health-bar';
+import HeatBar from '@/components/UI/8bit/heat-bar';
+import { Progress } from '@/components/UI/8bit/progress';
 
 interface OverlayProps {
   stats: GameStats;
@@ -16,7 +16,7 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
   const nextConfig = TIER_CONFIGS[nextTier];
 
   const progress = nextConfig
-    ? ((stats.kills - TIER_CONFIGS[stats.tier].minKills) / (nextConfig.minKills - TIER_CONFIGS[stats.tier].minKills)) * 100
+    ? ((stats.score - TIER_CONFIGS[stats.tier].minScore) / (nextConfig.minScore - TIER_CONFIGS[stats.tier].minScore)) * 100
     : 100;
 
   const healthPercent = (stats.health / currentConfig.maxHealth) * 100;
@@ -46,8 +46,8 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
         </div>
       ))}
 
-      {/* Performance Monitor (Right Side, Centered) */}
-      {stats.performance && (
+      {/* Performance Monitor (Right Side, Centered) - only when DEBUG_PERFORMANCE_PANEL is enabled */}
+      {DEBUG_PERFORMANCE_PANEL && stats.performance && (
         <div className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/90 backdrop-blur-sm p-2 rounded border border-green-500 font-mono text-xs text-green-400" style={{ transform: 'scale(0.65) translateY(-50%)', transformOrigin: 'right center' }}>
           <div className="font-bold text-green-300 mb-1 text-center">PERFORMANCE</div>
 
@@ -232,7 +232,7 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
               <div className="text-right">
                 <div className="text-xs text-muted-foreground retro">NEXT UNLOCK</div>
                 <Badge variant="outline" className="font-mono">
-                  {Math.max(0, nextConfig.minKills - stats.kills)} Kills
+                  {Math.max(0, nextConfig.minScore - stats.score)} pts
                 </Badge>
               </div>
             )}

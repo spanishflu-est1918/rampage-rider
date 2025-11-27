@@ -1,5 +1,8 @@
 import { Tier, TierConfig } from "./types";
 
+// Debug flag for performance panel - set to true to show performance metrics
+export const DEBUG_PERFORMANCE_PANEL = false;
+
 export const WORLD_WIDTH = 40;
 export const WORLD_DEPTH = 60; // Visible depth
 export const CHUNK_SIZE = 40;
@@ -7,7 +10,7 @@ export const CHUNK_SIZE = 40;
 export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   [Tier.FOOT]: {
     name: "Foot Fiend",
-    minKills: 0,
+    minScore: 0, // Starting tier
     speedMultiplier: 1.0, // Base speed approx 8 units/s
     maxHealth: 50,
     color: 0xffaa00, // Psycho Orange
@@ -16,7 +19,7 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   },
   [Tier.BIKE]: {
     name: "Bike Butcher",
-    minKills: 10,
+    minScore: 150, // ~10 kills with basic combo
     speedMultiplier: 1.5,
     maxHealth: 75,
     color: 0x00aaff, // Cyan
@@ -25,7 +28,7 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   },
   [Tier.MOTO]: {
     name: "Moto Maniac",
-    minKills: 40,
+    minScore: 1000, // ~40 kills with pursuit/combo bonuses
     speedMultiplier: 2.2,
     maxHealth: 100,
     color: 0xff3333, // Aggressive Red
@@ -34,12 +37,21 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   },
   [Tier.SEDAN]: {
     name: "Sedan Sovereign",
-    minKills: 110,
+    minScore: 4000, // ~110 kills with high multipliers
     speedMultiplier: 3.0,
     maxHealth: 150,
     color: 0x333333, // Tank Black
     scale: 1.8,
     description: "Armored destruction. King of the road.",
+  },
+  [Tier.TRUCK]: {
+    name: "Road Destroyer",
+    minScore: 10000, // ~250 kills with insane multipliers
+    speedMultiplier: 2.5, // Slower than sedan but unstoppable
+    maxHealth: 300, // Tank-level health
+    color: 0x880000, // Blood red
+    scale: 2.5,
+    description: "18 wheels of destruction. Crushes EVERYTHING.",
   },
 };
 
@@ -185,6 +197,7 @@ export enum VehicleType {
   BICYCLE = "bicycle",
   MOTORBIKE = "motorbike",
   SEDAN = "sedan",
+  TRUCK = "truck", // 18-wheeler that destroys buildings
 }
 
 /**
@@ -213,6 +226,8 @@ export interface VehicleConfig {
   // Kill mechanics
   killRadius: number;
   causesRagdoll: boolean; // Whether kills send bodies flying (heavy vehicles only)
+  // Special abilities
+  canCrushBuildings?: boolean; // Truck can drive through buildings
 }
 
 /**
@@ -276,6 +291,28 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     killRadius: 3.5,
     causesRagdoll: true, // Heavy enough to send bodies flying!
   },
+  [VehicleType.TRUCK]: {
+    type: VehicleType.TRUCK,
+    name: "18-Wheeler",
+    modelPath: "/assets/vehicles/truck.glb",
+    speed: 12, // Slow but unstoppable
+    turnSpeed: 2.5, // Very slow turning - it's an 18-wheeler!
+    maxHealth: 300, // Tank-level
+    // Adjusted based on actual gameplay testing - need to match visual model
+    // Pedestrians at dx=2.71 should be hit, so halfWidth needs to be > 2.71
+    colliderWidth: 3.0,    // Half-width (side to side) - covers ~6 unit wide truck
+    colliderHeight: 2.83,  // Height
+    colliderLength: 9.40,  // Half-length (front to back) - covers ~18.8 unit long truck
+    modelScale: 1.4,
+    modelRotationY: 0,
+    modelOffsetY: 0,
+    riderOffsetY: 0,
+    riderOffsetZ: 0,
+    hideRider: true,
+    killRadius: 5.0, // Not used for truck (uses box collision)
+    causesRagdoll: true,
+    canCrushBuildings: true,
+  },
 };
 
 /**
@@ -285,6 +322,7 @@ export const TIER_VEHICLE_MAP: Partial<Record<Tier, VehicleType>> = {
   [Tier.BIKE]: VehicleType.BICYCLE,
   [Tier.MOTO]: VehicleType.MOTORBIKE,
   [Tier.SEDAN]: VehicleType.SEDAN,
+  [Tier.TRUCK]: VehicleType.TRUCK,
 };
 
 /**
@@ -504,3 +542,13 @@ export const COLLISION_GROUPS = {
   VEHICLE: 0x0080,
   COP_BIKE: 0x0100, // Motorbike cops
 } as const;
+
+/**
+ * Helper to create Rapier collision group value
+ * @param membership - What group this collider belongs to (COLLISION_GROUPS value)
+ * @param filter - What groups this collider can collide with (OR'd COLLISION_GROUPS values)
+ * @returns Combined 32-bit collision group value for setCollisionGroups()
+ */
+export function makeCollisionGroups(membership: number, filter: number): number {
+  return (filter << 16) | membership;
+}
