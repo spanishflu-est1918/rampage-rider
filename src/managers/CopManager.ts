@@ -25,6 +25,9 @@ export class CopManager {
   private _tempDirection = new THREE.Vector3();
   private _tempSpawnPos = new THREE.Vector3();
 
+  // Pre-allocated array for getCopData (reused each call, avoids filter/map allocations)
+  private _copDataResult: Array<{ position: THREE.Vector3; health: number; maxHealth: number }> = [];
+
   constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
     this.world = world;
@@ -114,9 +117,9 @@ export class CopManager {
         cop.setChaseTarget(playerPosition);
       }
 
-      // Calculate distance for animation LOD
-      const distance = (cop as THREE.Group).position.distanceTo(playerPosition);
-      cop.update(deltaTime, distance);
+      // Calculate squared distance for animation LOD (avoids sqrt)
+      const distanceSq = (cop as THREE.Group).position.distanceToSquared(playerPosition);
+      cop.update(deltaTime, distanceSq);
     }
   }
 
@@ -218,16 +221,23 @@ export class CopManager {
 
   /**
    * Get all active cops' positions and health for UI rendering
-   * Returns references directly - caller should not modify
+   * Returns pre-allocated array (reused each call) - caller should not hold references
    */
   getCopData(): Array<{ position: THREE.Vector3; health: number; maxHealth: number }> {
-    return this.cops
-      .filter(cop => !cop.isDeadState())
-      .map(cop => ({
-        position: (cop as THREE.Group).position, // Return reference, not clone
-        health: cop.getHealth(),
-        maxHealth: 3
-      }));
+    // Reset length without deallocating (reuse array)
+    this._copDataResult.length = 0;
+
+    for (const cop of this.cops) {
+      if (!cop.isDeadState()) {
+        this._copDataResult.push({
+          position: (cop as THREE.Group).position, // Return reference, not clone
+          health: cop.getHealth(),
+          maxHealth: 3
+        });
+      }
+    }
+
+    return this._copDataResult;
   }
 
   /**

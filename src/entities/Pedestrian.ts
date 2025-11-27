@@ -266,11 +266,15 @@ export class Pedestrian extends THREE.Group {
   /**
    * Update pedestrian (called every frame)
    */
-  update(deltaTime: number, distanceToPlayer?: number): void {
+  // Pre-calculated squared distance threshold for animation LOD (25^2 = 625)
+  private static readonly ANIMATION_LOD_DISTANCE_SQ = 625;
+
+  update(deltaTime: number, distanceToPlayerSq?: number): void {
     if (!this.modelLoaded) return;
 
     // Skip expensive animation updates for distant pedestrians (LOD optimization)
-    const skipAnimation = distanceToPlayer !== undefined && distanceToPlayer > 25;
+    // Uses squared distance to avoid sqrt in caller's hot loop
+    const skipAnimation = distanceToPlayerSq !== undefined && distanceToPlayerSq > Pedestrian.ANIMATION_LOD_DISTANCE_SQ;
 
     // Update animation mixer (skip for distant entities)
     if (this.mixer && !skipAnimation) {

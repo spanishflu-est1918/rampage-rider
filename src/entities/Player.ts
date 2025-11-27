@@ -10,6 +10,7 @@ import {
   TASER_CONFIG,
   HIT_STUN,
   COLLISION_GROUPS,
+  makeCollisionGroups,
 } from '../constants';
 
 /**
@@ -262,9 +263,8 @@ export class Player extends THREE.Group {
     // Membership: PLAYER group
     // Filter: can collide with GROUND, PEDESTRIAN, BUILDING
     const playerFilter = COLLISION_GROUPS.GROUND | COLLISION_GROUPS.PEDESTRIAN | COLLISION_GROUPS.BUILDING;
-    const collisionGroups = (playerFilter << 16) | COLLISION_GROUPS.PLAYER;
     const colliderDesc = RAPIER.ColliderDesc.capsule(0.5, 0.3)
-      .setCollisionGroups(collisionGroups);
+      .setCollisionGroups(makeCollisionGroups(COLLISION_GROUPS.PLAYER, playerFilter));
 
     this.collider = world.createCollider(colliderDesc, this.rigidBody);
 

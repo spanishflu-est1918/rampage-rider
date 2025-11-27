@@ -46,6 +46,19 @@ export class MotorbikeCopManager {
   private readonly _tempCopPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
 
+  // Pre-calculated squared distances for attack range checks (avoid sqrt in hot loop)
+  private static readonly SHOOT_RANGE_SQ = MOTORBIKE_COP_CONFIG.SHOOT_RANGE * MOTORBIKE_COP_CONFIG.SHOOT_RANGE;
+  private static readonly TASER_RANGE_SQ = MOTORBIKE_COP_CONFIG.TASER_RANGE * MOTORBIKE_COP_CONFIG.TASER_RANGE;
+
+  // Pre-allocated array for getCopData (reused each call, avoids filter/map allocations)
+  private _copDataResult: Array<{
+    position: THREE.Vector3;
+    health: number;
+    maxHealth: number;
+    variant: MotorbikeCopVariant;
+    state: MotorbikeCopState;
+  }> = [];
+
   constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
     this.world = world;
@@ -275,16 +288,16 @@ export class MotorbikeCopManager {
         cop.setChaseTarget(playerPosition);
 
         // Handle ranged attacks based on wanted stars and distance
-        // Use zero-alloc getPositionInto to avoid GC pressure
+        // Use squared distance to avoid sqrt in hot loop
         cop.getPositionInto(this._tempCopPos);
-        const distance = this._tempCopPos.distanceTo(playerPosition);
+        const distanceSq = this._tempCopPos.distanceToSquared(playerPosition);
         const state = cop.getState();
 
         if (state === MotorbikeCopState.CHASE) {
-          if (wantedStars >= 2 && distance <= MOTORBIKE_COP_CONFIG.SHOOT_RANGE) {
+          if (wantedStars >= 2 && distanceSq <= MotorbikeCopManager.SHOOT_RANGE_SQ) {
             // 2+ stars: shoot
             cop.fireBullet(playerPosition);
-          } else if (wantedStars === 1 && playerCanBeTased && distance <= MOTORBIKE_COP_CONFIG.TASER_RANGE) {
+          } else if (wantedStars === 1 && playerCanBeTased && distanceSq <= MotorbikeCopManager.TASER_RANGE_SQ) {
             // 1 star: taser
             cop.fireTaser(playerPosition);
           }
@@ -393,6 +406,7 @@ export class MotorbikeCopManager {
 
   /**
    * Get cop data for UI (health bars, indicators)
+   * Returns pre-allocated array (reused each call) - caller should not hold references
    */
   getCopData(): Array<{
     position: THREE.Vector3;
@@ -401,15 +415,22 @@ export class MotorbikeCopManager {
     variant: MotorbikeCopVariant;
     state: MotorbikeCopState;
   }> {
-    return this.cops
-      .filter((cop) => !cop.isDeadState())
-      .map((cop) => ({
-        position: cop.getPosition(),
-        health: cop.getHealth(),
-        maxHealth: cop.getMaxHealth(),
-        variant: cop.getVariant(),
-        state: cop.getState(),
-      }));
+    // Reset length without deallocating (reuse array)
+    this._copDataResult.length = 0;
+
+    for (const cop of this.cops) {
+      if (!cop.isDeadState()) {
+        this._copDataResult.push({
+          position: cop.getPosition(),
+          health: cop.getHealth(),
+          maxHealth: cop.getMaxHealth(),
+          variant: cop.getVariant(),
+          state: cop.getState(),
+        });
+      }
+    }
+
+    return this._copDataResult;
   }
 
   /**

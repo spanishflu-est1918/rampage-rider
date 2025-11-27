@@ -1,6 +1,6 @@
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { COLLISION_GROUPS } from '../constants';
+import { COLLISION_GROUPS, makeCollisionGroups } from '../constants';
 
 /**
  * KinematicCharacterHelper
@@ -32,10 +32,8 @@ export class KinematicCharacterHelper {
     const body = world.createRigidBody(bodyDesc);
 
     // Create capsule collider
-    // Format: (filter << 16) | membership
-    const collisionGroups = (collisionFilter << 16) | collisionGroup;
     const colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, capsuleRadius)
-      .setCollisionGroups(collisionGroups)
+      .setCollisionGroups(makeCollisionGroups(collisionGroup, collisionFilter))
       .setTranslation(0, capsuleHalfHeight + capsuleRadius, 0);
     const collider = world.createCollider(colliderDesc, body);
 
@@ -103,6 +101,9 @@ export class KinematicCharacterHelper {
 
   /**
    * Get collision filter for pedestrian (collides with GROUND, BUILDING, PLAYER, COP)
+   * NOTE: Does not include VEHICLE because pedestrians use Yuka AI for movement,
+   * not physics-based character controller. Vehicle collisions are handled via
+   * damageInBox/damageInRadius checks in CrowdManager.
    */
   static getPedestrianCollisionFilter(): number {
     return COLLISION_GROUPS.GROUND | COLLISION_GROUPS.BUILDING | COLLISION_GROUPS.PLAYER | COLLISION_GROUPS.COP;
