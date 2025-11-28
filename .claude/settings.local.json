@@ -45,7 +45,8 @@
       "Bash(npx @gltf-transform/cli draco:*)",
       "Bash(uvx blender-mcp:*)",
       "Bash(brew install:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(git fetch:*)"
     ],
     "deny": [],
     "ask": []
