@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GameStats, TierConfig, Tier } from '../../types';
 import { TIER_CONFIGS, DEBUG_PERFORMANCE_PANEL } from '../../constants';
 import { Badge } from '@/components/UI/8bit/badge';
+import { Button } from '@/components/UI/8bit/button';
 import HealthBar from '@/components/UI/8bit/health-bar';
 import HeatBar from '@/components/UI/8bit/heat-bar';
 import { Progress } from '@/components/UI/8bit/progress';
@@ -11,6 +12,7 @@ interface OverlayProps {
 }
 
 const Overlay: React.FC<OverlayProps> = ({ stats }) => {
+  const [uiHidden, setUiHidden] = useState(false);
   const currentConfig: TierConfig = TIER_CONFIGS[stats.tier];
   const nextTier = (stats.tier + 1) as Tier;
   const nextConfig = TIER_CONFIGS[nextTier];
@@ -23,6 +25,20 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
 
   return (
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex flex-col justify-between z-10">
+
+      {/* Screenshot Mode Toggle Button - always visible */}
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={() => setUiHidden(!uiHidden)}
+        className="absolute top-4 right-4 pointer-events-auto bg-black/50 hover:bg-black/70 text-white z-20"
+        style={{ transform: 'scale(0.75)', transformOrigin: 'top right' }}
+      >
+        {uiHidden ? '👁' : '📷'}
+      </Button>
+
+      {/* All UI hidden when in screenshot mode */}
+      {uiHidden ? null : <>
 
       {/* Cop Health Dots */}
       {stats.copHealthBars?.map((cop, index) => (
@@ -253,6 +269,7 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
         </div>
       </div>
 
+      </>}
     </div>
   );
 };

@@ -12,6 +12,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-11-28]
 
+### UI & Pedestrian Improvements
+
+**Added:**
+- **Screenshot mode toggle**: Button in top-right corner (📷/👁) hides/shows entire UI for clean screenshots
+- **Idle pedestrians at building corners**: 5% of pedestrians stand idle near building corners instead of wandering
+  - Uses Victory or Jump animations randomly
+  - Positioned at building corners accounting for 90° rotation
+  - Face away from buildings (into the street)
+
+**Changed:**
+- `setIdleBehavior()` now accepts optional animation parameter
+
+**Files Modified:**
+- `src/components/UI/Overlay.tsx` - Added screenshot mode toggle button
+- `src/managers/CrowdManager.ts` - Added idle pedestrian spawning at building corners
+- `src/entities/Pedestrian.ts` - Updated setIdleBehavior signature
+
+---
+
 ### German Biergarten Tables - Festive Overhaul
 
 **Added:**

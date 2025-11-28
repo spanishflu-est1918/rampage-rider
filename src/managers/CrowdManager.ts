@@ -189,8 +189,38 @@ export class CrowdManager {
     this.scene.add(pedestrian);
     this.pedestrians.push(pedestrian);
 
-    // Set wander behavior
-    pedestrian.setWanderBehavior();
+    // 5% chance to be idle (standing around near building corners), 95% wander
+    if (Math.random() < 0.05) {
+      // Snap to nearest building corner
+      // Buildings are rotated 90°, so DEPTH becomes X-width, WIDTH becomes Z-depth
+      const cellW = this.cellWidth; // building + street
+      const cellD = this.cellDepth;
+      const halfBuildingW = CITY_CONFIG.BUILDING_DEPTH / 2; // Long side is X after rotation
+      const halfBuildingD = CITY_CONFIG.BUILDING_WIDTH / 2; // Short side is Z after rotation
+
+      // Find nearest building grid cell (buildings are at EVEN grid positions)
+      const gridX = Math.round(position.x / cellW / 2) * 2;
+      const gridZ = Math.round(position.z / cellD / 2) * 2;
+      const buildingCenterX = gridX * cellW;
+      const buildingCenterZ = gridZ * cellD;
+
+      // Pick a random corner of this building (with small offset so they're just outside)
+      const cornerOffsetX = (Math.random() < 0.5 ? -1 : 1) * (halfBuildingW + 0.5);
+      const cornerOffsetZ = (Math.random() < 0.5 ? -1 : 1) * (halfBuildingD + 0.5);
+
+      position.x = buildingCenterX + cornerOffsetX;
+      position.z = buildingCenterZ + cornerOffsetZ;
+      (pedestrian as THREE.Group).position.copy(position);
+
+      // Random idle animation: 50% Victory, 50% Jump
+      const idleAnim = Math.random() < 0.5 ? 'Victory' : 'Jump';
+      pedestrian.setIdleBehavior(idleAnim);
+      // Face away from building (into the street)
+      const angleToBuilding = Math.atan2(buildingCenterZ - position.z, buildingCenterX - position.x);
+      (pedestrian as THREE.Group).rotation.y = angleToBuilding + Math.PI;
+    } else {
+      pedestrian.setWanderBehavior();
+    }
   }
 
   /**

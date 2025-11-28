@@ -214,13 +214,13 @@ export class Pedestrian extends THREE.Group {
   }
 
   /**
-   * Set idle behavior (for table pedestrians - just stand still)
+   * Set idle behavior (standing still with optional animation)
    */
-  setIdleBehavior(): void {
+  setIdleBehavior(animation: string = 'Idle'): void {
     // Clear steering behaviors - pedestrian will stand still
     this.yukaVehicle.steering.clear();
     this.yukaVehicle.maxSpeed = 0;
-    this.playAnimation('Idle', 0.3);
+    this.playAnimation(animation, 0.3);
   }
 
   /**
