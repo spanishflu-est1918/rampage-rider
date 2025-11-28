@@ -630,8 +630,8 @@ export class CrowdManager {
     const centerX = gridX * this.cellWidth;
     const centerZ = gridZ * this.cellDepth;
 
-    // 4 tables in a tight 2x2 cluster in the center of the intersection
-    const tableSpacing = 1.8; // Distance between tables
+    // 4 tables in a 2x2 cluster in the center of the intersection
+    const tableSpacing = 3.5; // Distance between tables
     const tablePositions = [
       { x: centerX - tableSpacing / 2, z: centerZ - tableSpacing / 2 },
       { x: centerX + tableSpacing / 2, z: centerZ - tableSpacing / 2 },
