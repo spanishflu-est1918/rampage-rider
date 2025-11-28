@@ -4,6 +4,7 @@ import * as YUKA from 'yuka';
 import { Pedestrian } from '../entities/Pedestrian';
 import { InstancedBlobShadows } from '../rendering/InstancedBlobShadows';
 import { AIManager } from '../core/AIManager';
+import { CITY_CONFIG } from '../constants';
 
 /**
  * CrowdManager
@@ -29,9 +30,21 @@ export class CrowdManager {
   private readonly DEATH_CLEANUP_DELAY = 3.0; // Seconds before dead pedestrians are removed
 
   // Spawn config
-  private maxPedestrians: number = 40;
+  private maxPedestrians: number = 60;
   private spawnRadius: number = 25; // Max spawn distance
   private minSpawnDistance: number = 18; // Spawn off-screen (visible area is ~15 units radius)
+
+  // Table system - simple vertical tables at intersection corners
+  private tables: THREE.Group[] = [];
+  private tableGeometry: THREE.BoxGeometry | null = null;
+  private tableMaterial: THREE.MeshStandardMaterial | null = null;
+  private cellWidth: number;
+  private cellDepth: number;
+  private currentTableBaseX = Infinity;
+  private currentTableBaseZ = Infinity;
+
+  // Track which pedestrians are "at tables" (standing idle)
+  private tablePedestrians: Set<Pedestrian> = new Set();
 
   // Character types with weights (higher = more common)
   private characterPool: Array<{ type: string; weight: number }> = [
@@ -79,10 +92,21 @@ export class CrowdManager {
     this.world = world;
     this.aiManager = aiManager;
 
-    // Create instanced shadow manager (max 60 shadows for pedestrians)
-    this.shadowManager = new InstancedBlobShadows(scene, 60);
+    // Create instanced shadow manager (max 80 shadows for pedestrians)
+    this.shadowManager = new InstancedBlobShadows(scene, 80);
 
     this.totalWeight = this.characterPool.reduce((sum, char) => sum + char.weight, 0);
+
+    // Table grid setup
+    this.cellWidth = CITY_CONFIG.BUILDING_WIDTH + CITY_CONFIG.STREET_WIDTH;
+    this.cellDepth = CITY_CONFIG.BUILDING_WIDTH + CITY_CONFIG.STREET_WIDTH;
+
+    // Create shared table geometry and material
+    this.tableGeometry = new THREE.BoxGeometry(1.5, 0.8, 0.6); // Vertical table
+    this.tableMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8B4513, // Saddle brown wood
+      roughness: 0.8,
+    });
   }
 
   /**
@@ -505,7 +529,16 @@ export class CrowdManager {
     this.pedestrianPool = [];
     this.deathTimers.clear();
     this.pedestriansToRemove = [];
+    this.tablePedestrians.clear();
     // Note: AIManager is shared, don't clear it here
+
+    // Clear tables
+    for (const table of this.tables) {
+      this.scene.remove(table);
+    }
+    this.tables = [];
+    this.currentTableBaseX = Infinity;
+    this.currentTableBaseZ = Infinity;
 
     // Dispose shadow manager
     this.shadowManager.dispose();
@@ -523,5 +556,156 @@ export class CrowdManager {
    */
   getPedestrianCount(): number {
     return this.pedestrians.length;
+  }
+
+  // ============================================
+  // TABLE SYSTEM - Tables at intersection corners
+  // ============================================
+
+  /**
+   * Create a single table mesh (vertical standing table)
+   */
+  private createTableMesh(x: number, z: number): THREE.Group {
+    const table = new THREE.Group();
+
+    // Table top (vertical orientation)
+    const top = new THREE.Mesh(this.tableGeometry!, this.tableMaterial!);
+    top.position.y = 0.4; // Table height
+    top.castShadow = false;
+    top.receiveShadow = false;
+    table.add(top);
+
+    table.position.set(x, 0, z);
+    table.rotation.y = Math.random() * Math.PI * 2; // Random rotation
+
+    return table;
+  }
+
+  /**
+   * Spawn pedestrians around a table (2-4 per table)
+   */
+  private spawnTablePedestrians(tableX: number, tableZ: number): void {
+    const numPatrons = 2 + Math.floor(Math.random() * 3); // 2-4 pedestrians
+
+    for (let i = 0; i < numPatrons; i++) {
+      // Position around table in a circle
+      const angle = (i / numPatrons) * Math.PI * 2 + Math.random() * 0.3;
+      const distance = 1.0 + Math.random() * 0.5;
+
+      const position = new THREE.Vector3(
+        tableX + Math.cos(angle) * distance,
+        0,
+        tableZ + Math.sin(angle) * distance
+      );
+
+      const characterType = this.getRandomCharacterType();
+
+      let pedestrian: Pedestrian;
+      if (this.pedestrianPool.length > 0) {
+        pedestrian = this.pedestrianPool.pop()!;
+        pedestrian.reset(position, characterType);
+      } else {
+        pedestrian = new Pedestrian(position, this.world, characterType, this.aiManager.getEntityManager(), this.shadowManager);
+      }
+
+      this.scene.add(pedestrian);
+      this.pedestrians.push(pedestrian);
+      this.tablePedestrians.add(pedestrian);
+
+      // Face towards table center
+      const angleToTable = Math.atan2(tableZ - position.z, tableX - position.x);
+      (pedestrian as THREE.Group).rotation.y = angleToTable + Math.PI;
+
+      // Set idle behavior (not wandering)
+      pedestrian.setIdleBehavior();
+    }
+  }
+
+  /**
+   * Create tables at 4 corners of an intersection
+   */
+  private createIntersectionTables(gridX: number, gridZ: number): void {
+    // Intersection center
+    const centerX = (gridX + 0.5) * this.cellWidth;
+    const centerZ = (gridZ + 0.5) * this.cellDepth;
+
+    // 4 corners around intersection (offset from center)
+    const cornerOffset = 2.5;
+    const corners = [
+      { x: centerX - cornerOffset, z: centerZ - cornerOffset },
+      { x: centerX + cornerOffset, z: centerZ - cornerOffset },
+      { x: centerX - cornerOffset, z: centerZ + cornerOffset },
+      { x: centerX + cornerOffset, z: centerZ + cornerOffset },
+    ];
+
+    for (const corner of corners) {
+      // Create table
+      const table = this.createTableMesh(corner.x, corner.z);
+      this.scene.add(table);
+      this.tables.push(table);
+
+      // Spawn pedestrians at this table
+      this.spawnTablePedestrians(corner.x, corner.z);
+    }
+  }
+
+  /**
+   * Update tables based on player position (streaming)
+   */
+  updateTables(playerPosition: THREE.Vector3): void {
+    const playerGridX = Math.floor(playerPosition.x / this.cellWidth);
+    const playerGridZ = Math.floor(playerPosition.z / this.cellDepth);
+
+    // Initialize on first call
+    if (!Number.isFinite(this.currentTableBaseX)) {
+      this.currentTableBaseX = playerGridX;
+      this.currentTableBaseZ = playerGridZ;
+      this.createIntersectionTables(playerGridX, playerGridZ);
+      return;
+    }
+
+    // Check if player moved to new grid cell
+    if (playerGridX !== this.currentTableBaseX || playerGridZ !== this.currentTableBaseZ) {
+      // Remove old tables
+      for (const table of this.tables) {
+        this.scene.remove(table);
+      }
+      this.tables = [];
+
+      // Remove table pedestrians from tracking (they stay in crowd but become normal)
+      this.tablePedestrians.clear();
+
+      // Create new tables at new intersection
+      this.createIntersectionTables(playerGridX, playerGridZ);
+
+      this.currentTableBaseX = playerGridX;
+      this.currentTableBaseZ = playerGridZ;
+    }
+  }
+
+  /**
+   * When a table pedestrian dies, panic nearby table pedestrians
+   */
+  panicTablePedestrians(deadPosition: THREE.Vector3): void {
+    const panicRadius = 8;
+    const panicRadiusSq = panicRadius * panicRadius;
+
+    for (const pedestrian of this.tablePedestrians) {
+      if (pedestrian.isDeadState()) continue;
+
+      const distSq = (pedestrian as THREE.Group).position.distanceToSquared(deadPosition);
+      if (distSq < panicRadiusSq) {
+        pedestrian.panic(deadPosition);
+        // Remove from table tracking - they're running now
+        this.tablePedestrians.delete(pedestrian);
+      }
+    }
+  }
+
+  /**
+   * Check if a pedestrian is at a table
+   */
+  isTablePedestrian(pedestrian: Pedestrian): boolean {
+    return this.tablePedestrians.has(pedestrian);
   }
 }

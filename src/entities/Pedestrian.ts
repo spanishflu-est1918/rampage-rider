@@ -199,6 +199,16 @@ export class Pedestrian extends THREE.Group {
   }
 
   /**
+   * Set idle behavior (for table pedestrians - just stand still)
+   */
+  setIdleBehavior(): void {
+    // Clear steering behaviors - pedestrian will stand still
+    this.yukaVehicle.steering.clear();
+    this.yukaVehicle.maxSpeed = 0;
+    this.playAnimation('Idle', 0.3);
+  }
+
+  /**
    * Make pedestrian panic and run away from danger
    */
   // Pre-allocated YUKA vector for flee behavior (avoids per-panic allocation)

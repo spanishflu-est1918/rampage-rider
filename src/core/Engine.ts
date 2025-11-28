@@ -10,7 +10,6 @@ import { CopCarManager } from '../managers/CopCarManager';
 import { BuildingManager } from '../managers/BuildingManager';
 import { LampPostManager } from '../managers/LampPostManager';
 import { ChristmasTreeManager } from '../managers/ChristmasTreeManager';
-import { TableManager } from '../managers/TableManager';
 import { Player } from '../entities/Player';
 import { Vehicle } from '../entities/Vehicle';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
@@ -51,7 +50,6 @@ export class Engine {
   public buildings: BuildingManager | null = null;
   public lampPosts: LampPostManager | null = null;
   public christmasTrees: ChristmasTreeManager | null = null;
-  public tables: TableManager | null = null;
   public particles: ParticleEmitter;
   public bloodDecals: BloodDecalSystem;
 
@@ -337,7 +335,6 @@ export class Engine {
       this.buildings = new BuildingManager(this.scene, world);
       this.lampPosts = new LampPostManager(this.scene);
       this.christmasTrees = new ChristmasTreeManager(this.scene);
-      this.tables = new TableManager(this.scene);
     }
   }
 
@@ -564,9 +561,6 @@ export class Engine {
     }
     if (this.christmasTrees) {
       this.christmasTrees.clear();
-    }
-    if (this.tables) {
-      this.tables.clear();
     }
 
     this.particles.clear();
@@ -1522,6 +1516,7 @@ export class Engine {
     this.particles.emitBlood(position, cfg.particleCount);
     if (this.crowd) {
       this.crowd.panicCrowd(position, cfg.panicRadius);
+      this.crowd.panicTablePedestrians(position);
     }
 
     let message: string;
@@ -1789,15 +1784,13 @@ export class Engine {
     if (this.christmasTrees) {
       this.christmasTrees.update(currentPos);
     }
-    if (this.tables) {
-      this.tables.update(currentPos, dt);
-    }
     if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.world = performance.now() - worldStart;
 
     // Pedestrians
     const pedestriansStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
     if (this.crowd) {
       this.crowd.update(dt, currentPos);
+      this.crowd.updateTables(currentPos);
 
       const isBicycle = this.getCurrentVehicleType() === VehicleType.BICYCLE;
       const isTruck = this.getCurrentVehicleType() === VehicleType.TRUCK;
@@ -1845,14 +1838,6 @@ export class Engine {
             this.handleVehicleKill(result.positions[regularKills + i] || currentPos, true);
           }
 
-          // Table patron kills (same radius as vehicle kills)
-          if (this.tables) {
-            const killRadius = isTruck ? Math.max(this.vehicle.getColliderDimensions().width, this.vehicle.getColliderDimensions().length) : this.vehicle.getKillRadius();
-            const tableResult = this.tables.damageInRadius(currentPos, killRadius, 999);
-            for (let i = 0; i < tableResult.kills; i++) {
-              this.handleVehicleKill(tableResult.positions[i] || currentPos, false);
-            }
-          }
         }
       } else if (this.player) {
         this.crowd.handlePlayerCollisions(currentPos);
