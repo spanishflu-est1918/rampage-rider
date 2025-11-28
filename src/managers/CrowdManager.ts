@@ -622,30 +622,31 @@ export class CrowdManager {
   }
 
   /**
-   * Create tables at 4 corners of an intersection
+   * Create 4 tables clustered in center of intersection (where 4 buildings meet)
    */
   private createIntersectionTables(gridX: number, gridZ: number): void {
-    // Intersection center
-    const centerX = (gridX + 0.5) * this.cellWidth;
-    const centerZ = (gridZ + 0.5) * this.cellDepth;
+    // Intersection center is at the corner where 4 grid cells meet
+    // Grid cells contain buildings, so the intersection is at cell boundaries
+    const centerX = gridX * this.cellWidth;
+    const centerZ = gridZ * this.cellDepth;
 
-    // 4 corners around intersection (offset from center)
-    const cornerOffset = 2.5;
-    const corners = [
-      { x: centerX - cornerOffset, z: centerZ - cornerOffset },
-      { x: centerX + cornerOffset, z: centerZ - cornerOffset },
-      { x: centerX - cornerOffset, z: centerZ + cornerOffset },
-      { x: centerX + cornerOffset, z: centerZ + cornerOffset },
+    // 4 tables in a tight 2x2 cluster in the center of the intersection
+    const tableSpacing = 1.8; // Distance between tables
+    const tablePositions = [
+      { x: centerX - tableSpacing / 2, z: centerZ - tableSpacing / 2 },
+      { x: centerX + tableSpacing / 2, z: centerZ - tableSpacing / 2 },
+      { x: centerX - tableSpacing / 2, z: centerZ + tableSpacing / 2 },
+      { x: centerX + tableSpacing / 2, z: centerZ + tableSpacing / 2 },
     ];
 
-    for (const corner of corners) {
+    for (const pos of tablePositions) {
       // Create table
-      const table = this.createTableMesh(corner.x, corner.z);
+      const table = this.createTableMesh(pos.x, pos.z);
       this.scene.add(table);
       this.tables.push(table);
 
       // Spawn pedestrians at this table
-      this.spawnTablePedestrians(corner.x, corner.z);
+      this.spawnTablePedestrians(pos.x, pos.z);
     }
   }
 
