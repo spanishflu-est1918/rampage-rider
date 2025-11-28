@@ -44,6 +44,14 @@ export class Pedestrian extends THREE.Group {
   private isStumbling: boolean = false;
   private stumbleTimer: number = 0;
 
+  // Festive state (for table pedestrians)
+  private isFestive: boolean = false;
+  private festiveSwayTime: number = 0;
+  private festiveSwaySpeed: number = 0;
+  private festiveSwayAmount: number = 0;
+  private santaHat: THREE.Group | null = null;
+  private headBone: THREE.Bone | null = null;
+
   // Dead body knockback velocity (for ragdoll sliding)
   private deadVelocity: THREE.Vector3 = new THREE.Vector3();
   private timeSinceDeath: number = 0; // Track time for raycast limiting
@@ -142,6 +150,13 @@ export class Pedestrian extends THREE.Group {
 
       (this as THREE.Group).add(gltf.scene);
 
+      // Find head bone for Santa hat attachment
+      gltf.scene.traverse((child) => {
+        if (child instanceof THREE.Bone && child.name.toLowerCase().includes('head')) {
+          this.headBone = child;
+        }
+      });
+
       // Setup animation mixer
       this.mixer = new THREE.AnimationMixer(gltf.scene);
       this.animations = gltf.animations;
@@ -206,6 +221,93 @@ export class Pedestrian extends THREE.Group {
     this.yukaVehicle.steering.clear();
     this.yukaVehicle.maxSpeed = 0;
     this.playAnimation('Idle', 0.3);
+  }
+
+  /**
+   * Set sitting behavior (for table pedestrians - sit at table)
+   */
+  setSitBehavior(): void {
+    // Clear steering behaviors - pedestrian will sit still
+    this.yukaVehicle.steering.clear();
+    this.yukaVehicle.maxSpeed = 0;
+    this.playAnimation('SitDown', 0.3);
+  }
+
+  /**
+   * Set festive behavior for table pedestrians - sway, cheer, Santa hat
+   */
+  setFestiveBehavior(): void {
+    this.isFestive = true;
+    this.yukaVehicle.steering.clear();
+    this.yukaVehicle.maxSpeed = 0;
+
+    // Random sway parameters - forward/backward rocking
+    this.festiveSwayTime = Math.random() * Math.PI * 2; // Random phase offset
+    this.festiveSwaySpeed = 2.0 + Math.random() * 1.5; // 2.0-3.5 Hz
+    this.festiveSwayAmount = 0.08 + Math.random() * 0.06; // More visible rocking
+
+    // 50% chance to play Victory (cheering) animation, otherwise Idle
+    if (Math.random() < 0.5) {
+      this.playAnimation('Victory', 0.3);
+    } else {
+      this.playAnimation('Idle', 0.3);
+    }
+
+  }
+
+  /**
+   * Add a Santa hat to the pedestrian's head
+   */
+  private addSantaHat(): void {
+    if (this.santaHat) return; // Already has hat
+
+    this.santaHat = new THREE.Group();
+
+    // Red cone (main hat)
+    const coneGeom = new THREE.ConeGeometry(0.15, 0.35, 8);
+    const redMat = new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.8 });
+    const cone = new THREE.Mesh(coneGeom, redMat);
+    cone.position.y = 0.15;
+    cone.rotation.x = -0.1; // Slight tilt back
+    this.santaHat.add(cone);
+
+    // White pom-pom at top
+    const pomGeom = new THREE.SphereGeometry(0.06, 8, 6);
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+    const pom = new THREE.Mesh(pomGeom, whiteMat);
+    pom.position.y = 0.35;
+    this.santaHat.add(pom);
+
+    // White brim
+    const brimGeom = new THREE.TorusGeometry(0.14, 0.04, 6, 12);
+    const brim = new THREE.Mesh(brimGeom, whiteMat);
+    brim.rotation.x = Math.PI / 2;
+    brim.position.y = 0.0;
+    this.santaHat.add(brim);
+
+    // Attach to head bone if found, otherwise attach to group
+    if (this.headBone) {
+      this.santaHat.position.set(0, 0.15, 0);
+      this.headBone.add(this.santaHat);
+    } else {
+      // Fallback: attach to model at approximate head height
+      this.santaHat.position.set(0, 1.7, 0);
+      (this as THREE.Group).add(this.santaHat);
+    }
+  }
+
+  /**
+   * Update festive sway animation - forward/backward rocking
+   */
+  private updateFestiveSway(deltaTime: number): void {
+    if (!this.isFestive || this.isDead) return;
+
+    this.festiveSwayTime += deltaTime * this.festiveSwaySpeed;
+
+    // Forward-backward rocking motion (more visible)
+    const rockX = Math.sin(this.festiveSwayTime) * this.festiveSwayAmount;
+
+    (this as THREE.Group).rotation.x = rockX;
   }
 
   /**
@@ -289,6 +391,11 @@ export class Pedestrian extends THREE.Group {
     // Update animation mixer (skip for distant entities)
     if (this.mixer && !skipAnimation) {
       this.mixer.update(deltaTime);
+    }
+
+    // Update festive sway animation (table pedestrians)
+    if (this.isFestive && !skipAnimation) {
+      this.updateFestiveSway(deltaTime);
     }
 
     // Dead body ragdoll physics (bounce off car, buildings, and floor)

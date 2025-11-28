@@ -34,14 +34,22 @@ export class CrowdManager {
   private spawnRadius: number = 25; // Max spawn distance
   private minSpawnDistance: number = 18; // Spawn off-screen (visible area is ~15 units radius)
 
-  // Table system - simple vertical tables at intersection corners
-  private tables: THREE.Group[] = [];
+  // Table system - German biergarten tables between horizontal buildings
+  // Uses pooling like BuildingManager - 2 tables that reposition
+  private tableInstances: Array<{
+    mesh: THREE.Group;
+    body: RAPIER.RigidBody;
+    gridX: number;
+    gridZ: number;
+    pedestrians: Pedestrian[];
+  }> = [];
   private tableGeometry: THREE.BoxGeometry | null = null;
   private tableMaterial: THREE.MeshStandardMaterial | null = null;
   private cellWidth: number;
   private cellDepth: number;
   private currentTableBaseX = Infinity;
   private currentTableBaseZ = Infinity;
+  private tablesInitialized = false;
 
   // Track which pedestrians are "at tables" (standing idle)
   private tablePedestrians: Set<Pedestrian> = new Set();
@@ -101,8 +109,8 @@ export class CrowdManager {
     this.cellWidth = CITY_CONFIG.BUILDING_WIDTH + CITY_CONFIG.STREET_WIDTH;
     this.cellDepth = CITY_CONFIG.BUILDING_WIDTH + CITY_CONFIG.STREET_WIDTH;
 
-    // Create shared table geometry and material
-    this.tableGeometry = new THREE.BoxGeometry(1.5, 0.8, 0.6); // Vertical table
+    // Create shared table geometry and material - long German beer table
+    this.tableGeometry = new THREE.BoxGeometry(6, 0.08, 1.2); // Long horizontal beer table
     this.tableMaterial = new THREE.MeshStandardMaterial({
       color: 0x8B4513, // Saddle brown wood
       roughness: 0.8,
@@ -478,13 +486,22 @@ export class CrowdManager {
   cleanup(playerPosition: THREE.Vector3): void {
     if (this.pedestriansToRemove.length === 0) return;
 
+    // Count non-table pedestrians to respawn (table peds are managed separately)
+    let numToRespawn = 0;
+
     // Remove marked pedestrians
     for (const pedestrian of this.pedestriansToRemove) {
+      // Only count non-table pedestrians for respawn
+      if (!this.tablePedestrians.has(pedestrian)) {
+        numToRespawn++;
+      } else {
+        // Remove from table tracking
+        this.tablePedestrians.delete(pedestrian);
+      }
       this.removePedestrian(pedestrian);
     }
 
-    // Respawn to maintain population
-    const numToRespawn = this.pedestriansToRemove.length;
+    // Respawn only non-table pedestrians to maintain wandering population
     for (let i = 0; i < numToRespawn; i++) {
       this.spawnPedestrian(playerPosition);
     }
@@ -532,13 +549,16 @@ export class CrowdManager {
     this.tablePedestrians.clear();
     // Note: AIManager is shared, don't clear it here
 
-    // Clear tables
-    for (const table of this.tables) {
-      this.scene.remove(table);
+    // Clear table instances
+    for (const table of this.tableInstances) {
+      this.scene.remove(table.mesh);
+      this.world.removeRigidBody(table.body);
     }
-    this.tables = [];
+    this.tableInstances = [];
+
     this.currentTableBaseX = Infinity;
     this.currentTableBaseZ = Infinity;
+    this.tablesInitialized = false;
 
     // Dispose shadow manager
     this.shadowManager.dispose();
@@ -563,124 +583,362 @@ export class CrowdManager {
   // ============================================
 
   /**
-   * Create a single table mesh (vertical standing table)
+   * Create a single festive German beer table with decorations
+   * @param rotated - if true, rotate 90 degrees so table runs along Z axis
    */
-  private createTableMesh(x: number, z: number): THREE.Group {
+  private createTableMesh(x: number, z: number, rotated: boolean = false): THREE.Group {
     const table = new THREE.Group();
 
-    // Table top (vertical orientation)
+    // Wooden table top
     const top = new THREE.Mesh(this.tableGeometry!, this.tableMaterial!);
-    top.position.y = 0.4; // Table height
+    top.position.y = 0.75;
     top.castShadow = false;
     top.receiveShadow = false;
     table.add(top);
 
+    // Table legs
+    const legGeom = new THREE.BoxGeometry(0.12, 0.75, 0.12);
+    const legPositions = [
+      { x: -2.7, z: -0.45 },
+      { x: -2.7, z: 0.45 },
+      { x: 2.7, z: -0.45 },
+      { x: 2.7, z: 0.45 },
+    ];
+    for (const pos of legPositions) {
+      const leg = new THREE.Mesh(legGeom, this.tableMaterial!);
+      leg.position.set(pos.x, 0.375, pos.z);
+      table.add(leg);
+    }
+
+    // === FESTIVE DECORATIONS ===
+
+    // Center lantern (warm glowing candle)
+    const lanternGroup = new THREE.Group();
+    // Glass housing
+    const glassGeom = new THREE.CylinderGeometry(0.12, 0.12, 0.25, 8);
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0xffffee,
+      transparent: true,
+      opacity: 0.3,
+      roughness: 0.1,
+    });
+    const glass = new THREE.Mesh(glassGeom, glassMat);
+    glass.position.y = 0.125;
+    lanternGroup.add(glass);
+    // Candle flame (emissive)
+    const flameGeom = new THREE.SphereGeometry(0.05, 6, 4);
+    const flameMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa33,
+    });
+    const flame = new THREE.Mesh(flameGeom, flameMat);
+    flame.position.y = 0.15;
+    lanternGroup.add(flame);
+    lanternGroup.position.set(0, 0.77, 0);
+    table.add(lanternGroup);
+
+    // Beer mugs along the table (6 mugs)
+    const mugGeom = new THREE.CylinderGeometry(0.08, 0.07, 0.18, 8);
+    const mugMat = new THREE.MeshStandardMaterial({
+      color: 0xddcc88, // Ceramic/beer color
+      roughness: 0.6,
+    });
+    const mugPositions = [
+      { x: -2.0, z: -0.35 }, { x: -2.0, z: 0.35 },
+      { x: 0, z: -0.35 }, { x: 0, z: 0.35 },
+      { x: 2.0, z: -0.35 }, { x: 2.0, z: 0.35 },
+    ];
+    for (const pos of mugPositions) {
+      const mug = new THREE.Mesh(mugGeom, mugMat);
+      mug.position.set(pos.x, 0.86, pos.z);
+      table.add(mug);
+      // Mug handle
+      const handleGeom = new THREE.TorusGeometry(0.04, 0.015, 4, 8, Math.PI);
+      const handle = new THREE.Mesh(handleGeom, mugMat);
+      handle.rotation.y = pos.z > 0 ? 0 : Math.PI;
+      handle.rotation.x = Math.PI / 2;
+      handle.position.set(pos.x + (pos.z > 0 ? 0.1 : -0.1), 0.86, pos.z);
+      table.add(handle);
+    }
+
+    // Pretzel plates (simple cylinders with brown pretzels)
+    const plateGeom = new THREE.CylinderGeometry(0.15, 0.15, 0.02, 12);
+    const plateMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.8 });
+    const pretzelGeom = new THREE.TorusGeometry(0.08, 0.025, 4, 12);
+    const pretzelMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
+    const platePositions = [{ x: -1.0, z: 0 }, { x: 1.0, z: 0 }];
+    for (const pos of platePositions) {
+      const plate = new THREE.Mesh(plateGeom, plateMat);
+      plate.position.set(pos.x, 0.78, pos.z);
+      table.add(plate);
+      const pretzel = new THREE.Mesh(pretzelGeom, pretzelMat);
+      pretzel.rotation.x = Math.PI / 2;
+      pretzel.position.set(pos.x, 0.82, pos.z);
+      table.add(pretzel);
+    }
+
+    // === STRING LIGHTS ABOVE TABLE ===
+    const stringLightGroup = new THREE.Group();
+    const wirePoints: THREE.Vector3[] = [];
+    const bulbColors = [0xff4444, 0x44ff44, 0xffff44, 0x4444ff, 0xff44ff]; // Christmas colors
+    const numBulbs = 10;
+    const stringLength = 5.5;
+    const stringHeight = 2.5; // Height above table
+    const sag = 0.3;
+
+    for (let i = 0; i <= numBulbs; i++) {
+      const t = i / numBulbs;
+      const xPos = (t - 0.5) * stringLength;
+      // Catenary sag
+      const yPos = stringHeight - sag * Math.sin(t * Math.PI);
+      wirePoints.push(new THREE.Vector3(xPos, yPos, 0));
+
+      // Add bulb at each point (except ends)
+      if (i > 0 && i < numBulbs) {
+        const bulbGeom = new THREE.SphereGeometry(0.06, 6, 4);
+        const bulbMat = new THREE.MeshBasicMaterial({
+          color: bulbColors[i % bulbColors.length],
+        });
+        const bulb = new THREE.Mesh(bulbGeom, bulbMat);
+        bulb.position.set(xPos, yPos - 0.08, 0);
+        stringLightGroup.add(bulb);
+      }
+    }
+
+    // Wire
+    const wireGeom = new THREE.BufferGeometry().setFromPoints(wirePoints);
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x222222 });
+    const wire = new THREE.Line(wireGeom, wireMat);
+    stringLightGroup.add(wire);
+
+    // Poles at each end
+    const poleGeom = new THREE.CylinderGeometry(0.03, 0.03, stringHeight, 6);
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.8 });
+    const pole1 = new THREE.Mesh(poleGeom, poleMat);
+    pole1.position.set(-stringLength / 2, stringHeight / 2, 0);
+    stringLightGroup.add(pole1);
+    const pole2 = new THREE.Mesh(poleGeom, poleMat);
+    pole2.position.set(stringLength / 2, stringHeight / 2, 0);
+    stringLightGroup.add(pole2);
+
+    table.add(stringLightGroup);
+
     table.position.set(x, 0, z);
-    table.rotation.y = Math.random() * Math.PI * 2; // Random rotation
+    if (rotated) {
+      table.rotation.y = Math.PI / 2;
+    }
 
     return table;
   }
 
   /**
-   * Spawn pedestrians around a table (2-4 per table)
+   * Create a table instance at a grid position
+   * Grid positions: tables go at (evenX, oddZ) - between buildings' long sides
    */
-  private spawnTablePedestrians(tableX: number, tableZ: number): void {
-    const numPatrons = 2 + Math.floor(Math.random() * 3); // 2-4 pedestrians
+  private createTableInstance(gridX: number, gridZ: number): typeof this.tableInstances[0] {
+    const worldX = gridX * this.cellWidth;
+    const worldZ = gridZ * this.cellDepth;
 
-    for (let i = 0; i < numPatrons; i++) {
-      // Position around table in a circle
-      const angle = (i / numPatrons) * Math.PI * 2 + Math.random() * 0.3;
-      const distance = 1.0 + Math.random() * 0.5;
+    // Create table mesh
+    const mesh = this.createTableMesh(worldX, worldZ, false);
+    this.scene.add(mesh);
 
-      const position = new THREE.Vector3(
-        tableX + Math.cos(angle) * distance,
-        0,
-        tableZ + Math.sin(angle) * distance
-      );
+    // Create physics body
+    const bodyDesc = RAPIER.RigidBodyDesc.fixed()
+      .setTranslation(worldX, 0.375, worldZ);
+    const body = this.world.createRigidBody(bodyDesc);
 
-      const characterType = this.getRandomCharacterType();
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(3.0, 0.375, 0.6)
+      .setCollisionGroups(0x00400040);
+    this.world.createCollider(colliderDesc, body);
 
-      let pedestrian: Pedestrian;
-      if (this.pedestrianPool.length > 0) {
-        pedestrian = this.pedestrianPool.pop()!;
-        pedestrian.reset(position, characterType);
-      } else {
-        pedestrian = new Pedestrian(position, this.world, characterType, this.aiManager.getEntityManager(), this.shadowManager);
-      }
+    // Spawn pedestrians for this table
+    const pedestrians = this.spawnTablePedestriansForInstance(worldX, worldZ, false);
 
-      this.scene.add(pedestrian);
-      this.pedestrians.push(pedestrian);
-      this.tablePedestrians.add(pedestrian);
-
-      // Face towards table center
-      const angleToTable = Math.atan2(tableZ - position.z, tableX - position.x);
-      (pedestrian as THREE.Group).rotation.y = angleToTable + Math.PI;
-
-      // Set idle behavior (not wandering)
-      pedestrian.setIdleBehavior();
-    }
+    return { mesh, body, gridX, gridZ, pedestrians };
   }
 
   /**
-   * Create 4 tables clustered in center of intersection (where 4 buildings meet)
+   * Reposition an existing table to a new grid position
+   * Like BuildingManager - reuses mesh and physics body
    */
-  private createIntersectionTables(gridX: number, gridZ: number): void {
-    // Intersection center is at the corner where 4 grid cells meet
-    // Grid cells contain buildings, so the intersection is at cell boundaries
-    const centerX = gridX * this.cellWidth;
-    const centerZ = gridZ * this.cellDepth;
+  private repositionTable(
+    table: typeof this.tableInstances[0],
+    newGridX: number,
+    newGridZ: number
+  ): void {
+    const worldX = newGridX * this.cellWidth;
+    const worldZ = newGridZ * this.cellDepth;
 
-    // 4 tables in a 2x2 cluster in the center of the intersection
-    const tableSpacing = 6; // Distance between tables
-    const tablePositions = [
-      { x: centerX - tableSpacing / 2, z: centerZ - tableSpacing / 2 },
-      { x: centerX + tableSpacing / 2, z: centerZ - tableSpacing / 2 },
-      { x: centerX - tableSpacing / 2, z: centerZ + tableSpacing / 2 },
-      { x: centerX + tableSpacing / 2, z: centerZ + tableSpacing / 2 },
+    // Move mesh
+    table.mesh.position.set(worldX, 0, worldZ);
+
+    // Move physics body (reuse instead of recreate)
+    table.body.setTranslation({ x: worldX, y: 0.375, z: worldZ }, true);
+    table.body.wakeUp();
+
+    // Remove old pedestrians
+    for (const ped of table.pedestrians) {
+      this.tablePedestrians.delete(ped);
+      this.removePedestrian(ped);
+    }
+
+    // Spawn new pedestrians at new position
+    table.pedestrians = this.spawnTablePedestriansForInstance(worldX, worldZ, false);
+
+    table.gridX = newGridX;
+    table.gridZ = newGridZ;
+  }
+
+  /**
+   * Spawn pedestrians for a table instance (returns array, doesn't push to tablePedestrians)
+   */
+  private spawnTablePedestriansForInstance(tableX: number, tableZ: number, rotated: boolean): Pedestrian[] {
+    const pedestrians: Pedestrian[] = [];
+    const numPerSide = 3 + Math.floor(Math.random() * 2);
+    const tableHalfLength = 2.5;
+    const sideOffset = 1.0;
+
+    for (let sideIdx = 0; sideIdx < 2; sideIdx++) {
+      const side = sideIdx === 0 ? 1 : -1;
+
+      for (let i = 0; i < numPerSide; i++) {
+        const t = numPerSide === 1 ? 0 : (i / (numPerSide - 1)) * 2 - 1;
+        const alongTable = t * tableHalfLength;
+
+        let position: THREE.Vector3;
+        let facingAngle: number;
+
+        if (rotated) {
+          const jitterX = (Math.random() - 0.5) * 0.15;
+          const jitterZ = (Math.random() - 0.5) * 0.4;
+          position = new THREE.Vector3(
+            tableX + side * sideOffset + jitterX,
+            0,
+            tableZ + alongTable + jitterZ
+          );
+          facingAngle = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+        } else {
+          const jitterX = (Math.random() - 0.5) * 0.4;
+          const jitterZ = (Math.random() - 0.5) * 0.15;
+          position = new THREE.Vector3(
+            tableX + alongTable + jitterX,
+            0,
+            tableZ + side * sideOffset + jitterZ
+          );
+          facingAngle = side > 0 ? Math.PI : 0;
+        }
+
+        const characterType = this.getRandomCharacterType();
+
+        let pedestrian: Pedestrian;
+        if (this.pedestrianPool.length > 0) {
+          pedestrian = this.pedestrianPool.pop()!;
+          pedestrian.reset(position, characterType);
+        } else {
+          pedestrian = new Pedestrian(position, this.world, characterType, this.aiManager.getEntityManager(), this.shadowManager);
+        }
+
+        this.scene.add(pedestrian);
+        this.pedestrians.push(pedestrian);
+        this.tablePedestrians.add(pedestrian);
+        pedestrians.push(pedestrian);
+
+        (pedestrian as THREE.Group).rotation.y = facingAngle;
+        pedestrian.setFestiveBehavior();
+      }
+    }
+
+    return pedestrians;
+  }
+
+  /**
+   * Initialize the table pool (2 tables)
+   */
+  private initializeTables(baseX: number, baseZ: number): void {
+    if (this.tablesInitialized) return;
+
+    // Tables at (baseX, baseZ+1) and (baseX+2, baseZ+1)
+    const tableGridZ = baseZ + 1;
+
+    const table1 = this.createTableInstance(baseX, tableGridZ);
+    const table2 = this.createTableInstance(baseX + 2, tableGridZ);
+
+    this.tableInstances.push(table1, table2);
+    this.currentTableBaseX = baseX;
+    this.currentTableBaseZ = baseZ;
+    this.tablesInitialized = true;
+  }
+
+  /**
+   * Reposition tables to a new base (like BuildingManager.repositionToBase)
+   */
+  private repositionTablesToBase(baseX: number, baseZ: number): void {
+    const tableGridZ = baseZ + 1;
+
+    // Target positions for 2 tables
+    const targetPositions = [
+      { gridX: baseX, gridZ: tableGridZ },
+      { gridX: baseX + 2, gridZ: tableGridZ },
     ];
 
-    for (const pos of tablePositions) {
-      // Create table
-      const table = this.createTableMesh(pos.x, pos.z);
-      this.scene.add(table);
-      this.tables.push(table);
+    // Find which tables are already at target positions
+    const remainingTargets = [...targetPositions];
+    const outOfBounds: typeof this.tableInstances = [];
 
-      // Spawn pedestrians at this table
-      this.spawnTablePedestrians(pos.x, pos.z);
+    for (const table of this.tableInstances) {
+      const idx = remainingTargets.findIndex(
+        t => t.gridX === table.gridX && t.gridZ === table.gridZ
+      );
+      if (idx !== -1) {
+        remainingTargets.splice(idx, 1); // Already at a good position
+      } else {
+        outOfBounds.push(table);
+      }
     }
+
+    // Only reposition tables that are out of bounds
+    for (let i = 0; i < outOfBounds.length; i++) {
+      const target = remainingTargets[i];
+      if (target) {
+        this.repositionTable(outOfBounds[i], target.gridX, target.gridZ);
+      }
+    }
+
+    this.currentTableBaseX = baseX;
+    this.currentTableBaseZ = baseZ;
   }
 
   /**
    * Update tables based on player position (streaming)
+   * Uses same hysteresis logic as BuildingManager
    */
   updateTables(playerPosition: THREE.Vector3): void {
     const playerGridX = Math.floor(playerPosition.x / this.cellWidth);
     const playerGridZ = Math.floor(playerPosition.z / this.cellDepth);
 
-    // Initialize on first call
-    if (!Number.isFinite(this.currentTableBaseX)) {
-      this.currentTableBaseX = playerGridX;
-      this.currentTableBaseZ = playerGridZ;
-      this.createIntersectionTables(playerGridX, playerGridZ);
+    // First time initialization
+    if (!this.tablesInitialized) {
+      const baseX = Math.floor(playerGridX / 2) * 2;
+      const baseZ = Math.floor(playerGridZ / 2) * 2;
+      this.initializeTables(baseX, baseZ);
       return;
     }
 
-    // Check if player moved to new grid cell
-    if (playerGridX !== this.currentTableBaseX || playerGridZ !== this.currentTableBaseZ) {
-      // Remove old tables
-      for (const table of this.tables) {
-        this.scene.remove(table);
-      }
-      this.tables = [];
+    // Hysteresis: same as BuildingManager
+    // Shift when player goes past edge of 2x2 area
+    let shiftX = 0;
+    if (playerGridX > this.currentTableBaseX + 2) shiftX = 2;
+    else if (playerGridX < this.currentTableBaseX) shiftX = -2;
 
-      // Remove table pedestrians from tracking (they stay in crowd but become normal)
-      this.tablePedestrians.clear();
+    let shiftZ = 0;
+    if (playerGridZ > this.currentTableBaseZ + 2) shiftZ = 2;
+    else if (playerGridZ < this.currentTableBaseZ) shiftZ = -2;
 
-      // Create new tables at new intersection
-      this.createIntersectionTables(playerGridX, playerGridZ);
-
-      this.currentTableBaseX = playerGridX;
-      this.currentTableBaseZ = playerGridZ;
+    if (shiftX !== 0 || shiftZ !== 0) {
+      this.repositionTablesToBase(
+        this.currentTableBaseX + shiftX,
+        this.currentTableBaseZ + shiftZ
+      );
     }
   }
 

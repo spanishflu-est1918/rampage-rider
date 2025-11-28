@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2024-11-28]
+
+### German Biergarten Tables - Festive Overhaul
+
+**Added:**
+- **Festive table decorations**: center lantern with candle, beer mugs with handles, pretzel plates, Christmas string lights with poles
+- **Table pedestrian rocking animation**: forward/backward swaying motion (rotation.x), 50% play Victory animation, 50% play Idle
+- **Physics colliders for tables**: player/vehicles can no longer pass through tables
+- **Table pedestrian tracking**: separate Set tracks which pedestrians belong to tables (not respawned as wanderers when killed)
+
+**Fixed:**
+- **Double-spawn bug**: Table pedestrians were spawning twice when player walked near tables
+- **Table respawn timing**: Tables now use BuildingManager-style pooling system instead of destroy/recreate
+  - 2 table instances are created once and repositioned as player moves
+  - Same hysteresis logic as buildings: `playerGridX > baseX + 2` or `playerGridX < baseX`
+  - Only tables that leave the 2x2 area are repositioned (others stay put)
+  - Pedestrians are properly removed from scene before new ones spawn
+
+**Technical Details:**
+- `tableInstances` array stores mesh, physics body, grid position, and associated pedestrians
+- `createTableInstance()` creates new table with mesh, physics, and pedestrians
+- `repositionTable()` moves existing table (reuses mesh/body, respawns pedestrians)
+- `repositionTablesToBase()` uses BuildingManager pattern - only moves out-of-bounds tables
+- `spawnTablePedestriansForInstance()` returns pedestrian array for instance tracking
+
+**Files Modified:**
+- `src/managers/CrowdManager.ts` - Complete table system rewrite with pooling
+- `src/entities/Pedestrian.ts` - Added festive behavior (setFestiveBehavior, updateFestiveSway)
+
+---
+
 ## [2024-11-27]
 
 ### ESC to Pause
