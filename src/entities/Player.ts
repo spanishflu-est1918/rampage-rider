@@ -717,6 +717,14 @@ export class Player extends THREE.Group {
   }
 
   /**
+   * Take damage (placeholder - player currently doesn't have health on foot)
+   * Just applies hit stun for now
+   */
+  takeDamage(_damage: number): void {
+    this.applyHitStun();
+  }
+
+  /**
    * Handle Space key press for escaping taser
    * Uses INVERSE EXPONENTIAL: the higher your progress, the less each press adds
    */

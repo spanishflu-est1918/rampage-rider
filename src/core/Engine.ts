@@ -10,6 +10,7 @@ import { CopCarManager } from '../managers/CopCarManager';
 import { BuildingManager } from '../managers/BuildingManager';
 import { LampPostManager } from '../managers/LampPostManager';
 import { ChristmasTreeManager } from '../managers/ChristmasTreeManager';
+import { TableManager } from '../managers/TableManager';
 import { Player } from '../entities/Player';
 import { Vehicle } from '../entities/Vehicle';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
@@ -50,6 +51,7 @@ export class Engine {
   public buildings: BuildingManager | null = null;
   public lampPosts: LampPostManager | null = null;
   public christmasTrees: ChristmasTreeManager | null = null;
+  public tables: TableManager | null = null;
   public particles: ParticleEmitter;
   public bloodDecals: BloodDecalSystem;
 
@@ -335,6 +337,7 @@ export class Engine {
       this.buildings = new BuildingManager(this.scene, world);
       this.lampPosts = new LampPostManager(this.scene);
       this.christmasTrees = new ChristmasTreeManager(this.scene);
+      this.tables = new TableManager(this.scene);
     }
   }
 
@@ -561,6 +564,9 @@ export class Engine {
     }
     if (this.christmasTrees) {
       this.christmasTrees.clear();
+    }
+    if (this.tables) {
+      this.tables.clear();
     }
 
     this.particles.clear();
@@ -1783,6 +1789,9 @@ export class Engine {
     if (this.christmasTrees) {
       this.christmasTrees.update(currentPos);
     }
+    if (this.tables) {
+      this.tables.update(currentPos, dt);
+    }
     if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.world = performance.now() - worldStart;
 
     // Pedestrians
@@ -1834,6 +1843,15 @@ export class Engine {
           }
           for (let i = 0; i < result.panicKills; i++) {
             this.handleVehicleKill(result.positions[regularKills + i] || currentPos, true);
+          }
+
+          // Table patron kills (same radius as vehicle kills)
+          if (this.tables) {
+            const killRadius = isTruck ? Math.max(this.vehicle.getColliderDimensions().width, this.vehicle.getColliderDimensions().length) : this.vehicle.getKillRadius();
+            const tableResult = this.tables.damageInRadius(currentPos, killRadius, 999);
+            for (let i = 0; i < tableResult.kills; i++) {
+              this.handleVehicleKill(tableResult.positions[i] || currentPos, false);
+            }
           }
         }
       } else if (this.player) {
@@ -1893,7 +1911,7 @@ export class Engine {
             this.shakeCamera(2.0);
             for (const pos of trampleResult.positions) {
               this.particles.emitBlood(pos, 80);
-              this.showKillMessage('COP CAR CRUSHED!', pos, true);
+              this.triggerKillNotification('COP CAR CRUSHED!', true, 500);
             }
           }
         }
