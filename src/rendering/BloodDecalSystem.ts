@@ -14,6 +14,8 @@ interface DecalData {
 export class BloodDecalSystem {
   private scene: THREE.Scene;
   private decals: DecalData[] = [];
+  // PERF: Ring buffer pointer for O(1) oldest removal instead of O(n) shift()
+  private decalHeadIndex: number = 0;
   private bloodTextures: THREE.Texture[] = [];
   private sharedMaterials: THREE.MeshBasicMaterial[] = [];
   private sharedGeometry: THREE.PlaneGeometry;
@@ -195,7 +197,8 @@ export class BloodDecalSystem {
    */
   addBloodDecal(position: THREE.Vector3, size: number = 2.0): void {
     // Enforce max decals - remove oldest if at limit
-    while (this.decals.length >= this.maxDecals) {
+    // PERF: Account for ring buffer head index when counting active decals
+    while ((this.decals.length - this.decalHeadIndex) >= this.maxDecals) {
       this.removeOldestDecal();
     }
 
@@ -250,11 +253,20 @@ export class BloodDecalSystem {
 
   /**
    * Remove oldest decal (hide its instance)
+   * PERF: Uses ring buffer index for O(1) removal instead of O(n) shift()
    */
   private removeOldestDecal(): void {
-    if (this.decals.length === 0) return;
+    // PERF: Check active decal count using ring buffer head
+    if ((this.decals.length - this.decalHeadIndex) === 0) return;
 
-    const oldest = this.decals.shift()!;
+    // PERF: Access oldest by head index, then increment (ring buffer style)
+    const oldest = this.decals[this.decalHeadIndex];
+    this.decalHeadIndex++;
+    // When we've removed enough, compact the array
+    if (this.decalHeadIndex > 50) {
+      this.decals = this.decals.slice(this.decalHeadIndex);
+      this.decalHeadIndex = 0;
+    }
 
     // Hide this instance by setting scale to 0
     this._tempMatrix.compose(
@@ -306,7 +318,9 @@ export class BloodDecalSystem {
 
     const currentTime = Date.now() / 1000;
 
-    while (this.decals.length > 0 && currentTime - this.decals[0].createdAt > this.decalLifetime) {
+    // PERF: Use head index to access oldest decal in ring buffer
+    while ((this.decals.length - this.decalHeadIndex) > 0 &&
+           currentTime - this.decals[this.decalHeadIndex].createdAt > this.decalLifetime) {
       this.removeOldestDecal();
     }
   }
@@ -328,6 +342,7 @@ export class BloodDecalSystem {
       this.freeIndices[t] = [];
     }
     this.decals = [];
+    this.decalHeadIndex = 0; // Reset ring buffer head
   }
 
   /**
@@ -360,6 +375,7 @@ export class BloodDecalSystem {
    * Get decal count (for debugging)
    */
   getDecalCount(): number {
-    return this.decals.length;
+    // PERF: Return active count accounting for ring buffer head
+    return this.decals.length - this.decalHeadIndex;
   }
 }

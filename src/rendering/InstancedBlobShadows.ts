@@ -25,6 +25,8 @@ export class InstancedBlobShadows {
   private tempMatrix = new THREE.Matrix4();
   private tempPosition = new THREE.Vector3();
   private tempScale = new THREE.Vector3();
+  // PERF: Pre-allocated identity quaternion (avoids allocation per shadow update)
+  private readonly _identityQuaternion = new THREE.Quaternion();
 
   constructor(scene: THREE.Scene, maxInstances: number = 100) {
     this.maxInstances = maxInstances;
@@ -115,9 +117,10 @@ export class InstancedBlobShadows {
     this.tempPosition.set(x, yOffset, z);
     this.tempScale.set(radius, radius, radius);
 
+    // PERF: Reuse pre-allocated identity quaternion
     this.tempMatrix.compose(
       this.tempPosition,
-      new THREE.Quaternion(), // No rotation
+      this._identityQuaternion,
       this.tempScale
     );
 
