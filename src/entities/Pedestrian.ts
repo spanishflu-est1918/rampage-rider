@@ -41,6 +41,8 @@ export class Pedestrian extends THREE.Group {
   private walkSpeed: number = ENTITY_SPEEDS.PEDESTRIAN_WALK;
   private runSpeed: number = ENTITY_SPEEDS.PEDESTRIAN_RUN;
   private isPanicking: boolean = false;
+  private panicFreezeTimer: number = 0; // Brief freeze before fleeing (0.6s)
+  private pendingDangerPosition: THREE.Vector3 | null = null; // For delayed flee
   private isStumbling: boolean = false;
   private stumbleTimer: number = 0;
 
@@ -319,16 +321,36 @@ export class Pedestrian extends THREE.Group {
 
   panic(dangerPosition: THREE.Vector3): void {
     if (this.isDead) return;
+    // Already panicking and past freeze? Don't restart
+    if (this.isPanicking && this.panicFreezeTimer <= 0) return;
 
     this.isPanicking = true;
+
+    // Deer-in-headlights: freeze briefly before fleeing (gives player time to catch)
+    this.panicFreezeTimer = 0.6;
+    this.pendingDangerPosition = dangerPosition.clone();
+
+    // Stop moving during freeze
+    this.yukaVehicle.steering.clear();
+    this.yukaVehicle.maxSpeed = 0;
+
+    // Play startled/idle animation during freeze
+    this.playAnimation('Idle', 0.1);
+  }
+
+  /**
+   * Start actual flee behavior (called after freeze timer expires)
+   */
+  private startFleeing(): void {
+    if (!this.pendingDangerPosition) return;
+
     this.yukaVehicle.maxSpeed = this.runSpeed;
 
     // Clear existing behaviors
     this.yukaVehicle.steering.clear();
 
     // Flee from danger (flatten to 2D to prevent vertical movement)
-    // Reuse pre-allocated vector and behavior
-    this._fleeTarget.set(dangerPosition.x, 0, dangerPosition.z);
+    this._fleeTarget.set(this.pendingDangerPosition.x, 0, this.pendingDangerPosition.z);
     if (!this._fleeBehavior) {
       this._fleeBehavior = new YUKA.FleeBehavior(this._fleeTarget);
     } else {
@@ -339,6 +361,8 @@ export class Pedestrian extends THREE.Group {
 
     // Play walk animation (speed will be increased in update loop)
     this.playAnimation('Walk', 0.1);
+
+    this.pendingDangerPosition = null;
   }
 
   /**
@@ -476,6 +500,14 @@ export class Pedestrian extends THREE.Group {
       this.stumbleTimer -= deltaTime;
       if (this.stumbleTimer <= 0) {
         this.isStumbling = false;
+      }
+    }
+
+    // Update panic freeze timer (deer-in-headlights before fleeing)
+    if (this.panicFreezeTimer > 0) {
+      this.panicFreezeTimer -= deltaTime;
+      if (this.panicFreezeTimer <= 0) {
+        this.startFleeing();
       }
     }
 
@@ -647,6 +679,8 @@ export class Pedestrian extends THREE.Group {
     this.isDead = false;
     this.health = PEDESTRIAN_CONFIG.HEALTH;
     this.isPanicking = false;
+    this.panicFreezeTimer = 0;
+    this.pendingDangerPosition = null;
     this.isStumbling = false;
     this.stumbleTimer = 0;
     this.deadVelocity.set(0, 0, 0);

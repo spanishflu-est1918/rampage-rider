@@ -31,6 +31,10 @@ export class CrowdManager {
 
   // Spawn config
   private maxPedestrians: number = 60;
+  private baseMaxPedestrians: number = 60;
+  private surgeTimer: number = 0; // Timer for crowd surge effect
+  private readonly SURGE_MAX: number = 100; // Temporary max during surge
+  private readonly SURGE_DURATION: number = 15; // Seconds of crowd surge
   private spawnRadius: number = 25; // Max spawn distance
   private minSpawnDistance: number = 18; // Spawn off-screen (visible area is ~15 units radius)
 
@@ -297,6 +301,58 @@ export class CrowdManager {
     }
 
     return { kills: killCount, panicKills: panicKillCount, positions: killPositions };
+  }
+
+  /**
+   * Apply knockback and damage to pedestrians in radius (360° blast)
+   * Returns kill count and positions for effects
+   */
+  blastInRadius(
+    position: THREE.Vector3,
+    radius: number,
+    force: number,
+    damage: number,
+    maxKills: number = Infinity
+  ): {
+    kills: number;
+    knockedBack: number;
+    positions: THREE.Vector3[];
+  } {
+    let killCount = 0;
+    let knockedBackCount = 0;
+    const killPositions: THREE.Vector3[] = [];
+    const radiusSq = radius * radius;
+
+    for (const pedestrian of this.pedestrians) {
+      if (pedestrian.isDeadState()) continue;
+      if (killCount >= maxKills) break;
+
+      const pedPos = (pedestrian as THREE.Group).position;
+      const distanceSq = pedPos.distanceToSquared(position);
+
+      if (distanceSq < radiusSq) {
+        const distance = Math.sqrt(distanceSq);
+        // Force scales with distance (closer = stronger)
+        const scaledForce = force * (1 - distance / radius);
+
+        // Calculate direction away from blast center
+        this._tempDirection.subVectors(pedPos, position).normalize();
+
+        // Apply knockback
+        pedestrian.applyKnockback(this._tempDirection, scaledForce);
+        knockedBackCount++;
+
+        // Apply damage
+        pedestrian.takeDamage(damage);
+
+        if (pedestrian.isDeadState()) {
+          killCount++;
+          killPositions.push(pedPos.clone());
+        }
+      }
+    }
+
+    return { kills: killCount, knockedBack: knockedBackCount, positions: killPositions };
   }
 
   /**
@@ -606,6 +662,32 @@ export class CrowdManager {
    */
   getPedestrianCount(): number {
     return this.pedestrians.length;
+  }
+
+  /**
+   * Trigger a crowd surge - temporarily increases pedestrian cap
+   * Used when tier unlocks to give the new vehicle more targets
+   */
+  triggerCrowdSurge(): void {
+    this.surgeTimer = this.SURGE_DURATION;
+    this.maxPedestrians = this.SURGE_MAX;
+  }
+
+  /**
+   * Update surge timer - call every frame
+   */
+  updateSurge(dt: number): void {
+    if (this.surgeTimer > 0) {
+      this.surgeTimer -= dt;
+      if (this.surgeTimer <= 0) {
+        // Surge ended, return to base
+        this.maxPedestrians = this.baseMaxPedestrians;
+      } else if (this.surgeTimer < 5) {
+        // Gradually reduce in last 5 seconds
+        const t = this.surgeTimer / 5;
+        this.maxPedestrians = Math.floor(this.baseMaxPedestrians + (this.SURGE_MAX - this.baseMaxPedestrians) * t);
+      }
+    }
   }
 
   // ============================================

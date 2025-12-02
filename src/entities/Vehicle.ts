@@ -421,10 +421,12 @@ export class Vehicle extends THREE.Group {
       // Dot product: 1 = same direction (front), -1 = opposite (back), 0 = perpendicular (side)
       const dot = forward.dot(toAttacker);
 
-      // Only take damage if attack is from sides (|dot| < 0.5) or back (dot < -0.3)
-      const isVulnerable = Math.abs(dot) < 0.5 || dot < -0.3;
+      // Directional shielding: truck is immune to frontal attacks only
+      // dot > 0.7 = front 90° cone (±45° from center) = immune
+      // dot <= 0.7 = sides + rear (270° total) = vulnerable
+      const isFrontalAttack = dot > 0.7;
 
-      if (!isVulnerable) {
+      if (isFrontalAttack) {
         // Attack from front - no damage, but show blocked effect
         return false;
       }
