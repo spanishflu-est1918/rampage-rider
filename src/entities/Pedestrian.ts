@@ -62,6 +62,8 @@ export class Pedestrian extends THREE.Group {
   private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempKnockback: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempCarDir: THREE.Vector3 = new THREE.Vector3();
+  // PERF: Pre-allocated for RAPIER movement (avoid object creation per frame)
+  private readonly _rapierMovement = { x: 0, y: 0, z: 0 };
 
   // Pre-allocated Rapier ray for dead body physics (avoid per-frame allocation)
   private _deadBodyRay: RAPIER.Ray | null = null;
@@ -515,12 +517,11 @@ export class Pedestrian extends THREE.Group {
     const yukaPos = this.yukaVehicle.position;
     const currentPos = this.rigidBody.translation();
 
-    // Calculate desired movement vector
-    const desiredMovement = {
-      x: yukaPos.x - currentPos.x,
-      y: 0,
-      z: yukaPos.z - currentPos.z
-    };
+    // PERF: Reuse pre-allocated object instead of creating new one per frame
+    const desiredMovement = this._rapierMovement;
+    desiredMovement.x = yukaPos.x - currentPos.x;
+    desiredMovement.y = 0;
+    desiredMovement.z = yukaPos.z - currentPos.z;
 
     // Use character controller for collision-aware movement
     // This prevents pedestrians from walking through vehicles

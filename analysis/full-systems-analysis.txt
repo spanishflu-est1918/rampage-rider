@@ -1,0 +1,81 @@
+Loaded cached credentials.
+I've analyzed the provided codebase. Here is the detailed breakdown of the game's combat, escalation, and vehicle systems.
+
+### 1. Lorry / Vehicle Combat System
+
+**Lorry (Truck) Implementation:**
+*   **Indestructibility:** Defined in `src/constants.ts` as `VehicleType.TRUCK` ("18-Wheeler") with `canCrushBuildings: true`. In `src/entities/Vehicle.ts`, if this flag is set, the physics collision filter is configured to **ignore buildings** (`COLLISION_GROUPS.BUILDING`), colliding only with the ground. This allows it to clip through buildings physically.
+*   **Building Destruction:** `Engine.ts` (`update` loop) explicitly calls `buildings.checkTruckCollision()` when the truck moves. If a collision is detected, it triggers `handleBuildingDestruction`, playing a debris effect and removing the building mesh.
+*   **Hit Box:** It uses a massive box collider (`colliderWidth: 3.0`, `colliderLength: 9.40`) instead of a radius check for killing pedestrians (`CrowdManager.ts` -> `damageInBox` with swept collision to catch entities during rapid rotation).
+
+**Cop Interactions & Ramming:**
+*   **Ramming:** Cops (CopCar & Motorbike) have specific AI states for ramming (`MotorbikeCopState.RAM`). When within `RAM_DISTANCE` (defined in config), they accelerate towards the player.
+*   **Damage:**
+    *   **Giving:** `CopCar.ts` executes `ramAttack()`, invoking a callback in `Engine.ts`.
+    *   **Receiving:** `Vehicle.ts` has a `takeDamageFromPosition` method. The Truck is **directionally shielded**; it only takes damage if the attack comes from the sides or rear (calculated via dot product of the truck's forward vector and the attack direction). Attacks from the front are ignored.
+
+### 2. Cop Escalation Mechanics
+
+**Spawning & Escalation:**
+*   **Heat System:** Spawning is driven by `stats.heat` (0-100).
+*   **Cop Manager (`CopManager.ts`):** Spawns foot cops.
+    *   25% Heat: 1 Cop
+    *   50% Heat: 2 Cops
+    *   75% Heat: 3 Cops
+*   **Advanced Units:**
+    *   **Bike Cops:** Spawn if player is on a Bike + Heat > 25%.
+    *   **Motorbike Cops:** Spawn if player is on Motorbike+. Has variants: Scout (25%), Swarm (50%), Boss (75%).
+    *   **Cop Cars:** Spawn if player is in Sedan/Truck + Heat > 50%.
+
+**Behaviors & AI:**
+*   **AI Library:** Uses `YUKA` for steering behaviors (Seek, Arrive, Wander).
+*   **Wanted Levels (Stars):** Determined by `stats.copKills` in `Engine.ts`.
+    *   **0 Stars:** Punch attacks (Close range).
+    *   **1 Star:** Taser attacks (Medium range). Stuns player, triggers "Mash Space" QTE.
+    *   **2+ Stars:** Shoot (Long range). Fires bullet projectiles.
+
+### 3. Attack / Blast Systems
+
+**Attack Mechanics:**
+*   **Melee (Knife):** `Player.ts` triggers animation. `Engine.ts` performs a cone check (`damageInRadius` with `coneAngle`).
+*   **Drive-By:** On Motorbike/Bicycle, attacks use a wider cone or different logic handled in `handleBicycleAttack` / `handleMotorbikeShoot` in `Engine.ts`.
+*   **Projectiles:** Cops fire physical bullet meshes (`Cop.ts` -> `createBulletProjectile`). They move simply by updating position each frame towards a target vector.
+
+**Blast & Effects:**
+*   **Taser Escape Blast:** When the player successfully mashes space to 100%, `Player.ts` fires `onTaserEscape`. `Engine.ts` catches this and triggers `cops.applyKnockbackInRadius`, sending nearby cops flying using ragdoll physics (`Cop.ts` -> `applyKnockback` with `isRagdolling = true`).
+*   **Visuals:**
+    *   **Blood:** `ParticleSystem.ts` manages pooled blood particles. `BloodDecalSystem.ts` places permanent texture decals on the ground using `InstancedMesh` for performance.
+    *   **Debris:** `ParticleSystem.ts` has a separate system for chunky building debris.
+
+### 4. Rampage / Escalation States
+
+**Rampage Logic:**
+*   **Combos:** `stats.combo` increments with kills. `stats.comboTimer` (5s) resets on kill.
+*   **Infinite Ammo/Stamina:** The code checks `this.stats.combo >= 10`. If true, `maxKills` for melee attacks becomes `Infinity` (killing everyone in the cone), otherwise it kills only 1 target.
+*   **Vehicle Tiers:**
+    1.  **Foot:** Starting state.
+    2.  **Bike:** Unlocks at 150 score.
+    3.  **Motorbike:** Unlocks at 2000 score.
+    4.  **Sedan (Monster Truck):** Unlocks at 4000 score.
+    5.  **Truck (18-Wheeler):** Unlocks at 10000 score.
+
+### 5. Overall Game Escalation
+
+**Progression System:**
+*   **Score-Based:** Game difficulty and player power are strictly tied to Score.
+*   **Feedback Loop:**
+    1.  Kills give **Score** and **Heat**.
+    2.  **Score** unlocks better Vehicles (Tiers).
+    3.  **Heat** spawns harder Cops.
+    4.  Better Vehicles allow killing harder Cops, generating more Score/Heat.
+*   **Vehicle Unlocks:** When a score threshold is reached, `Engine.ts` (`checkTierProgression`) spawns an "Awaiting Vehicle" (glowing) nearby. Entering it upgrades the Tier.
+*   **Multipliers:**
+    *   **Pursuit:** Points doubled if cops are chasing.
+    *   **Panic:** Points doubled if victim was running away.
+    *   **Combo:** Score multiplier scales with combo count.
+
+### Summary of Key Findings for Implementation
+*   **Crucial Hook:** The "Indestructible" Lorry is just a collision filter trick.
+*   **AI Bottleneck:** The AI uses `YUKA` but `Engine.ts` manually syncs positions. Any new AI must respect this loop.
+*   **Performance:** The game aggressively pools entities (pedestrians, particles, decals). New effects must use pooling to maintain 60fps.
+*   **State Centralization:** `Engine.ts` is a "God Class" holding references to all managers. Most logic resides there rather than in individual entities.

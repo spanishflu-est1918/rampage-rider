@@ -49,6 +49,8 @@ export class CopCar extends THREE.Group {
   // Pre-allocated vectors
   private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+  // PERF: Pre-allocated for getPosition() return value
+  private readonly _positionResult: THREE.Vector3 = new THREE.Vector3();
 
   constructor(
     position: THREE.Vector3,
@@ -342,7 +344,7 @@ export class CopCar extends THREE.Group {
 
   getPosition(): THREE.Vector3 {
     const pos = this.rigidBody.translation();
-    return new THREE.Vector3(pos.x, pos.y, pos.z);
+    return this._positionResult.set(pos.x, pos.y, pos.z);
   }
 
   getPositionInto(out: THREE.Vector3): THREE.Vector3 {

@@ -47,6 +47,12 @@ export class Vehicle extends THREE.Group {
   // Pre-allocated vectors (reused every frame to avoid GC pressure)
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempVelocity: THREE.Vector3 = new THREE.Vector3();
+  // PERF: Pre-allocated for damage direction calculations
+  private readonly _damageDir: THREE.Vector3 = new THREE.Vector3();
+  private readonly _forwardDir: THREE.Vector3 = new THREE.Vector3();
+  // PERF: Pre-allocated for RAPIER movement (avoid object creation per frame)
+  private readonly _rapierMovement = { x: 0, y: 0, z: 0 };
+  private readonly _rapierPosition = { x: 0, y: 0, z: 0 };
 
   constructor(config: VehicleConfig) {
     super();
@@ -340,11 +346,11 @@ export class Vehicle extends THREE.Group {
 
     // Use character controller to compute movement with collisions
     if (this.characterController && this.collider) {
-      const desiredMovement = {
-        x: velocity.x * deltaTime,
-        y: -0.1 * deltaTime,
-        z: velocity.z * deltaTime,
-      };
+      // PERF: Reuse pre-allocated objects instead of creating new ones per frame
+      const desiredMovement = this._rapierMovement;
+      desiredMovement.x = velocity.x * deltaTime;
+      desiredMovement.y = -0.1 * deltaTime;
+      desiredMovement.z = velocity.z * deltaTime;
 
       this.characterController.computeColliderMovement(
         this.collider,
@@ -355,11 +361,10 @@ export class Vehicle extends THREE.Group {
 
       const correctedMovement = this.characterController.computedMovement();
 
-      const newPosition = {
-        x: translation.x + correctedMovement.x,
-        y: Math.max(0.5, translation.y + correctedMovement.y),
-        z: translation.z + correctedMovement.z,
-      };
+      const newPosition = this._rapierPosition;
+      newPosition.x = translation.x + correctedMovement.x;
+      newPosition.y = Math.max(0.5, translation.y + correctedMovement.y);
+      newPosition.z = translation.z + correctedMovement.z;
 
       this.rigidBody.setNextKinematicTranslation(newPosition);
       (this as THREE.Group).position.set(newPosition.x, newPosition.y, newPosition.z);
@@ -410,12 +415,13 @@ export class Vehicle extends THREE.Group {
     // For truck, check if attack comes from vulnerable direction
     if (this.config.canCrushBuildings) {
       const vehiclePos = this.getPosition();
-      const toAttacker = new THREE.Vector3()
+      // PERF: Reuse pre-allocated vectors instead of new THREE.Vector3()
+      const toAttacker = this._damageDir
         .subVectors(attackerPosition, vehiclePos)
         .normalize();
 
       // Get vehicle's forward direction
-      const forward = new THREE.Vector3(0, 0, -1);
+      const forward = this._forwardDir.set(0, 0, -1);
       forward.applyQuaternion((this as THREE.Group).quaternion);
 
       // Dot product: 1 = same direction (front), -1 = opposite (back), 0 = perpendicular (side)

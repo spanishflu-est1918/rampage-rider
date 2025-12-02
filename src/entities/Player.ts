@@ -107,6 +107,9 @@ export class Player extends THREE.Group {
   private readonly _tempAttackPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _facingDir: THREE.Vector3 = new THREE.Vector3();
   private static readonly _Y_AXIS: THREE.Vector3 = new THREE.Vector3(0, 1, 0);
+  // PERF: Pre-allocated for RAPIER movement (avoid object creation per frame)
+  private readonly _rapierMovement = { x: 0, y: 0, z: 0 };
+  private readonly _rapierPosition = { x: 0, y: 0, z: 0 };
 
   constructor() {
     super();
@@ -539,9 +542,15 @@ export class Player extends THREE.Group {
       }
     }
 
-    // Store current input for next frame
+    // Store current input for next frame (PERF: manual copy instead of spread)
     if (inputChanged) {
-      this.prevInput = { ...this.input };
+      this.prevInput.up = this.input.up;
+      this.prevInput.down = this.input.down;
+      this.prevInput.left = this.input.left;
+      this.prevInput.right = this.input.right;
+      this.prevInput.sprint = this.input.sprint;
+      this.prevInput.jump = this.input.jump;
+      this.prevInput.attack = this.input.attack;
     }
 
     // Apply move speed (reduced during taser stun, blocked during attack)
@@ -579,12 +588,11 @@ export class Player extends THREE.Group {
 
     // Use character controller to compute movement with collisions
     if (this.characterController && this.collider) {
-      // Desired movement including gravity
-      const desiredMovement = {
-        x: velocity.x * deltaTime,
-        y: this.verticalVelocity * deltaTime,
-        z: velocity.z * deltaTime
-      };
+      // PERF: Reuse pre-allocated objects instead of creating new ones per frame
+      const desiredMovement = this._rapierMovement;
+      desiredMovement.x = velocity.x * deltaTime;
+      desiredMovement.y = this.verticalVelocity * deltaTime;
+      desiredMovement.z = velocity.z * deltaTime;
 
       // Compute movement accounting for obstacles (only collide with ground/buildings, not NPCs)
       this.characterController.computeColliderMovement(
@@ -598,11 +606,10 @@ export class Player extends THREE.Group {
       const correctedMovement = this.characterController.computedMovement();
 
       // Apply to rigid body
-      const newPosition = {
-        x: translation.x + correctedMovement.x,
-        y: translation.y + correctedMovement.y,
-        z: translation.z + correctedMovement.z
-      };
+      const newPosition = this._rapierPosition;
+      newPosition.x = translation.x + correctedMovement.x;
+      newPosition.y = translation.y + correctedMovement.y;
+      newPosition.z = translation.z + correctedMovement.z;
 
       this.rigidBody.setNextKinematicTranslation(newPosition);
 

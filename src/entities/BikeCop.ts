@@ -61,6 +61,7 @@ export class BikeCop extends THREE.Group {
   // Pre-allocated vectors
   private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+  private readonly _positionResult: THREE.Vector3 = new THREE.Vector3();
 
   // Config
   private static readonly RAM_RANGE = 2.0; // Close range ram attack
@@ -470,8 +471,9 @@ export class BikeCop extends THREE.Group {
   }
 
   getPosition(): THREE.Vector3 {
+    // PERF: Reuse pre-allocated vector instead of allocating new one
     const pos = this.rigidBody.translation();
-    return new THREE.Vector3(pos.x, pos.y, pos.z);
+    return this._positionResult.set(pos.x, pos.y, pos.z);
   }
 
   getPositionInto(out: THREE.Vector3): THREE.Vector3 {

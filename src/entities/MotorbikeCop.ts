@@ -107,6 +107,12 @@ export class MotorbikeCop extends THREE.Group {
   private readonly _tempMidPoint: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempTargetWithHeight: THREE.Vector3 = new THREE.Vector3();
   private readonly _taserPositions: Float32Array = new Float32Array(9); // 3 points × 3 coords
+  // PERF: Pre-allocated for getPosition() return value and bullet target
+  private readonly _positionResult: THREE.Vector3 = new THREE.Vector3();
+  private readonly _bulletTarget: THREE.Vector3 = new THREE.Vector3();
+  // PERF: Pre-allocated for RAPIER movement (avoid object creation per frame)
+  private readonly _rapierMovement = { x: 0, y: 0, z: 0 };
+  private readonly _rapierPosition = { x: 0, y: 0, z: 0 };
 
   // Use centralized collision groups from constants
 
@@ -638,7 +644,11 @@ export class MotorbikeCop extends THREE.Group {
       moveZ *= scale;
     }
 
-    const desiredMovement = { x: moveX, y: -0.1 * deltaTime, z: moveZ };
+    // PERF: Reuse pre-allocated objects instead of creating new ones per frame
+    const desiredMovement = this._rapierMovement;
+    desiredMovement.x = moveX;
+    desiredMovement.y = -0.1 * deltaTime;
+    desiredMovement.z = moveZ;
 
     // Use character controller for collision
     this.characterController.computeColliderMovement(
@@ -647,11 +657,10 @@ export class MotorbikeCop extends THREE.Group {
     );
 
     const correctedMovement = this.characterController.computedMovement();
-    const newPosition = {
-      x: currentPos.x + correctedMovement.x,
-      y: Math.max(0.3, currentPos.y + correctedMovement.y),
-      z: currentPos.z + correctedMovement.z,
-    };
+    const newPosition = this._rapierPosition;
+    newPosition.x = currentPos.x + correctedMovement.x;
+    newPosition.y = Math.max(0.3, currentPos.y + correctedMovement.y);
+    newPosition.z = currentPos.z + correctedMovement.z;
 
     this.rigidBody.setNextKinematicTranslation(newPosition);
     (this as THREE.Group).position.set(newPosition.x, newPosition.y, newPosition.z);
@@ -831,7 +840,9 @@ export class MotorbikeCop extends THREE.Group {
 
     this.bulletProjectile = new THREE.Mesh(MotorbikeCop.sharedBulletGeometry, MotorbikeCop.sharedBulletMaterial);
     this.bulletProjectile.position.copy(copPos);
-    this.bulletTarget = targetPos.clone().setY(targetPos.y + 0.5);
+    // PERF: Reuse pre-allocated vector instead of clone()
+    this._bulletTarget.copy(targetPos).setY(targetPos.y + 0.5);
+    this.bulletTarget = this._bulletTarget;
     this.parentScene.add(this.bulletProjectile);
 
     this.attackCooldown = MOTORBIKE_COP_CONFIG.SHOOT_COOLDOWN;
@@ -878,12 +889,11 @@ export class MotorbikeCop extends THREE.Group {
 
   /**
    * Get position
-   * NOTE: Returns a new Vector3 for external use (safe but allocates).
-   * Internal methods should use _tempPosition directly.
+   * PERF: Returns pre-allocated vector - callers should copy if storing
    */
   getPosition(): THREE.Vector3 {
     const pos = this.rigidBody.translation();
-    return new THREE.Vector3(pos.x, pos.y, pos.z);
+    return this._positionResult.set(pos.x, pos.y, pos.z);
   }
 
   /**
