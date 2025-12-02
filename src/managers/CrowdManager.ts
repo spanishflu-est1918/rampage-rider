@@ -152,15 +152,32 @@ export class CrowdManager {
     return pool[0].type;
   }
 
+  // PERF: Staggered spawn state to prevent 3-second stall from bulk model loading
+  private staggeredSpawnQueue: number = 0;
+  private staggeredSpawnPlayerPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly SPAWNS_PER_FRAME: number = 5; // Spread 60 spawns over 12 frames
+
   /**
-   * Initialize crowd with pedestrians
+   * Initialize crowd with pedestrians (staggered over multiple frames)
    */
   spawnInitialCrowd(playerPosition: THREE.Vector3): void {
-    for (let i = 0; i < this.maxPedestrians; i++) {
-      this.spawnPedestrian(playerPosition);
+    // Queue staggered spawning instead of all-at-once
+    this.staggeredSpawnQueue = this.maxPedestrians;
+    this.staggeredSpawnPlayerPos.copy(playerPosition);
+    // Note: Actual spawning happens in update() to spread load across frames
+  }
+
+  /**
+   * Process staggered spawn queue (called from update)
+   */
+  private processStaggeredSpawns(): void {
+    if (this.staggeredSpawnQueue <= 0) return;
+
+    const toSpawn = Math.min(this.staggeredSpawnQueue, this.SPAWNS_PER_FRAME);
+    for (let i = 0; i < toSpawn; i++) {
+      this.spawnPedestrian(this.staggeredSpawnPlayerPos);
     }
-    // Note: Flocking behaviors (separation, alignment, cohesion) are set up
-    // in Pedestrian constructor, no need for separate setupFlocking()
+    this.staggeredSpawnQueue -= toSpawn;
   }
 
   /**
@@ -535,6 +552,9 @@ export class CrowdManager {
    * Update all pedestrians (Yuka AI updated by Engine's AIManager)
    */
   update(deltaTime: number, playerPosition: THREE.Vector3): void {
+    // PERF: Process staggered spawns first (spreads initial crowd over multiple frames)
+    this.processStaggeredSpawns();
+
     // Mark pedestrians for removal (don't remove during iteration)
     for (const pedestrian of this.pedestrians) {
       // Calculate squared distance once for both removal check and animation LOD
