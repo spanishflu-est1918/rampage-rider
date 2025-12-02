@@ -34,7 +34,7 @@ All values are in `src/constants.ts` unless otherwise noted.
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | Health | 3 | Knife hits to kill |
-| Speed | 7.2 | Units/sec (player sprint: 7.0) |
+| Speed | 6.5 | Units/sec (player sprint: 7.0) |
 | Max count | 3 | Maximum simultaneous foot cops |
 | Spawn at 25% heat | 1 cop | First spawn threshold |
 | Spawn at 50% heat | 2 cops | Second spawn threshold |
@@ -96,7 +96,7 @@ All values are in `src/constants.ts` unless otherwise noted.
 |--------|-------|--------|----------|----------------|
 | Ram | 2.5 | 15-35 | 2.0s | Any |
 | Taser | 8.0 | 0 (stun) | 3.0s | 1 |
-| Shoot | 15.0 | 15 | 1.5s | 2 |
+| Shoot | 12.0 | 15 | 1.5s | 2 |
 
 #### Spawn Patterns
 
@@ -149,8 +149,10 @@ KILLS
   ├──► HEAT (0-100)
   │      │
   │      ├── 25% ──► Tier 1 cops spawn (1 foot/bike/scout)
-  │      ├── 50% ──► Tier 2 cops spawn (2 foot/bike, swarm, cop cars)
-  │      └── 75% ──► Tier 3 cops spawn (3 foot, boss motorbike)
+  │      ├── 45% ──► 2 swarm bikes start appearing
+  │      ├── 50% ──► Cop cars unlock (SEDAN/TRUCK tier only)
+  │      ├── 55% ──► Full 6-bike swarm unlocks
+  │      └── 75% ──► Boss level cops spawn (3 foot, boss motorbike)
   │
   └──► COP KILLS ──► WANTED STARS (0-2)
                         │
@@ -195,6 +197,24 @@ KILLS
 - **Movement**: 20 units/sec (fast but catchable)
 - **Attack pattern**: Ram at 5 unit range
 - **Hit stun**: 1.0s (longest)
+
+---
+
+## Special Mechanics
+
+### Bike Cop Sprint Burst
+- **Trigger**: When within 10 units of player
+- **Effect**: Boost speed to 15 units/sec (faster than player bike at 14)
+- **Purpose**: Creates catch-up mechanic for close-range engagements
+
+### Sedan Chip Damage vs Cop Cars
+- **Damage**: 1 damage per second to cop cars within 4m radius
+- **Effect**: Non-lethal hits show metal spark particles
+- **Purpose**: Sedan can gradually weaken pursuing cop cars
+
+### Bicycle Attack Behavior
+- **Movement requirement**: Can attack while stationary or moving
+- **Attack range**: Same as on-foot melee (4.5 unit radius, 180° cone)
 
 ---
 

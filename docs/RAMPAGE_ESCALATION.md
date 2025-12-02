@@ -158,7 +158,7 @@ The word "RAMPAGE!" appears randomly in kill messages during pursuit - it's just
 |------|-------------------|
 | FOOT | Small radius (2.5), single target until 10+ combo |
 | BIKE | Must be moving to attack, medium radius |
-| MOTO | Fixed 5 max kills (no combo scaling) |
+| MOTO | 5 → 8 at 10+ combo → ∞ at 15+ combo |
 | SEDAN | Must be moving (speed > 1) |
 | TRUCK | Slow turn speed, large hitbox blocks view |
 
@@ -166,7 +166,7 @@ The word "RAMPAGE!" appears randomly in kill messages during pursuit - it's just
 
 ## Proposals: Maximize Kill Potential
 
-### Option 1: Add Combo Scaling to Motorbike
+### Option 1: Add Combo Scaling to Motorbike ✅ **IMPLEMENTED**
 
 **Current**: Motorbike blast is fixed at 5 max kills regardless of combo.
 
@@ -176,6 +176,11 @@ const maxKills = this.stats.combo >= 10 ? Infinity : cfg.blastMaxKills;
 ```
 
 **Impact**: High combo would allow motorbike to clear entire crowds.
+
+**Status**: Implemented with tiered scaling:
+- Base: 5 max kills
+- 10+ combo: 8 max kills
+- 15+ combo: Unlimited kills
 
 ### Option 2: Reduce Combo Threshold
 
@@ -209,13 +214,19 @@ const maxKills = this.stats.combo >= 10 ? Infinity : cfg.blastMaxKills;
 
 **Impact**: Creates distinct power spike above the 10+ combo baseline.
 
-### Option 5: Increase Pedestrian Density
+### Option 5: Increase Pedestrian Density ✅ **IMPLEMENTED** (Crowd Surge)
 
 **Current**: Max 60 pedestrians.
 
 **Proposal**: Increase to 100 during high combo/heat.
 
 **Impact**: More targets available, higher potential kill counts.
+
+**Status**: Implemented as tier unlock crowd surge:
+- Base pedestrian count: 60
+- On tier unlock: Surges to 100 for 15 seconds
+- Triggered by BIKE/MOTO/SEDAN/TRUCK unlocks
+- Creates dramatic spike in kill opportunities
 
 ### Option 6: Add AOE Attacks to Foot/Bike
 
@@ -248,6 +259,57 @@ const maxKills = this.stats.combo >= 10 ? Infinity : cfg.blastMaxKills;
 3. Enter pursuit state for 2x multiplier
 4. Target panicking pedestrians for 4x total
 5. Kill cops when possible (50-100 points each)
+
+---
+
+## Implemented Juice Features
+
+### Combo Milestone Announcements
+
+**Description**: Screen-centered announcements appear at specific combo milestones.
+
+**Thresholds**: 5, 10, 15, 20, 30, 50 combo
+
+**Implementation**:
+- Displayed in `ScoreOverlay.tsx`
+- Fade-in animation with scaling
+- Lasts 2 seconds
+- Stacks if multiple milestones reached quickly
+
+### Tier Unlock Slow-Mo Effect
+
+**Description**: Brief time dilation effect when unlocking new tier.
+
+**Parameters**:
+- Duration: 0.3 seconds
+- Time scale: 0.3x (70% slow-down)
+- Triggered on BIKE/MOTO/SEDAN/TRUCK unlock
+
+**Implementation**: Physics time step scaled in `Engine.ts`
+
+### Crowd Surge on Tier Unlock
+
+**Description**: Pedestrian count temporarily increases when unlocking new vehicle.
+
+**Parameters**:
+- Base count: 60 pedestrians
+- Surge count: 100 pedestrians
+- Duration: 15 seconds
+- Triggers: BIKE/MOTO/SEDAN/TRUCK unlocks
+
+**Impact**: Creates immediate spike in kill opportunities after tier progression.
+
+### Panic Freeze Mechanic
+
+**Description**: Pedestrians freeze briefly before fleeing when player approaches.
+
+**Parameters**:
+- Freeze duration: 0.6 seconds
+- Trigger: Player enters detection radius
+- Effect: "Deer in headlights" behavior
+- State transition: IDLE → FLEE_FREEZE → FLEE_RUN
+
+**Impact**: Makes low-speed attacks easier to land, creates more realistic panic response.
 
 ---
 
