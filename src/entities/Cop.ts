@@ -538,6 +538,23 @@ export class Cop extends THREE.Group {
     this.removeBulletProjectile();
     // Note: blob shadow is removed by CopManager when it removes from scene
 
+    // PERF: Stop and uncache animation mixer to prevent memory leak
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer.uncacheRoot(this.mixer.getRoot());
+      (this.mixer as THREE.AnimationMixer | null) = null;
+    }
+
+    // Dispose blob shadow (created per instance)
+    if (this.blobShadow) {
+      this.blobShadow.geometry.dispose();
+      if (Array.isArray(this.blobShadow.material)) {
+        this.blobShadow.material.forEach(m => m.dispose());
+      } else if (this.blobShadow.material) {
+        (this.blobShadow.material as THREE.Material).dispose();
+      }
+    }
+
     // Dispose cloned materials (SkeletonUtils.clone DOES clone materials)
     // But DON'T dispose geometries - those ARE shared by reference
     (this as THREE.Group).traverse((child) => {

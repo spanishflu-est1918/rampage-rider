@@ -56,7 +56,8 @@ export class MotorbikeCop extends THREE.Group {
   private seekBehavior: YUKA.SeekBehavior;
   private arriveBehavior: YUKA.ArriveBehavior;
   private wanderBehavior: YUKA.WanderBehavior;
-  private separationBehavior: YUKA.SeparationBehavior;
+  // PERF: Separation behavior disabled - O(n²) complexity, see Cop.ts for rationale
+  // private separationBehavior: YUKA.SeparationBehavior;
   private seekTarget: YUKA.Vector3; // Reusable target vector
 
   // State machine
@@ -153,9 +154,10 @@ export class MotorbikeCop extends THREE.Group {
     this.wanderBehavior.weight = 0;
     this.yukaVehicle.steering.add(this.wanderBehavior);
 
-    this.separationBehavior = new YUKA.SeparationBehavior();
-    this.separationBehavior.weight = 0.5;
-    this.yukaVehicle.steering.add(this.separationBehavior);
+    // PERF: Separation disabled - O(n²) entity iteration kills performance
+    // this.separationBehavior = new YUKA.SeparationBehavior();
+    // this.separationBehavior.weight = 0.5;
+    // this.yukaVehicle.steering.add(this.separationBehavior);
 
     this.yukaEntityManager.add(this.yukaVehicle);
 

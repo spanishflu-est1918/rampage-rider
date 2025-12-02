@@ -27,6 +27,7 @@ export class BikeCopManager {
   // Pre-allocated vectors
   private readonly _tempSpawnPos = new THREE.Vector3();
   private readonly _tempCopPos = new THREE.Vector3();
+  private readonly _tempAttackDir = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
@@ -42,16 +43,19 @@ export class BikeCopManager {
   }
 
   updateSpawns(heat: number, playerPosition: THREE.Vector3, deltaTime: number): void {
-    // Remove dead cops
-    this.cops = this.cops.filter((cop) => {
+    // Remove dead cops (PERF: use splice loop instead of filter)
+    let activeCops = 0;
+    for (let i = this.cops.length - 1; i >= 0; i--) {
+      const cop = this.cops[i];
       if (cop.isDeadState() && !(cop as THREE.Group).visible) {
         this.scene.remove(cop);
         this.scene.remove(cop.getBlobShadow());
         cop.dispose();
-        return false;
+        this.cops.splice(i, 1);
+      } else if (!cop.isDeadState()) {
+        activeCops++;
       }
-      return true;
-    });
+    }
 
     // Update spawn cooldown
     this.lastSpawnTime += deltaTime;
@@ -68,7 +72,6 @@ export class BikeCopManager {
     else if (heat >= 25) desiredCops = 1;
 
     // Spawn if needed
-    const activeCops = this.cops.filter((cop) => !cop.isDeadState()).length;
     if (activeCops < desiredCops && this.cops.length < this.maxCops) {
       this.spawnCop(playerPosition);
       this.lastSpawnTime = 0;
@@ -129,8 +132,8 @@ export class BikeCopManager {
         let inCone = true;
 
         if (direction) {
-          const tempDir = new THREE.Vector3().subVectors(this._tempCopPos, position).normalize();
-          const dotProduct = direction.dot(tempDir);
+          this._tempAttackDir.subVectors(this._tempCopPos, position).normalize();
+          const dotProduct = direction.dot(this._tempAttackDir);
           const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
           inCone = angle <= coneAngle / 2;
         }
@@ -176,7 +179,11 @@ export class BikeCopManager {
   }
 
   getActiveCopCount(): number {
-    return this.cops.filter((cop) => !cop.isDeadState()).length;
+    let count = 0;
+    for (const cop of this.cops) {
+      if (!cop.isDeadState()) count++;
+    }
+    return count;
   }
 
   getCopData(): Array<{ position: THREE.Vector3; health: number; maxHealth: number }> {

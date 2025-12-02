@@ -105,6 +105,8 @@ export class Player extends THREE.Group {
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempVelocity: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempAttackPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _facingDir: THREE.Vector3 = new THREE.Vector3();
+  private static readonly _Y_AXIS: THREE.Vector3 = new THREE.Vector3(0, 1, 0);
 
   constructor() {
     super();
@@ -634,11 +636,12 @@ export class Player extends THREE.Group {
 
   /**
    * Get player facing direction (normalized vector in XZ plane)
+   * PERF: Reuses pre-allocated vector - do NOT store reference, copy if needed
    */
   getFacingDirection(): THREE.Vector3 {
-    const direction = new THREE.Vector3(0, 0, 1);
-    direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), (this as THREE.Group).rotation.y);
-    return direction;
+    this._facingDir.set(0, 0, 1);
+    this._facingDir.applyAxisAngle(Player._Y_AXIS, (this as THREE.Group).rotation.y);
+    return this._facingDir;
   }
 
   /**
@@ -1024,10 +1027,28 @@ export class Player extends THREE.Group {
       this.rigidBody = null;
     }
 
-    // Cleanup model
+    // PERF: Stop and uncache animation mixer to prevent memory leak
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer.uncacheRoot(this.mixer.getRoot());
+      (this.mixer as THREE.AnimationMixer | null) = null;
+    }
+
+    // Dispose blob shadow (created per instance in constructor)
+    if (this.blobShadow) {
+      this.blobShadow.geometry.dispose();
+      if (Array.isArray(this.blobShadow.material)) {
+        this.blobShadow.material.forEach(m => m.dispose());
+      } else if (this.blobShadow.material) {
+        (this.blobShadow.material as THREE.Material).dispose();
+      }
+    }
+
+    // Cleanup model - DON'T dispose geometries (shared via AssetLoader)
+    // Only dispose cloned materials
     this.modelContainer.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
+        // DON'T dispose geometry - shared across all instances
         if (Array.isArray(child.material)) {
           child.material.forEach(m => m.dispose());
         } else {

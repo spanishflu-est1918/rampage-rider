@@ -49,16 +49,19 @@ export class CopManager {
    * Update cop spawns based on heat level
    */
   updateSpawns(heat: number, playerPosition: THREE.Vector3): void {
-    // Remove dead cops
-    this.cops = this.cops.filter(cop => {
+    // Remove dead cops (PERF: use splice loop instead of filter to avoid allocations)
+    let activeCops = 0;
+    for (let i = this.cops.length - 1; i >= 0; i--) {
+      const cop = this.cops[i];
       if (cop.isDeadState() && !(cop as THREE.Group).visible) {
         this.scene.remove(cop);
         this.scene.remove(cop.getBlobShadow());
         cop.dispose();
-        return false;
+        this.cops.splice(i, 1);
+      } else if (!cop.isDeadState()) {
+        activeCops++;
       }
-      return true;
-    });
+    }
 
     // Calculate desired cop count based on heat
     let desiredCops = 0;
@@ -67,7 +70,6 @@ export class CopManager {
     else if (heat >= 25) desiredCops = 1;
 
     // Spawn more cops if below desired count
-    const activeCops = this.cops.filter(cop => !cop.isDeadState()).length;
     const copsToSpawn = Math.min(desiredCops - activeCops, this.maxCops - this.cops.length);
 
     for (let i = 0; i < copsToSpawn; i++) {
@@ -213,10 +215,14 @@ export class CopManager {
   }
 
   /**
-   * Get active cop count
+   * Get active cop count (PERF: loop instead of filter)
    */
   getActiveCopCount(): number {
-    return this.cops.filter(cop => !cop.isDeadState()).length;
+    let count = 0;
+    for (const cop of this.cops) {
+      if (!cop.isDeadState()) count++;
+    }
+    return count;
   }
 
   /**

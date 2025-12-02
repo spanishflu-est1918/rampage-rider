@@ -2297,7 +2297,10 @@ export class Engine {
     }
 
     // Send stats update (including performance data and vehicle state)
-    if (this.callbacks.onStatsUpdate) {
+    // PERF: Throttle to every 3 frames (~20fps) to reduce React reconciliation overhead
+    this.statsUpdateCounter++;
+    if (this.callbacks.onStatsUpdate && this.statsUpdateCounter >= 3) {
+      this.statsUpdateCounter = 0;
       const isNearCar = this.vehicleSpawned && !this.isInVehicle && this.isPlayerNearVehicle();
       const vehicleStats = this.isInVehicle && this.vehicle ? {
         vehicleHealth: this.vehicle.getHealth(),

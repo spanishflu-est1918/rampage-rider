@@ -44,6 +44,8 @@ export class MotorbikeCopManager {
   // Pre-allocated vectors (avoid GC pressure)
   private readonly _tempCopPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempSpawnPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempBehindDir: THREE.Vector3 = new THREE.Vector3();
 
   // Pre-calculated squared distances for attack range checks (avoid sqrt in hot loop)
   private static readonly SHOOT_RANGE_SQ = MOTORBIKE_COP_CONFIG.SHOOT_RANGE * MOTORBIKE_COP_CONFIG.SHOOT_RANGE;
@@ -92,8 +94,9 @@ export class MotorbikeCopManager {
       }
     }
 
-    // Remove dead cops
-    this.cops = this.cops.filter((cop) => {
+    // Remove dead cops (PERF: use splice loop instead of filter)
+    for (let i = this.cops.length - 1; i >= 0; i--) {
+      const cop = this.cops[i];
       if (cop.isDeadState() && !(cop as THREE.Group).visible) {
         this.scene.remove(cop);
         this.scene.remove(cop.getBlobShadow());
@@ -112,10 +115,9 @@ export class MotorbikeCopManager {
             break;
         }
 
-        return false;
+        this.cops.splice(i, 1);
       }
-      return true;
-    });
+    }
 
     // Check for wave clear
     const activeCops = this.getActiveCopCount();
@@ -222,27 +224,29 @@ export class MotorbikeCopManager {
         // Swarm spawns at flanking positions
         const flankAngle = Math.random() * Math.PI * 2;
         const flankDistance = config.SPAWN_BEHIND_DISTANCE * (0.7 + Math.random() * 0.6);
-        spawnPos = new THREE.Vector3(
+        this._tempSpawnPos.set(
           playerPosition.x + Math.cos(flankAngle) * flankDistance,
           0,
           playerPosition.z + Math.sin(flankAngle) * flankDistance
         );
+        spawnPos = this._tempSpawnPos;
         break;
       }
 
       case MotorbikeCopVariant.SCOUT:
       default: {
         // Scout spawns behind player
-        const behindDir = playerVelocity.clone().negate();
-        if (behindDir.lengthSq() < 0.01) {
-          behindDir.set(0, 0, 1); // Default behind if stationary
+        this._tempBehindDir.copy(playerVelocity).negate();
+        if (this._tempBehindDir.lengthSq() < 0.01) {
+          this._tempBehindDir.set(0, 0, 1); // Default behind if stationary
         } else {
-          behindDir.normalize();
+          this._tempBehindDir.normalize();
         }
         const lateralOffset = (Math.random() - 0.5) * config.SPAWN_FLANK_OFFSET;
-        spawnPos = playerPosition.clone()
-          .add(behindDir.multiplyScalar(config.SPAWN_BEHIND_DISTANCE))
-          .add(new THREE.Vector3(lateralOffset, 0, 0));
+        this._tempSpawnPos.copy(playerPosition)
+          .add(this._tempBehindDir.multiplyScalar(config.SPAWN_BEHIND_DISTANCE));
+        this._tempSpawnPos.x += lateralOffset;
+        spawnPos = this._tempSpawnPos;
         break;
       }
     }
@@ -405,10 +409,14 @@ export class MotorbikeCopManager {
   }
 
   /**
-   * Get active cop count
+   * Get active cop count (PERF: loop instead of filter)
    */
   getActiveCopCount(): number {
-    return this.cops.filter((cop) => !cop.isDeadState()).length;
+    let count = 0;
+    for (const cop of this.cops) {
+      if (!cop.isDeadState()) count++;
+    }
+    return count;
   }
 
   /**
