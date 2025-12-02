@@ -362,9 +362,9 @@ export class Cop extends THREE.Group {
 
       // Get current position
       const currentPos = this.rigidBody.translation();
-      let newX = currentPos.x + this.ragdollVelocity.x * deltaTime;
+      const newX = currentPos.x + this.ragdollVelocity.x * deltaTime;
       let newY = currentPos.y + this.ragdollVelocity.y * deltaTime;
-      let newZ = currentPos.z + this.ragdollVelocity.z * deltaTime;
+      const newZ = currentPos.z + this.ragdollVelocity.z * deltaTime;
 
       // Floor bounce
       if (newY <= 0) {

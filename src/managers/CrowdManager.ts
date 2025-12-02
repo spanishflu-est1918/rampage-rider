@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
-import * as YUKA from 'yuka';
 import { Pedestrian } from '../entities/Pedestrian';
 import { InstancedBlobShadows } from '../rendering/InstancedBlobShadows';
 import { AIManager } from '../core/AIManager';

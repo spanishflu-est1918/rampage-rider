@@ -380,7 +380,7 @@ export class Vehicle extends THREE.Group {
       // Assuming wheel radius ~0.3m, rotation = distance / radius
       const wheelRadius = 0.3;
       const distance = velocity.length() * deltaTime;
-      const rotationAngle = distance / wheelRadius;
+      const _rotationAngle = distance / wheelRadius;
 
       // Wheel animation disabled for performance
     }

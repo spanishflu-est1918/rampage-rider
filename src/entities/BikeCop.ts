@@ -71,6 +71,11 @@ export class BikeCop extends THREE.Group {
   private static readonly DECELERATION = 25;
   private static readonly MAX_FORCE = 20.0;
 
+  // Sprint burst - become threatening when close
+  private static readonly SPRINT_DISTANCE = 10; // Trigger sprint when within 10 units
+  private static readonly SPRINT_SPEED = 15; // Faster than player bike (14) when sprinting
+  private static readonly BASE_SPEED = 11; // Normal chase speed
+
   constructor(
     position: THREE.Vector3,
     world: RAPIER.World,
@@ -365,15 +370,25 @@ export class BikeCop extends THREE.Group {
       this.ramAttack();
     }
 
+    // Sprint burst when close to target - become a real threat
+    const targetSpeed =
+      distanceToTarget <= BikeCop.SPRINT_DISTANCE
+        ? BikeCop.SPRINT_SPEED
+        : BikeCop.BASE_SPEED;
+    this.maxSpeed = targetSpeed;
+    this.yukaVehicle.maxSpeed = targetSpeed;
+
     // Don't move while stunned
     if (this.isHitStunned) {
       this.currentSpeed = Math.max(0, this.currentSpeed - BikeCop.DECELERATION * deltaTime);
       return;
     }
 
-    // Update speed
+    // Update speed towards target speed
     if (this.currentSpeed < this.maxSpeed) {
       this.currentSpeed = Math.min(this.maxSpeed, this.currentSpeed + BikeCop.ACCELERATION * deltaTime);
+    } else if (this.currentSpeed > this.maxSpeed) {
+      this.currentSpeed = Math.max(this.maxSpeed, this.currentSpeed - BikeCop.DECELERATION * deltaTime);
     }
 
     // Get desired position from Yuka

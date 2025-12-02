@@ -8,7 +8,6 @@ import {
   ENTITY_SPEEDS,
   PHYSICS_CONFIG,
   TASER_CONFIG,
-  HIT_STUN,
   COLLISION_GROUPS,
   makeCollisionGroups,
 } from '../constants';

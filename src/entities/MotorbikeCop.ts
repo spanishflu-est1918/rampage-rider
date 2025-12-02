@@ -446,7 +446,7 @@ export class MotorbikeCop extends THREE.Group {
         this.seekBehavior.weight = 1.0;
         break;
 
-      case MotorbikeCopState.CHASE:
+      case MotorbikeCopState.CHASE: {
         // Seek with flanking offset (less random to avoid per-frame allocations)
         const flankOffset = Math.sin(this.patrolTimer * 3) * 5;
         this.seekTarget.set(
@@ -457,6 +457,7 @@ export class MotorbikeCop extends THREE.Group {
         this.seekBehavior.weight = 2.0;
         this.wanderBehavior.weight = 0.3;
         break;
+      }
 
       case MotorbikeCopState.RAM:
         // Arrive at player position

@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
-import Overlay from './components/UI/Overlay';
-import NotificationSystem, { NotificationController } from './components/UI/NotificationSystem';
-import SnowOverlay from './components/UI/SnowOverlay';
-import VehicleSelector from './components/UI/VehicleSelector';
-import AnimationSelector from './components/UI/AnimationSelector';
-import { MainMenu, GameOver } from './components/UI/Menus';
+import Overlay from './components/ui/Overlay';
+import NotificationSystem, { NotificationController } from './components/ui/NotificationSystem';
+import SnowOverlay from './components/ui/SnowOverlay';
+import VehicleSelector from './components/ui/VehicleSelector';
+import AnimationSelector from './components/ui/AnimationSelector';
+import { MainMenu, GameOver } from './components/ui/Menus';
 import { GameState, GameStats, Tier, KillNotification } from './types';
 import { VehicleType } from './constants';
 import ErrorBoundary from './components/ErrorBoundary';

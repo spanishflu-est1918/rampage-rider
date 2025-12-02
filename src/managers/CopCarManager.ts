@@ -63,9 +63,15 @@ export class CopCarManager {
     // Only spawn if heat >= threshold
     if (heat < COP_CAR_CONFIG.SPAWN_HEAT_THRESHOLD) return;
 
+    // Staggered max cars based on heat (avoid 50% cliff)
+    const maxCars =
+      heat >= COP_CAR_CONFIG.SPAWN_HEAT_THRESHOLD_FULL
+        ? COP_CAR_CONFIG.MAX_CARS
+        : COP_CAR_CONFIG.MAX_CARS_INITIAL;
+
     // Check if we need more cars
     const activeCars = this.cars.filter((car) => !car.isDeadState()).length;
-    if (activeCars >= COP_CAR_CONFIG.MAX_CARS) return;
+    if (activeCars >= maxCars) return;
 
     // Spawn behind player
     this.spawnCar(playerPosition, playerVelocity);
@@ -149,8 +155,9 @@ export class CopCarManager {
     position: THREE.Vector3,
     radius: number,
     damage: number
-  ): { kills: number; positions: THREE.Vector3[]; points: number } {
+  ): { kills: number; positions: THREE.Vector3[]; points: number; hits: number } {
     let killCount = 0;
+    let hitCount = 0;
     let totalPoints = 0;
     const killPositions: THREE.Vector3[] = [];
     const radiusSq = radius * radius;
@@ -162,6 +169,7 @@ export class CopCarManager {
       const distanceSq = this._tempCarPos.distanceToSquared(position);
 
       if (distanceSq < radiusSq) {
+        hitCount++;
         car.takeDamage(damage);
         car.applyKnockback(position, 15);
 
@@ -173,7 +181,7 @@ export class CopCarManager {
       }
     }
 
-    return { kills: killCount, positions: killPositions, points: totalPoints };
+    return { kills: killCount, positions: killPositions, points: totalPoints, hits: hitCount };
   }
 
   getActiveCopCount(): number {

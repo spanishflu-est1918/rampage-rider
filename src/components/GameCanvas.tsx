@@ -29,7 +29,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
     if (!canvasRef.current) return;
 
     let cancelled = false;
-    let initializingEngine: Engine | null = null;
+    let _initializingEngine: Engine | null = null;
 
     const initEngine = async () => {
       const engine = new Engine(
@@ -38,12 +38,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
         window.innerHeight
       );
 
-      initializingEngine = engine;
+      _initializingEngine = engine;
 
       try {
         await engine.init();
       } catch {
-        initializingEngine = null;
+        _initializingEngine = null;
         return;
       }
 
@@ -54,13 +54,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
         } catch {
           // Ignore disposal errors during cancel
         }
-        initializingEngine = null;
+        _initializingEngine = null;
         return;
       }
 
       engine.setCallbacks(onStatsUpdate, onGameOver, onKillNotification);
       engineRef.current = engine;
-      initializingEngine = null;
+      _initializingEngine = null;
       setEngineReady(true);
 
       // Expose engine controls to parent
@@ -201,7 +201,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [engineReady]);
+  }, [engineReady, onPauseToggle]);
 
   // Start/Stop based on gameActive prop
   useEffect(() => {

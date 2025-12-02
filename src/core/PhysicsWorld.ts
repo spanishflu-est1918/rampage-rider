@@ -36,8 +36,8 @@ export class PhysicsWorld {
   step(deltaTime: number): void {
     if (!this.world || !this.initialized) return;
 
-    // Clamp dt to prevent physics explosions
-    const clampedDt = Math.min(deltaTime, 0.1);
+    // Clamp dt to prevent physics explosions (Rapier uses fixed timestep internally)
+    const _clampedDt = Math.min(deltaTime, 0.1);
     this.world.step();
   }
 

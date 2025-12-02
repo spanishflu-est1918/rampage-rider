@@ -15,11 +15,9 @@ import { Vehicle } from '../entities/Vehicle';
 import { ParticleEmitter } from '../rendering/ParticleSystem';
 import {
   VehicleType,
-  VehicleConfig,
   VEHICLE_CONFIGS,
   TIER_VEHICLE_MAP,
   TIER_CONFIGS,
-  MOTORBIKE_COP_CONFIG,
   CAMERA_CONFIG,
   PLAYER_ATTACK_CONFIG,
   SCORING_CONFIG,
@@ -173,6 +171,7 @@ export class Engine {
 
   // Slow-mo effect for tier unlocks (Burnout-style impact frame)
   private slowmoTimer: number = 0;
+  private sedanChipCooldown: number = 0; // Cooldown for sedan vs cop car chip damage
   private slowmoScale: number = 1.0;
   private readonly SLOWMO_DURATION: number = 0.8;
   private readonly SLOWMO_SCALE: number = 0.15; // 15% speed during slowmo
@@ -732,7 +731,7 @@ export class Engine {
    */
   debugBoostHeat(): void {
     this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + SCORING_CONFIG.HEAT_DEBUG_BOOST);
-    console.log(`[DEBUG] Heat boosted to ${this.stats.heat}%`);
+    console.warn(`[DEBUG] Heat boosted to ${this.stats.heat}%`);
   }
 
   private findSafeVehicleSpawnPosition(playerPos: THREE.Vector3): THREE.Vector3 {
@@ -1203,7 +1202,7 @@ export class Engine {
 
     // --- Pedestrian damage ---
     const pedDamageStart = performance.now();
-    let pedKills = 0;
+    let _pedKills = 0;
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -1213,7 +1212,7 @@ export class Engine {
         attackDirection,
         coneAngle
       );
-      pedKills = pedResult.kills;
+      _pedKills = pedResult.kills;
 
       if (pedResult.kills > 0) {
         this.stats.kills += pedResult.kills;
@@ -1250,7 +1249,7 @@ export class Engine {
         this.crowd.panicCrowd(attackPosition, cfg.panicRadius);
       }
     }
-    const pedDamageTime = performance.now() - pedDamageStart;
+    const _pedDamageTime = performance.now() - pedDamageStart;
 
     // --- Cop damage (foot cops, bike cops, motorbike cops) ---
     const copDamageStart = performance.now();
@@ -1313,7 +1312,7 @@ export class Engine {
         }
       }
     }
-    const copDamageTime = performance.now() - copDamageStart;
+    const _copDamageTime = performance.now() - copDamageStart;
 
     // --- Blood particles and decals ---
     const particlesStart = performance.now();
@@ -1321,9 +1320,9 @@ export class Engine {
       this.emitBloodEffects(allKillPositions, this.player!.getPosition(), cfg.particleCount, cfg.decalCount);
       this.shakeCamera(cfg.cameraShakeMultiplier * totalKills);
     }
-    const particlesTime = performance.now() - particlesStart;
+    const _particlesTime = performance.now() - particlesStart;
 
-    const totalTime = performance.now() - attackStart;
+    const _totalTime = performance.now() - attackStart;
 
   }
 
@@ -1461,7 +1460,7 @@ export class Engine {
 
     // --- BLAST ATTACK: 360° knockback around player ---
     // Blast max kills scales with combo: 5 base → 8 at 10+ → unlimited at 15+
-    let blastMaxKills = cfg.blastMaxKills; // Base: 5
+    let blastMaxKills: number = cfg.blastMaxKills; // Base: 5
     if (this.stats.combo >= 15) {
       blastMaxKills = Infinity;
     } else if (this.stats.combo >= 10) {
@@ -2060,6 +2059,38 @@ export class Engine {
             for (const pos of trampleResult.positions) {
               this.particles.emitBlood(pos, 80);
               this.triggerKillNotification('COP CAR CRUSHED!', true, 500);
+            }
+          }
+        }
+
+        // Sedan chip-damages cop cars on collision (fight back!)
+        if (this.currentVehicleTier === Tier.SEDAN && this.vehicle) {
+          this.sedanChipCooldown = Math.max(0, this.sedanChipCooldown - dt);
+          if (this.sedanChipCooldown <= 0) {
+            const cfg = VEHICLE_CONFIGS[VehicleType.SEDAN];
+            const chipRadius = cfg.copCarChipRadius ?? 4.0;
+            const chipDamage = cfg.copCarChipDamage ?? 1;
+            const chipCooldown = cfg.copCarChipCooldown ?? 1.0;
+
+            const chipResult = this.copCars.damageInRadius(currentPos, chipRadius, chipDamage);
+            if (chipResult.hits > 0) {
+              // Any damage dealt (even non-lethal) triggers cooldown
+              this.sedanChipCooldown = chipCooldown;
+
+              if (chipResult.kills > 0) {
+                this.stats.score += chipResult.points;
+                this.stats.copKills += chipResult.kills;
+                this.updateWantedStars(true);
+                this.shakeCamera(1.5);
+                for (const pos of chipResult.positions) {
+                  this.particles.emitBlood(pos, 60);
+                  this.triggerKillNotification('COP CAR WRECKED!', true, 300);
+                }
+              } else {
+                // Non-lethal hit - smaller feedback with metal sparks
+                this.shakeCamera(0.3);
+                this.particles.emitSparks(currentPos, 6);
+              }
             }
           }
         }

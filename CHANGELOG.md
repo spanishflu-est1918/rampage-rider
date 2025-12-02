@@ -10,6 +10,85 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2024-12-02]
+
+### Cop Escalation Balance & Code Quality
+
+**Changed:**
+- **Foot cop speed**: 7.2 → 6.5 (slightly slower than player sprint 7.0)
+- **Motorbike cop shoot range**: 15 → 12 (gives player more reaction time)
+- **Heat cliff staggered**: Previously everything unlocked at 50% heat
+  - 45%: 2 swarm bikes start appearing
+  - 50%: Cop cars unlock
+  - 55%: Full 6-bike swarm unlocks
+
+**Added:**
+- **Bike cop sprint burst**: When within 10 units of player, bike cops boost to speed 15 (faster than player bike at 14), making them threatening in close range
+- **Sedan chip damage vs cop cars**: Sedan now deals 1 damage per second to cop cars within 4m radius
+  - Full kill feedback: large camera shake, blood particles, "COP CAR WRECKED!" notification
+  - Non-lethal hit feedback: small camera shake + metal spark particles
+- **Metal spark particle effect**: Yellow/orange/white-hot sparks for sedan vs cop car collisions
+  - Short-lived (0.3-0.6s), fast-moving particles
+  - Helps players see progress on cop car HP
+
+**Fixed:**
+- **Import path casing**: All `components/UI/` imports normalized to lowercase `components/ui/`
+- **TypeScript literal type error**: `blastMaxKills` now typed as `number` to allow Infinity assignment
+
+**Files Modified:**
+- `src/constants.ts` - Speed values, heat thresholds, sedan chip damage config
+- `src/entities/BikeCop.ts` - Sprint burst mechanic
+- `src/managers/MotorbikeCopManager.ts` - Staggered swarm spawning
+- `src/managers/CopCarManager.ts` - damageInRadius returns hit count
+- `src/core/Engine.ts` - Sedan chip damage logic, spark effect call
+- `src/rendering/ParticleSystem.ts` - `emitSparks()` method
+- `src/App.tsx`, `src/index.css`, `src/components/ui/*` - Import casing fixes
+
+### ESLint Setup
+
+**Added:**
+- **ESLint flat config** with TypeScript and React hooks support
+- Rules: `no-explicit-any: error`, `no-unused-vars` with underscore ignore, `no-console` warn, `exhaustive-deps: error`
+
+**Fixed:**
+- 27+ lint errors across 16 files (unused vars, missing dependencies, console statements)
+
+**Files Created:**
+- `eslint.config.js`
+
+**Files Modified:**
+- `package.json` - Added lint scripts and ESLint dependencies
+
+### Designer Feedback Tuning Pass (PR #3)
+
+**Changed:**
+- **Bike→Moto threshold**: 2000 → 1200 score (faster progression)
+- **Motorbike blast scaling**: 5 base kills → 8 at 10+ combo → unlimited at 15+ combo
+- **Heat decay**: 3x faster after 10s of no kills (rewards aggression, forgives breaks)
+- **Wanted stars decay**: -1 star every 45s (escapable if patient)
+
+**Added:**
+- **Panic freeze**: 0.6s freeze before pedestrians flee (gives player reaction time)
+- **Combo milestone announcer**: "5X COMBO!", "10X RAMPAGE!", etc.
+- **Slow-mo on tier unlock**: 0.3s time dilation effect
+- **Scaled score popups**: Size increases with combo multiplier
+- **Crowd surge**: Extra pedestrians spawn after tier unlock (more targets to celebrate)
+
+**Files Created:**
+- `docs/COP_ESCALATION.md` - Police system design doc
+- `docs/GAMEPLAY_TUNING.md` - Balance values reference
+- `docs/GAME_OVERVIEW.md` - Game mechanics overview
+- `docs/RAMPAGE_ESCALATION.md` - Progression system design
+
+**Files Modified:**
+- `src/constants.ts` - Threshold and timing tweaks
+- `src/core/Engine.ts` - Slow-mo, announcer, decay logic
+- `src/entities/Pedestrian.ts` - Panic freeze behavior
+- `src/managers/CrowdManager.ts` - Crowd surge spawning
+- `src/components/UI/NotificationSystem.tsx` - Scaled popups
+
+---
+
 ## [2024-11-28]
 
 ### UI & Pedestrian Improvements

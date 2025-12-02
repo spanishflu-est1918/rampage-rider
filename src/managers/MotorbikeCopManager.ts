@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
-import * as YUKA from 'yuka';
 import { MotorbikeCop, MotorbikeCopVariant, MotorbikeCopState } from '../entities/MotorbikeCop';
 import { MOTORBIKE_COP_CONFIG } from '../constants';
 import { AIManager } from '../core/AIManager';
@@ -142,7 +141,7 @@ export class MotorbikeCopManager {
     const thresholds = MOTORBIKE_COP_CONFIG.HEAT_THRESHOLDS;
     const limits = MOTORBIKE_COP_CONFIG;
 
-    // Calculate desired cop counts based on heat
+    // Calculate desired cop counts based on heat (staggered to avoid 50% cliff)
     let desiredScouts = 0;
     let desiredSwarm = 0;
     let desiredBosses = 0;
@@ -152,10 +151,15 @@ export class MotorbikeCopManager {
       desiredScouts = limits.MAX_SCOUTS;
       desiredSwarm = limits.MAX_SWARM;
       desiredBosses = limits.MAX_BOSSES;
-    } else if (heat >= thresholds.SWARM) {
-      // Swarm at 50%+ heat
+    } else if (heat >= thresholds.SWARM_FULL) {
+      // Full swarm at 55%+ heat (6 bikes)
       desiredScouts = limits.MAX_SCOUTS;
-      desiredSwarm = Math.min(4, limits.MAX_SWARM);
+      desiredSwarm = limits.MAX_SWARM;
+      desiredBosses = 0;
+    } else if (heat >= thresholds.SWARM_INITIAL) {
+      // Initial swarm at 45%+ heat (only 2 bikes)
+      desiredScouts = limits.MAX_SCOUTS;
+      desiredSwarm = 2;
       desiredBosses = 0;
     } else if (heat >= thresholds.SCOUT) {
       // Scouts at 25%+ heat
@@ -165,7 +169,7 @@ export class MotorbikeCopManager {
     }
 
     // Check total cap
-    const totalDesired = desiredScouts + desiredSwarm + desiredBosses;
+    const _totalDesired = desiredScouts + desiredSwarm + desiredBosses;
     const currentTotal = this.scoutCount + this.swarmCount + this.bossCount;
     if (currentTotal >= limits.MAX_TOTAL) {
       this.previousHeat = heat;
@@ -200,7 +204,7 @@ export class MotorbikeCopManager {
 
     // Calculate spawn position based on variant
     switch (variant) {
-      case MotorbikeCopVariant.BOSS:
+      case MotorbikeCopVariant.BOSS: {
         // Boss spawns ahead of player
         const aheadDir = playerVelocity.clone();
         if (aheadDir.lengthSq() < 0.01) {
@@ -212,8 +216,9 @@ export class MotorbikeCopManager {
           aheadDir.multiplyScalar(config.SPAWN_AHEAD_DISTANCE)
         );
         break;
+      }
 
-      case MotorbikeCopVariant.SWARM:
+      case MotorbikeCopVariant.SWARM: {
         // Swarm spawns at flanking positions
         const flankAngle = Math.random() * Math.PI * 2;
         const flankDistance = config.SPAWN_BEHIND_DISTANCE * (0.7 + Math.random() * 0.6);
@@ -223,9 +228,10 @@ export class MotorbikeCopManager {
           playerPosition.z + Math.sin(flankAngle) * flankDistance
         );
         break;
+      }
 
       case MotorbikeCopVariant.SCOUT:
-      default:
+      default: {
         // Scout spawns behind player
         const behindDir = playerVelocity.clone().negate();
         if (behindDir.lengthSq() < 0.01) {
@@ -238,6 +244,7 @@ export class MotorbikeCopManager {
           .add(behindDir.multiplyScalar(config.SPAWN_BEHIND_DISTANCE))
           .add(new THREE.Vector3(lateralOffset, 0, 0));
         break;
+      }
     }
 
     // Ensure spawn position is on ground

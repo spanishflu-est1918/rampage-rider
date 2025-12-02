@@ -114,7 +114,7 @@ export const ENTITY_SPEEDS = {
   PEDESTRIAN_RUN: 6.0, // Panic flee speed
 
   // Cop
-  COP_CHASE: 7.2, // 80% of original 9.0 - player should be able to outrun
+  COP_CHASE: 6.5, // Slightly slower than player sprint (7.0) - creates tension without guaranteed death
 } as const;
 
 /**
@@ -228,6 +228,10 @@ export interface VehicleConfig {
   causesRagdoll: boolean; // Whether kills send bodies flying (heavy vehicles only)
   // Special abilities
   canCrushBuildings?: boolean; // Truck can drive through buildings
+  // Sedan vs cop car chip damage
+  copCarChipDamage?: number; // Damage dealt to cop cars on collision
+  copCarChipRadius?: number; // Range for chip damage
+  copCarChipCooldown?: number; // Cooldown between chip damage hits
 }
 
 /**
@@ -290,6 +294,10 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     hideRider: true, // Hide rider in enclosed vehicle
     killRadius: 3.5,
     causesRagdoll: true, // Heavy enough to send bodies flying!
+    // Sedan vs cop car chip damage (sedan can fight back!)
+    copCarChipDamage: 1, // Damage per collision
+    copCarChipRadius: 4.0, // Collision range
+    copCarChipCooldown: 1.0, // Seconds between chip damage
   },
   [VehicleType.TRUCK]: {
     type: VehicleType.TRUCK,
@@ -361,7 +369,7 @@ export const MOTORBIKE_COP_CONFIG = {
   TASER_DAMAGE: 0,
   SHOOT_DAMAGE: 15,
   TASER_RANGE: 8.0,
-  SHOOT_RANGE: 15.0,
+  SHOOT_RANGE: 12.0, // Reduced from 15 - less snipe feeling, more fair engagement range
 
   // Variant-specific stats
   VARIANTS: {
@@ -385,10 +393,11 @@ export const MOTORBIKE_COP_CONFIG = {
     },
   },
 
-  // Heat thresholds for spawning
+  // Heat thresholds for spawning (staggered to avoid 50% cliff)
   HEAT_THRESHOLDS: {
     SCOUT: 25,
-    SWARM: 50,
+    SWARM_INITIAL: 45, // 2 swarm bikes start appearing
+    SWARM_FULL: 55, // Full 6-bike swarm unlocks
     BOSS: 75,
   },
 
@@ -433,9 +442,11 @@ export const COP_CAR_CONFIG = {
   HIT_STUN_DURATION: 1.0,
   POINT_VALUE: 100,
 
-  // Spawning (only when player is in sedan or truck)
-  MAX_CARS: 3,
-  SPAWN_HEAT_THRESHOLD: 50, // Need 50%+ heat
+  // Spawning (only when player is in sedan or truck) - staggered to avoid 50% cliff
+  MAX_CARS_INITIAL: 1, // 50-54% heat: only 1 cop car
+  MAX_CARS: 3, // 55%+ heat: full 3 cop cars
+  SPAWN_HEAT_THRESHOLD: 50, // Cop cars start appearing
+  SPAWN_HEAT_THRESHOLD_FULL: 55, // Full cop car complement unlocks
   SPAWN_BEHIND_DISTANCE: 50,
   SPAWN_COOLDOWN: 5.0,
 } as const;

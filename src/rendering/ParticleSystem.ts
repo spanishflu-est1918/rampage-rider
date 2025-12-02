@@ -551,6 +551,75 @@ export class ParticleEmitter {
   }
 
   /**
+   * Emit metal sparks (for sedan vs cop car chip damage)
+   */
+  emitSparks(position: THREE.Vector3, count: number = 8): void {
+    const actualCount = Math.min(count, 10);
+
+    for (let i = 0; i < actualCount; i++) {
+      if (this.debrisFreeIndices.length === 0) continue;
+
+      const index = this.debrisFreeIndices.pop()!;
+      this.activeDebris++;
+
+      const size = 8 + Math.random() * 12; // Small bright sparks
+      const baseIdx = index * 3;
+
+      // Spawn at collision point with tight spread
+      this.debrisPositions[baseIdx] = position.x + (Math.random() - 0.5) * 1;
+      this.debrisPositions[baseIdx + 1] = position.y + 0.3 + Math.random() * 0.5;
+      this.debrisPositions[baseIdx + 2] = position.z + (Math.random() - 0.5) * 1;
+
+      this.debrisSizes[index] = size;
+      this.debrisAlphas[index] = 1;
+
+      // Bright yellow/orange spark colors
+      const colorChoice = Math.random();
+      if (colorChoice < 0.5) {
+        // Bright yellow
+        this.debrisColors[baseIdx] = 1.0;
+        this.debrisColors[baseIdx + 1] = 0.9;
+        this.debrisColors[baseIdx + 2] = 0.3;
+      } else if (colorChoice < 0.8) {
+        // Orange
+        this.debrisColors[baseIdx] = 1.0;
+        this.debrisColors[baseIdx + 1] = 0.6;
+        this.debrisColors[baseIdx + 2] = 0.1;
+      } else {
+        // White hot
+        this.debrisColors[baseIdx] = 1.0;
+        this.debrisColors[baseIdx + 1] = 1.0;
+        this.debrisColors[baseIdx + 2] = 0.8;
+      }
+
+      // Fast outward spray
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * 5;
+      const upSpeed = 1 + Math.random() * 3;
+
+      const velocity = new THREE.Vector3(
+        Math.cos(angle) * speed,
+        upSpeed,
+        Math.sin(angle) * speed
+      );
+
+      this.debrisParticles.push({
+        index,
+        velocity,
+        life: 0.3 + Math.random() * 0.3, // Short-lived sparks
+        maxLife: 0.6,
+        rotationSpeed: 0,
+      });
+    }
+
+    // Mark buffers for update
+    this.debrisGeometry.attributes.position.needsUpdate = true;
+    this.debrisGeometry.attributes.size.needsUpdate = true;
+    this.debrisGeometry.attributes.alpha.needsUpdate = true;
+    this.debrisGeometry.attributes.color.needsUpdate = true;
+  }
+
+  /**
    * Clear all particles
    */
   clear(): void {

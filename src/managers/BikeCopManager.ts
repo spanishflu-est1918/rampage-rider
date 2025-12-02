@@ -97,7 +97,7 @@ export class BikeCopManager {
     this.scene.add(cop.getBlobShadow());
   }
 
-  update(deltaTime: number, playerPosition: THREE.Vector3, playerCanBeTased: boolean): void {
+  update(deltaTime: number, playerPosition: THREE.Vector3, _playerCanBeTased: boolean): void {
     for (const cop of this.cops) {
       if (!cop.isDeadState()) {
         cop.setChaseTarget(playerPosition);

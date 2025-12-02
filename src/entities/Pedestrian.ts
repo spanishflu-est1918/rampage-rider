@@ -674,7 +674,7 @@ export class Pedestrian extends THREE.Group {
   /**
    * Reset pedestrian for object pooling
    */
-  reset(position: THREE.Vector3, characterType: string): void {
+  reset(position: THREE.Vector3, _characterType: string): void {
     // Revive
     this.isDead = false;
     this.health = PEDESTRIAN_CONFIG.HEALTH;

@@ -89,7 +89,8 @@ export class AssetLoader {
           onProgress(loaded / total);
         }
 
-      } catch (error) {
+      } catch {
+        // Silently continue - missing assets are handled gracefully
       }
     });
 
