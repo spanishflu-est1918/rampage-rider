@@ -377,7 +377,12 @@ export class ParticleEmitter {
 
       if (particle.life <= 0) {
         this.returnParticleIndex(index);
-        this.particles.splice(i, 1);
+        // PERF: Swap-and-pop instead of splice (O(1) vs O(n))
+        const lastIdx = this.particles.length - 1;
+        if (i !== lastIdx) {
+          this.particles[i] = this.particles[lastIdx];
+        }
+        this.particles.pop();
         needsUpdate = true;
         continue;
       }
@@ -402,7 +407,12 @@ export class ParticleEmitter {
           this.onGroundHitCallback(this._tempHitPosition, particle.size);
         }
         this.returnParticleIndex(index);
-        this.particles.splice(i, 1);
+        // PERF: Swap-and-pop instead of splice (O(1) vs O(n))
+        const lastIdx2 = this.particles.length - 1;
+        if (i !== lastIdx2) {
+          this.particles[i] = this.particles[lastIdx2];
+        }
+        this.particles.pop();
         needsUpdate = true;
         continue;
       }
@@ -519,7 +529,12 @@ export class ParticleEmitter {
         this.debrisAlphas[index] = 0;
         this.debrisFreeIndices.push(index);
         this.activeDebris--;
-        this.debrisParticles.splice(i, 1);
+        // PERF: Swap-and-pop instead of splice (O(1) vs O(n))
+        const lastIdx = this.debrisParticles.length - 1;
+        if (i !== lastIdx) {
+          this.debrisParticles[i] = this.debrisParticles[lastIdx];
+        }
+        this.debrisParticles.pop();
         needsUpdate = true;
         continue;
       }
