@@ -157,7 +157,7 @@ The word "RAMPAGE!" appears randomly in kill messages during pursuit - it's just
 | Tier | Primary Limitation |
 |------|-------------------|
 | FOOT | Small radius (2.5), single target until 10+ combo |
-| BIKE | Must be moving to attack, medium radius |
+| BIKE | Can attack stationary, medium radius (3.0) |
 | MOTO | 5 → 8 at 10+ combo → ∞ at 15+ combo |
 | SEDAN | Must be moving (speed > 1) |
 | TRUCK | Slow turn speed, large hitbox blocks view |

@@ -535,6 +535,9 @@ export const SCORING_CONFIG = {
   // Combo system
   COMBO_DURATION: 5.0, // Seconds before combo expires
   COMBO_THRESHOLD_UNLIMITED: 10, // Combo level for unlimited kills
+  COMBO_MULTIPLIER_MAX: 2.5, // Max combo multiplier (x1.0 → x3.5 at 50 combo, half visual rate)
+  COMBO_MULTIPLIER_SCALE: 50, // Combo count at which max multiplier is reached
+  COP_KILL_COMBO_BONUS: 2.0, // Extra seconds added to combo timer on cop kill
 
   // Heat system
   HEAT_MAX: 100,
@@ -543,6 +546,8 @@ export const SCORING_CONFIG = {
   HEAT_PER_MOTORBIKE_COP_KILL: 30,
   HEAT_PER_MOTORBIKE_PED_KILL: 15,
   HEAT_DEBUG_BOOST: 25,
+  HEAT_FLOOR_THRESHOLD: 50, // Once heat hits this, floor kicks in
+  HEAT_FLOOR_MIN: 25, // Heat can't drop below this after hitting threshold
 } as const;
 
 /**

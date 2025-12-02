@@ -157,6 +157,7 @@ export class Engine {
   private blastRingLife: number = 0;
   private lastCombatTime: number = 0; // Track last kill for idle heat decay
   private lastCopKillTime: number = 0; // Track last cop kill for wanted star decay
+  private heatFloorActive: boolean = false; // True once heat has hit 50%, enables floor at 25%
   private lastAnnouncedComboMilestone: number = 0; // Track combo callouts
 
   // Combo milestone announcer messages
@@ -178,6 +179,7 @@ export class Engine {
   private lastPlayerPosition: THREE.Vector3 = new THREE.Vector3();
   private cameraMoveThreshold: number = 0; // Update every frame (0.1 caused jerk)
   private healthBarUpdateCounter: number = 0; // Throttle health bar projection
+  private statsUpdateCounter: number = 0; // PERF: Throttle React stats updates to every 3 frames
 
   // Pre-allocated vectors for update loop (avoid GC pressure)
   private readonly _tempCameraPos: THREE.Vector3 = new THREE.Vector3();
@@ -1224,7 +1226,9 @@ export class Engine {
         const regularPoints = regularKills * (this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints);
         const panicPoints = panicKills * (this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER * SCORING_CONFIG.PANIC_MULTIPLIER : basePoints * SCORING_CONFIG.PANIC_MULTIPLIER);
 
-        this.stats.score += regularPoints + panicPoints;
+        // Apply combo multiplier to score (x1.0 → x3.5)
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor((regularPoints + panicPoints) * comboMultiplier);
         this.stats.combo += pedResult.kills;
         this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
         this.lastCombatTime = this.stats.gameTime;
@@ -1270,8 +1274,18 @@ export class Engine {
       if (copResult.kills > 0) {
         const basePoints = SCORING_CONFIG.COP_BASE;
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
-        this.stats.score += copResult.kills * pointsPerKill;
+
+        // Apply combo multiplier to score (x1.0 → x3.5)
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(copResult.kills * pointsPerKill * comboMultiplier);
         this.stats.copKills += copResult.kills;
+        this.stats.combo += copResult.kills;
+        // Cop kills extend combo timer by +2s (incentivizes hunting cops)
+        this.stats.comboTimer = Math.min(
+          SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+          this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+        );
+        this.lastCombatTime = this.stats.gameTime;
         this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
 
@@ -1279,7 +1293,7 @@ export class Engine {
         allKillPositions.push(...copResult.positions);
 
         for (let i = 0; i < copResult.kills; i++) {
-          this.triggerKillNotification(Engine.randomFrom(Engine.COP_KILL_MESSAGES), true, pointsPerKill);
+          this.triggerKillNotification(Engine.randomFrom(Engine.COP_KILL_MESSAGES), true, Math.floor(pointsPerKill * comboMultiplier));
         }
       }
     }
@@ -1299,8 +1313,18 @@ export class Engine {
       if (bikeResult.kills > 0) {
         const basePoints = SCORING_CONFIG.COP_BASE;
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
-        this.stats.score += bikeResult.kills * pointsPerKill;
+
+        // Apply combo multiplier to score (x1.0 → x3.5)
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(bikeResult.kills * pointsPerKill * comboMultiplier);
         this.stats.copKills += bikeResult.kills;
+        this.stats.combo += bikeResult.kills;
+        // Cop kills extend combo timer by +2s (incentivizes hunting cops)
+        this.stats.comboTimer = Math.min(
+          SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+          this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+        );
+        this.lastCombatTime = this.stats.gameTime;
         this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (bikeResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
 
@@ -1308,7 +1332,7 @@ export class Engine {
         allKillPositions.push(...bikeResult.positions);
 
         for (let i = 0; i < bikeResult.kills; i++) {
-          this.triggerKillNotification(Engine.randomFrom(Engine.COP_KILL_MESSAGES), true, pointsPerKill);
+          this.triggerKillNotification(Engine.randomFrom(Engine.COP_KILL_MESSAGES), true, Math.floor(pointsPerKill * comboMultiplier));
         }
       }
     }
@@ -1360,7 +1384,9 @@ export class Engine {
         const regularPoints = regularKills * (this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints);
         const panicPoints = panicKills * (this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER * SCORING_CONFIG.PANIC_MULTIPLIER : basePoints * SCORING_CONFIG.PANIC_MULTIPLIER);
 
-        this.stats.score += regularPoints + panicPoints;
+        // Apply combo multiplier to score (x1.0 → x3.5)
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor((regularPoints + panicPoints) * comboMultiplier);
         this.stats.kills += pedResult.kills;
         this.stats.combo += pedResult.kills;
         this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
@@ -1375,11 +1401,11 @@ export class Engine {
             ? Engine.randomFrom(Engine.PURSUIT_KILL_MESSAGES)
             : 'BIKE SLASH!';
           const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints;
-          this.triggerKillNotification(message, this.stats.inPursuit, points);
+          this.triggerKillNotification(message, this.stats.inPursuit, Math.floor(points * comboMultiplier));
         }
         for (let i = 0; i < panicKills; i++) {
           const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER * SCORING_CONFIG.PANIC_MULTIPLIER : basePoints * SCORING_CONFIG.PANIC_MULTIPLIER;
-          this.triggerKillNotification('CYCLE SLAUGHTER!', true, points);
+          this.triggerKillNotification('CYCLE SLAUGHTER!', true, Math.floor(points * comboMultiplier));
         }
 
         this.crowd.panicCrowd(attackPosition, cfg.panicRadius);
@@ -1400,15 +1426,23 @@ export class Engine {
       if (copResult.kills > 0) {
         const basePoints = SCORING_CONFIG.COP_BASE;
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
-        this.stats.score += copResult.kills * pointsPerKill;
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(copResult.kills * pointsPerKill * comboMultiplier);
         this.stats.copKills += copResult.kills;
+        this.stats.combo += copResult.kills;
+        // Cop kills extend combo timer by +2s
+        this.stats.comboTimer = Math.min(
+          SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+          this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+        );
+        this.lastCombatTime = this.stats.gameTime;
         this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
 
         for (let i = 0; i < copResult.kills; i++) {
-          this.triggerKillNotification('COP CYCLIST!', true, pointsPerKill);
+          this.triggerKillNotification('COP CYCLIST!', true, Math.floor(pointsPerKill * comboMultiplier));
         }
       }
     }
@@ -1427,15 +1461,23 @@ export class Engine {
       if (bikeResult.kills > 0) {
         const basePoints = SCORING_CONFIG.COP_BASE;
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
-        this.stats.score += bikeResult.kills * pointsPerKill;
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(bikeResult.kills * pointsPerKill * comboMultiplier);
         this.stats.copKills += bikeResult.kills;
+        this.stats.combo += bikeResult.kills;
+        // Cop kills extend combo timer by +2s
+        this.stats.comboTimer = Math.min(
+          SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+          this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+        );
+        this.lastCombatTime = this.stats.gameTime;
         this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (bikeResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
         totalKills += bikeResult.kills;
         allKillPositions.push(...bikeResult.positions);
 
         for (let i = 0; i < bikeResult.kills; i++) {
-          this.triggerKillNotification('COP CYCLIST!', true, pointsPerKill);
+          this.triggerKillNotification('COP CYCLIST!', true, Math.floor(pointsPerKill * comboMultiplier));
         }
       }
     }
@@ -1480,7 +1522,9 @@ export class Engine {
         const basePoints = SCORING_CONFIG.PEDESTRIAN_MOTORBIKE;
         const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints;
 
-        this.stats.score += points * blastResult.kills;
+        // Apply combo multiplier to score (x1.0 → x3.5)
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(points * blastResult.kills * comboMultiplier);
         this.stats.kills += blastResult.kills;
         this.stats.combo += blastResult.kills;
         this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
@@ -1490,7 +1534,7 @@ export class Engine {
         totalKills += blastResult.kills;
         allKillPositions.push(...blastResult.positions);
 
-        this.triggerKillNotification('BLAST KILL!', true, points);
+        this.triggerKillNotification('BLAST KILL!', true, Math.floor(points * comboMultiplier));
         this.crowd.panicCrowd(attackPosition, cfg.panicRadius);
       }
 
@@ -1557,7 +1601,9 @@ export class Engine {
         const basePoints = SCORING_CONFIG.PEDESTRIAN_MOTORBIKE;
         const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints;
 
-        this.stats.score += points * pedResult.kills;
+        // Apply combo multiplier to score (x1.0 → x3.5)
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(points * pedResult.kills * comboMultiplier);
         this.stats.kills += pedResult.kills;
         this.stats.combo += pedResult.kills;
         this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
@@ -1568,7 +1614,7 @@ export class Engine {
         allKillPositions.push(...pedResult.positions);
 
         const message = pedResult.panicKills > 0 ? 'DRIVE-BY TERROR!' : 'DRIVE-BY!';
-        this.triggerKillNotification(message, true, points);
+        this.triggerKillNotification(message, true, Math.floor(points * comboMultiplier));
 
         this.crowd.panicCrowd(attackPosition, cfg.panicRadius);
       }
@@ -1588,14 +1634,22 @@ export class Engine {
       if (copResult.kills > 0) {
         const basePoints = SCORING_CONFIG.COP_MOTORBIKE;
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
-        this.stats.score += copResult.kills * pointsPerKill;
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(copResult.kills * pointsPerKill * comboMultiplier);
         this.stats.copKills += copResult.kills;
+        this.stats.combo += copResult.kills;
+        // Cop kills extend combo timer by +2s
+        this.stats.comboTimer = Math.min(
+          SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+          this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+        );
+        this.lastCombatTime = this.stats.gameTime;
         this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_COP_KILL));
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
 
-        this.triggerKillNotification('COP KILLER!', true, pointsPerKill);
+        this.triggerKillNotification('COP KILLER!', true, Math.floor(pointsPerKill * comboMultiplier));
       }
     }
 
@@ -1613,14 +1667,22 @@ export class Engine {
       if (motoResult.kills > 0) {
         const basePoints = SCORING_CONFIG.COP_MOTORBIKE;
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
-        this.stats.score += motoResult.kills * pointsPerKill + motoResult.points;
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor((motoResult.kills * pointsPerKill + motoResult.points) * comboMultiplier);
         this.stats.copKills += motoResult.kills;
+        this.stats.combo += motoResult.kills;
+        // Cop kills extend combo timer by +2s
+        this.stats.comboTimer = Math.min(
+          SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+          this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+        );
+        this.lastCombatTime = this.stats.gameTime;
         this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (motoResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_COP_KILL));
         totalKills += motoResult.kills;
         allKillPositions.push(...motoResult.positions);
 
-        this.triggerKillNotification('BIKER DOWN!', true, pointsPerKill);
+        this.triggerKillNotification('BIKER DOWN!', true, Math.floor(pointsPerKill * comboMultiplier));
       }
     }
 
@@ -1643,10 +1705,12 @@ export class Engine {
     if (wasPanicking) points *= SCORING_CONFIG.PANIC_MULTIPLIER;
     if (this.stats.inPursuit) points *= SCORING_CONFIG.PURSUIT_MULTIPLIER;
 
-    this.stats.score += points;
+    // Apply combo multiplier to score (x1.0 → x3.5)
+    const comboMultiplier = this.getComboMultiplier();
+    this.stats.score += Math.floor(points * comboMultiplier);
     this.stats.combo++;
     this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
-        this.lastCombatTime = this.stats.gameTime;
+    this.lastCombatTime = this.stats.gameTime;
     this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + SCORING_CONFIG.HEAT_PER_PED_KILL);
 
     this.particles.emitBlood(position, cfg.particleCount);
@@ -1663,7 +1727,7 @@ export class Engine {
     } else {
       message = Engine.randomFrom(Engine.ROADKILL_MESSAGES);
     }
-    this.triggerKillNotification(message, wasPanicking || this.stats.inPursuit, points);
+    this.triggerKillNotification(message, wasPanicking || this.stats.inPursuit, Math.floor(points * comboMultiplier));
 
     this.shakeCamera(cfg.cameraShake);
   }
@@ -1676,10 +1740,12 @@ export class Engine {
     let points = basePoints;
     if (this.stats.inPursuit) points *= SCORING_CONFIG.PURSUIT_MULTIPLIER;
 
-    this.stats.score += points;
+    // Apply combo multiplier to score (x1.0 → x3.5)
+    const comboMultiplier = this.getComboMultiplier();
+    this.stats.score += Math.floor(points * comboMultiplier);
     this.stats.combo++;
     this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
-        this.lastCombatTime = this.stats.gameTime;
+    this.lastCombatTime = this.stats.gameTime;
     this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + 50); // Big heat boost!
 
     // Debris explosion (not blood!)
@@ -1689,7 +1755,7 @@ export class Engine {
     this.shakeCamera(1.0);
 
     const message = Engine.randomFrom(Engine.BUILDING_DESTROY_MESSAGES);
-    this.triggerKillNotification(message, true, points);
+    this.triggerKillNotification(message, true, Math.floor(points * comboMultiplier));
   }
 
   resize(width: number, height: number): void {
@@ -1841,10 +1907,18 @@ export class Engine {
     this.checkComboMilestones();
 
     if (this.stats.heat > 0) {
+      // Track if heat has ever hit threshold (activates floor)
+      if (this.stats.heat >= SCORING_CONFIG.HEAT_FLOOR_THRESHOLD) {
+        this.heatFloorActive = true;
+      }
+
       // Faster heat decay when not in combat for 10+ seconds (3x normal rate)
       const timeSinceCombat = this.stats.gameTime - this.lastCombatTime;
       const heatDecayRate = timeSinceCombat > 10 ? 1.5 : 0.5; // 3x decay when idle
-      this.stats.heat = Math.max(0, this.stats.heat - (heatDecayRate * dt));
+
+      // Apply floor if active (can't drop below 25% once you've hit 50%)
+      const heatFloor = this.heatFloorActive ? SCORING_CONFIG.HEAT_FLOOR_MIN : 0;
+      this.stats.heat = Math.max(heatFloor, this.stats.heat - (heatDecayRate * dt));
     }
 
     // Update wanted stars decay (stars decrease over time without cop kills)
@@ -2052,13 +2126,21 @@ export class Engine {
         if (this.currentVehicleTier === Tier.TRUCK && this.vehicle) {
           const trampleResult = this.copCars.trampleInRadius(currentPos, 6.0);
           if (trampleResult.kills > 0) {
-            this.stats.score += trampleResult.points;
+            const comboMultiplier = this.getComboMultiplier();
+            this.stats.score += Math.floor(trampleResult.points * comboMultiplier);
             this.stats.copKills += trampleResult.kills;
+            this.stats.combo += trampleResult.kills;
+            // Cop kills extend combo timer by +2s
+            this.stats.comboTimer = Math.min(
+              SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+              this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+            );
+            this.lastCombatTime = this.stats.gameTime;
             this.updateWantedStars(true);
             this.shakeCamera(2.0);
             for (const pos of trampleResult.positions) {
               this.particles.emitBlood(pos, 80);
-              this.triggerKillNotification('COP CAR CRUSHED!', true, 500);
+              this.triggerKillNotification('COP CAR CRUSHED!', true, Math.floor(500 * comboMultiplier));
             }
           }
         }
@@ -2078,13 +2160,21 @@ export class Engine {
               this.sedanChipCooldown = chipCooldown;
 
               if (chipResult.kills > 0) {
-                this.stats.score += chipResult.points;
+                const comboMultiplier = this.getComboMultiplier();
+                this.stats.score += Math.floor(chipResult.points * comboMultiplier);
                 this.stats.copKills += chipResult.kills;
+                this.stats.combo += chipResult.kills;
+                // Cop kills extend combo timer by +2s
+                this.stats.comboTimer = Math.min(
+                  SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+                  this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+                );
+                this.lastCombatTime = this.stats.gameTime;
                 this.updateWantedStars(true);
                 this.shakeCamera(1.5);
                 for (const pos of chipResult.positions) {
                   this.particles.emitBlood(pos, 60);
-                  this.triggerKillNotification('COP CAR WRECKED!', true, 300);
+                  this.triggerKillNotification('COP CAR WRECKED!', true, Math.floor(300 * comboMultiplier));
                 }
               } else {
                 // Non-lethal hit - smaller feedback with metal sparks
@@ -2517,6 +2607,16 @@ export class Engine {
    */
   private static randomFrom<T>(arr: readonly T[]): T {
     return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  /**
+   * Calculate combo score multiplier (x1.0 → x3.5 based on combo count)
+   * Uses half-rate of visual multiplier for balanced scoring
+   */
+  private getComboMultiplier(): number {
+    const { COMBO_MULTIPLIER_MAX, COMBO_MULTIPLIER_SCALE } = SCORING_CONFIG;
+    const comboFactor = Math.min(this.stats.combo, COMBO_MULTIPLIER_SCALE) / COMBO_MULTIPLIER_SCALE;
+    return 1 + (comboFactor * COMBO_MULTIPLIER_MAX); // x1.0 → x3.5
   }
 
   /**
