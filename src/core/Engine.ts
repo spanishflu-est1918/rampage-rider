@@ -2087,8 +2087,9 @@ export class Engine {
                   this.triggerKillNotification('COP CAR WRECKED!', true, 300);
                 }
               } else {
-                // Non-lethal hit - smaller feedback
+                // Non-lethal hit - smaller feedback with metal sparks
                 this.shakeCamera(0.3);
+                this.particles.emitSparks(currentPos, 6);
               }
             }
           }
