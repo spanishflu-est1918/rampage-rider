@@ -88,8 +88,7 @@ Master reference for all tunable game parameters. All values in `src/constants.t
 
 ### Heat Decay
 
-- Rate: **0.5 per second** (passive in combat)
-- **Idle decay**: **1.5 per second** (3x) after 10+ seconds without kills
+- Rate: **0.5/s in combat, 1.5/s after 10s idle** (3x faster decay when not killing)
 - Location: `Engine.ts:1776-1780`
 
 ### Heat → Cop Spawns
@@ -115,7 +114,7 @@ Master reference for all tunable game parameters. All values in `src/constants.t
 | 1 | 1+ | Taser (6.0 range, stun) |
 | 2 | 3+ | Shoot (8.0 range, 20 dmg) |
 
-**Star Decay**: Stars decrease by 1 every 45 seconds without cop kills.
+**Wanted Stars Decay**: Stars decay by 1 every 45s without cop kills.
 
 **Location**: `WANTED_STARS` (lines 543-546)
 
@@ -233,6 +232,8 @@ Master reference for all tunable game parameters. All values in `src/constants.t
 | MOTO | 100 | 2.2x |
 | SEDAN | 150 | 3.0x |
 | TRUCK | 300 | 2.5x |
+
+**Note**: Speed multipliers in TIER_CONFIGS are relative values for UI/balance reference. Actual vehicle speeds are defined in VEHICLE_CONFIGS (Sedan: 15, Truck: 24).
 
 ---
 
