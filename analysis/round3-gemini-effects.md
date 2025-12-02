@@ -16,4 +16,28 @@ Found and analyzed allocations in `src/rendering/ParticleSystem.ts` and `src/ren
 | **335** | `const velocity = new THREE.Vector3(...)` | Per-particle (spray) | **Object Pooling:** Reuse `particle.velocity` from pool. |
 | **342** | `this.particles.push({ ... })` | Per-particle (spray) | **Object Pooling:** Reuse particle object from pool. |
 | **480** | `const velocity = new THREE.Vector3(...)` | Per-debris (emit) | **Object Pooling:** Pre-allocate `velocity` in `debrisPool`. |
-| **486** | `this.debrisParticles.push({
+| **486** | `this.debrisParticles.push({ ... })` | Per-debris (emit) | **Object Pooling:** Reuse debris object from `debrisPool`. |
+| **575** | `const velocity = new THREE.Vector3(...)` | Per-spark (emit) | **Object Pooling:** Reuse `debris.velocity` from pool. |
+| **581** | `this.debrisParticles.push({ ... })` | Per-spark (emit) | **Object Pooling:** Reuse debris object from pool. |
+| **371** | `this.particles.splice(i, 1)` | Per-particle (death) | **Swap-Remove:** Use `this.particles[i] = this.particles[last]; this.particles.pop()` to avoid O(N) shift and garbage. |
+
+### **File: `src/rendering/BloodDecalSystem.ts`**
+
+| Line | Allocation | Frequency | Exact Fix |
+| :--- | :--- | :--- | :--- |
+| **241** | `this.decals.push({ ... })` | Per-decal (add) | **Ring Buffer:** Use a pre-allocated array and write to `this.decals[headIndex]` to avoid object creation. |
+| **255** | `this.decals.shift()` | Per-decal (remove) | **Ring Buffer:** Use a `headIndex` pointer and increment it. `shift()` is O(N) and creates garbage. |
+
+---
+
+### **Applied Fixes Summary**
+
+1.  **`ParticleSystem.ts` Refactor:**
+    *   Implemented `particlePool` and `debrisPool` arrays, pre-filled in the constructor.
+    *   Replaced `new THREE.Vector3()` calls with `particle.velocity.set()`.
+    *   Replaced `splice()` with "swap-and-pop" removal (O(1)) to prevent array shifting and keep the pool tight.
+
+2.  **`BloodDecalSystem.ts` Refactor:**
+    *   Implemented a "virtual" ring buffer using `decalHeadIndex`.
+    *   Replaced `shift()` (O(N)) with `decalHeadIndex++` (O(1)).
+    *   Implemented periodic array compaction (slicing) to keep memory usage bounded without frequent large allocations.

@@ -97,6 +97,7 @@ export class CrowdManager {
   // Pre-allocated vectors for per-frame operations (avoid GC pressure)
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempKillPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempSpawnPos: THREE.Vector3 = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
@@ -170,7 +171,8 @@ export class CrowdManager {
     const angle = Math.random() * Math.PI * 2;
     const distance = this.minSpawnDistance + Math.random() * (this.spawnRadius - this.minSpawnDistance);
 
-    const position = new THREE.Vector3(
+    // PERF: Reuse pre-allocated vector instead of new THREE.Vector3()
+    const position = this._tempSpawnPos.set(
       playerPosition.x + Math.cos(angle) * distance,
       0, // Ground level
       playerPosition.z + Math.sin(angle) * distance

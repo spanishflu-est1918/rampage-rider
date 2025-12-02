@@ -188,7 +188,12 @@ export class CopCarManager {
   }
 
   getActiveCopCount(): number {
-    return this.cars.filter((car) => !car.isDeadState()).length;
+    // PERF: Loop instead of filter() to avoid array allocation
+    let count = 0;
+    for (const car of this.cars) {
+      if (!car.isDeadState()) count++;
+    }
+    return count;
   }
 
   getCopData(): Array<{ position: THREE.Vector3; health: number; maxHealth: number }> {

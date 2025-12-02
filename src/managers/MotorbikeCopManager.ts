@@ -208,13 +208,14 @@ export class MotorbikeCopManager {
     switch (variant) {
       case MotorbikeCopVariant.BOSS: {
         // Boss spawns ahead of player
-        const aheadDir = playerVelocity.clone();
+        // PERF: Reuse pre-allocated vectors instead of clone()
+        const aheadDir = this._tempDirection.copy(playerVelocity);
         if (aheadDir.lengthSq() < 0.01) {
           aheadDir.set(0, 0, -1); // Default forward if stationary
         } else {
           aheadDir.normalize();
         }
-        spawnPos = playerPosition.clone().add(
+        spawnPos = this._tempSpawnPos.copy(playerPosition).add(
           aheadDir.multiplyScalar(config.SPAWN_AHEAD_DISTANCE)
         );
         break;
