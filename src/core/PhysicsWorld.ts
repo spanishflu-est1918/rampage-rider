@@ -14,6 +14,11 @@ export class PhysicsWorld {
   // Re-export collision groups for backward compatibility
   public readonly COLLISION_GROUPS = COLLISION_GROUPS;
 
+  // PERF: Pre-allocated ray for castRay() - avoids allocation per raycast
+  private _rayOrigin = { x: 0, y: 0, z: 0 };
+  private _rayDir = { x: 0, y: 0, z: 0 };
+  private _ray: RAPIER.Ray | null = null;
+
   constructor() {}
 
   /**
@@ -91,12 +96,22 @@ export class PhysicsWorld {
   ): RAPIER.RayColliderHit | null {
     if (!this.world) return null;
 
-    const ray = new RAPIER.Ray(
-      { x: origin.x, y: origin.y, z: origin.z },
-      { x: direction.x, y: direction.y, z: direction.z }
-    );
+    // PERF: Reuse ray object instead of allocating new one per raycast
+    this._rayOrigin.x = origin.x;
+    this._rayOrigin.y = origin.y;
+    this._rayOrigin.z = origin.z;
+    this._rayDir.x = direction.x;
+    this._rayDir.y = direction.y;
+    this._rayDir.z = direction.z;
 
-    const hit = this.world.castRay(ray, maxDistance, true, filterGroups);
+    if (!this._ray) {
+      this._ray = new RAPIER.Ray(this._rayOrigin, this._rayDir);
+    } else {
+      this._ray.origin = this._rayOrigin;
+      this._ray.dir = this._rayDir;
+    }
+
+    const hit = this.world.castRay(this._ray, maxDistance, true, filterGroups);
     return hit;
   }
 

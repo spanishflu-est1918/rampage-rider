@@ -197,6 +197,11 @@ export class Engine {
   private readonly _zeroVelocity: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
   private readonly _tempCurrentPos: THREE.Vector3 = new THREE.Vector3();
 
+  // PERF: Pre-allocated objects for update loop (avoid per-frame allocations)
+  private readonly _defaultTaserState = { isTased: false, escapeProgress: 0 };
+  private readonly _actionContext = { isTased: false, isNearCar: false, isNearAwaitingVehicle: false, isInVehicle: false };
+  private readonly _killPositions: THREE.Vector3[] = [];
+
   // Pre-allocated spawn position offsets (avoid per-call allocation)
   private readonly _spawnOffsets: THREE.Vector3[] = [
     new THREE.Vector3(5, 0, 0), new THREE.Vector3(-5, 0, 0),
@@ -1940,16 +1945,15 @@ export class Engine {
     // Update vehicles pending cleanup
     this.updateVehicleCleanup(dt);
 
-    const taserState = this.player?.getTaserState() || { isTased: false, escapeProgress: 0 };
+    // PERF: Reuse pre-allocated objects instead of creating new ones every frame
+    const taserState = this.player?.getTaserState() || this._defaultTaserState;
     const isNearCurrentVehicle = this.isPlayerNearVehicle();
     const isNearAwaitingVehicle = this.isPlayerNearAwaitingVehicle();
-    const actionContext = {
-      isTased: taserState.isTased,
-      isNearCar: this.vehicleSpawned && isNearCurrentVehicle,
-      isNearAwaitingVehicle: this.awaitingVehicle !== null && isNearAwaitingVehicle,
-      isInVehicle: this.isInVehicle,
-    };
-    const { action, isNewPress } = this.actionController.resolve(this.input, actionContext);
+    this._actionContext.isTased = taserState.isTased;
+    this._actionContext.isNearCar = this.vehicleSpawned && isNearCurrentVehicle;
+    this._actionContext.isNearAwaitingVehicle = this.awaitingVehicle !== null && isNearAwaitingVehicle;
+    this._actionContext.isInVehicle = this.isInVehicle;
+    const { action, isNewPress } = this.actionController.resolve(this.input, this._actionContext);
 
     if (isNewPress) {
       switch (action) {
@@ -1966,12 +1970,16 @@ export class Engine {
           if (this.player) {
             if (!this.isInVehicle) {
               this.player.performAttack();
-            } else if (this.getCurrentVehicleType() === VehicleType.BICYCLE) {
-              this.handleBicycleAttack();
-              this.player.playBicycleAttack();
-            } else if (this.getCurrentVehicleType() === VehicleType.MOTORBIKE) {
-              this.handleMotorbikeShoot();
-              this.player.playMotorbikeShoot();
+            } else {
+              // PERF: Cache vehicle type to avoid duplicate calls
+              const vehicleType = this.getCurrentVehicleType();
+              if (vehicleType === VehicleType.BICYCLE) {
+                this.handleBicycleAttack();
+                this.player.playBicycleAttack();
+              } else if (vehicleType === VehicleType.MOTORBIKE) {
+                this.handleMotorbikeShoot();
+                this.player.playMotorbikeShoot();
+              }
             }
           }
           break;
@@ -2027,8 +2035,10 @@ export class Engine {
       this.crowd.updateTables(currentPos);
       this.crowd.updateSurge(dt); // Handle tier unlock crowd surge
 
-      const isBicycle = this.getCurrentVehicleType() === VehicleType.BICYCLE;
-      const isTruck = this.getCurrentVehicleType() === VehicleType.TRUCK;
+      // PERF: Cache vehicle type to avoid duplicate function calls
+      const currentVehicleType = this.getCurrentVehicleType();
+      const isBicycle = currentVehicleType === VehicleType.BICYCLE;
+      const isTruck = currentVehicleType === VehicleType.TRUCK;
       if (this.isInVehicle && this.vehicle && !isBicycle) {
         const vehicleVelocity = this.vehicle.getVelocity();
         const speed = vehicleVelocity.length();
