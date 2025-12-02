@@ -46,7 +46,8 @@
       "Bash(uvx blender-mcp:*)",
       "Bash(brew install:*)",
       "Bash(cp:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "SlashCommand(/code-review:code-review)"
     ],
     "deny": [],
     "ask": []
