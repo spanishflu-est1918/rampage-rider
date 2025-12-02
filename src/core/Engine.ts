@@ -151,6 +151,31 @@ export class Engine {
   private explosionLife: number = 0;
   private shockwaveRing: THREE.Mesh | null = null;
   private shockwaveLife: number = 0;
+
+  // Motorbike blast effect (reuses similar pattern but with different colors)
+  private blastSprite: THREE.Sprite | null = null;
+  private blastLife: number = 0;
+  private blastRing: THREE.Mesh | null = null;
+  private blastRingLife: number = 0;
+  private lastCombatTime: number = 0; // Track last kill for idle heat decay
+  private lastCopKillTime: number = 0; // Track last cop kill for wanted star decay
+  private lastAnnouncedComboMilestone: number = 0; // Track combo callouts
+
+  // Combo milestone announcer messages
+  private static readonly COMBO_MILESTONES: Array<{ threshold: number; message: string }> = [
+    { threshold: 5, message: 'KILLING SPREE!' },
+    { threshold: 10, message: 'RAMPAGE!' },
+    { threshold: 15, message: 'UNSTOPPABLE!' },
+    { threshold: 20, message: 'GODLIKE!' },
+    { threshold: 30, message: 'MASSACRE!' },
+    { threshold: 50, message: 'LEGENDARY!' },
+  ];
+
+  // Slow-mo effect for tier unlocks (Burnout-style impact frame)
+  private slowmoTimer: number = 0;
+  private slowmoScale: number = 1.0;
+  private readonly SLOWMO_DURATION: number = 0.8;
+  private readonly SLOWMO_SCALE: number = 0.15; // 15% speed during slowmo
   private lastPlayerPosition: THREE.Vector3 = new THREE.Vector3();
   private cameraMoveThreshold: number = 0; // Update every frame (0.1 caused jerk)
   private healthBarUpdateCounter: number = 0; // Throttle health bar projection
@@ -635,6 +660,13 @@ export class Engine {
 
     const tierConfig = TIER_CONFIGS[tier];
     this.triggerKillNotification(`${tierConfig.name.toUpperCase()} UNLOCKED!`, true, 0);
+
+    // Burnout-style slow-mo impact frame on tier unlock
+    this.triggerSlowmo();
+    this.shakeCamera(3.0);
+
+    // Crowd surge - spawn more pedestrians for the new vehicle to rampage through
+    this.crowd?.triggerCrowdSurge();
   }
 
   debugSpawnVehicle(vehicleType: VehicleType | null): void {
@@ -891,6 +923,13 @@ export class Engine {
 
     const tierConfig = TIER_CONFIGS[tier];
     this.triggerKillNotification(`${tierConfig.name.toUpperCase()} UNLOCKED!`, true, 0);
+
+    // Burnout-style slow-mo impact frame on tier unlock
+    this.triggerSlowmo();
+    this.shakeCamera(3.0);
+
+    // Crowd surge - spawn more pedestrians for the new vehicle to rampage through
+    this.crowd?.triggerCrowdSurge();
   }
 
   // Cache for awaiting vehicle materials (avoid traverse every frame)
@@ -1108,15 +1147,28 @@ export class Engine {
 
   /**
    * Update wanted stars based on cop kills - consolidated from multiple attack handlers
+   * Stars decay by 1 after 45 seconds without killing cops
    */
-  private updateWantedStars(): void {
-    if (this.stats.copKills < WANTED_STARS.STAR_1) {
-      this.stats.wantedStars = 0;
-    } else if (this.stats.copKills < WANTED_STARS.STAR_2) {
-      this.stats.wantedStars = 1;
-    } else {
-      this.stats.wantedStars = 2;
+  private updateWantedStars(copKilled: boolean = false): void {
+    // Update last cop kill time if cop was killed
+    if (copKilled) {
+      this.lastCopKillTime = this.stats.gameTime;
     }
+
+    // Calculate base star level from cop kills
+    let baseStars = 0;
+    if (this.stats.copKills >= WANTED_STARS.STAR_2) {
+      baseStars = 2;
+    } else if (this.stats.copKills >= WANTED_STARS.STAR_1) {
+      baseStars = 1;
+    }
+
+    // Apply decay: reduce stars by 1 if no cop kills for 45+ seconds
+    const timeSinceLastCopKill = this.stats.gameTime - this.lastCopKillTime;
+    const decayLevels = Math.floor(timeSinceLastCopKill / 45); // 1 level per 45s
+    const decayedStars = Math.max(0, baseStars - decayLevels);
+
+    this.stats.wantedStars = decayedStars;
   }
 
   /**
@@ -1176,6 +1228,7 @@ export class Engine {
         this.stats.score += regularPoints + panicPoints;
         this.stats.combo += pedResult.kills;
         this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.lastCombatTime = this.stats.gameTime;
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (pedResult.kills * SCORING_CONFIG.HEAT_PER_PED_KILL));
 
         totalKills += pedResult.kills;
@@ -1220,7 +1273,7 @@ export class Engine {
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
-        this.updateWantedStars();
+        this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
 
         totalKills += copResult.kills;
@@ -1249,7 +1302,7 @@ export class Engine {
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += bikeResult.kills * pointsPerKill;
         this.stats.copKills += bikeResult.kills;
-        this.updateWantedStars();
+        this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (bikeResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
 
         totalKills += bikeResult.kills;
@@ -1312,6 +1365,7 @@ export class Engine {
         this.stats.kills += pedResult.kills;
         this.stats.combo += pedResult.kills;
         this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.lastCombatTime = this.stats.gameTime;
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (pedResult.kills * SCORING_CONFIG.HEAT_PER_PED_KILL));
 
         totalKills += pedResult.kills;
@@ -1349,7 +1403,7 @@ export class Engine {
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
-        this.updateWantedStars();
+        this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
@@ -1376,7 +1430,7 @@ export class Engine {
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += bikeResult.kills * pointsPerKill;
         this.stats.copKills += bikeResult.kills;
-        this.updateWantedStars();
+        this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (bikeResult.kills * SCORING_CONFIG.HEAT_PER_COP_KILL));
         totalKills += bikeResult.kills;
         allKillPositions.push(...bikeResult.positions);
@@ -1399,6 +1453,87 @@ export class Engine {
 
     const attackPosition = this.vehicle.getPosition();
     // Reuse pre-allocated vectors instead of new THREE.Vector3()
+    this._tempVehicleDir.set(0, 0, 1).applyAxisAngle(this._yAxis, this.vehicle.getRotationY());
+
+    let totalKills = 0;
+    let totalKnockedBack = 0;
+    const allKillPositions: THREE.Vector3[] = [];
+
+    // --- BLAST ATTACK: 360° knockback around player ---
+    // Blast max kills scales with combo: 5 base → 8 at 10+ → unlimited at 15+
+    let blastMaxKills = cfg.blastMaxKills; // Base: 5
+    if (this.stats.combo >= 15) {
+      blastMaxKills = Infinity;
+    } else if (this.stats.combo >= 10) {
+      blastMaxKills = 8;
+    }
+
+    if (this.crowd) {
+      const blastResult = this.crowd.blastInRadius(
+        attackPosition,
+        cfg.blastRadius,
+        cfg.blastForce,
+        cfg.blastDamage,
+        blastMaxKills
+      );
+
+      if (blastResult.kills > 0) {
+        const basePoints = SCORING_CONFIG.PEDESTRIAN_MOTORBIKE;
+        const points = this.stats.inPursuit ? basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER : basePoints;
+
+        this.stats.score += points * blastResult.kills;
+        this.stats.kills += blastResult.kills;
+        this.stats.combo += blastResult.kills;
+        this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.lastCombatTime = this.stats.gameTime;
+        this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (blastResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_PED_KILL));
+
+        totalKills += blastResult.kills;
+        allKillPositions.push(...blastResult.positions);
+
+        this.triggerKillNotification('BLAST KILL!', true, points);
+        this.crowd.panicCrowd(attackPosition, cfg.panicRadius);
+      }
+
+      totalKnockedBack += blastResult.knockedBack;
+    }
+
+    // Apply knockback to cops in blast radius
+    if (this.cops) {
+      this.cops.applyKnockbackInRadius(attackPosition, cfg.blastRadius, cfg.blastForce);
+    }
+    if (this.motorbikeCops) {
+      this.motorbikeCops.applyKnockbackInRadius(attackPosition, cfg.blastRadius, cfg.blastForce);
+    }
+
+    // Show blast visual FX
+    if (totalKills > 0 || totalKnockedBack > 0) {
+      this.showMotorbikeBlast(attackPosition);
+      this.shakeCamera(1.5);
+
+      // Blood effects for kills
+      if (totalKills > 0) {
+        this.emitBloodEffects(allKillPositions, attackPosition, cfg.particleCount, cfg.decalCount);
+      }
+    } else {
+      // Miss feedback
+      this.shakeCamera(cfg.cameraShakeMiss);
+    }
+
+    // Update stats
+    if (totalKills > 0) {
+      this.updateWantedStars(true);
+    }
+  }
+
+  /**
+   * Original forward-cone motorbike shooting (kept for reference, could be secondary attack)
+   */
+  private handleMotorbikeShootCone(): void {
+    if (!this.vehicle || !this.player) return;
+    const cfg = PLAYER_ATTACK_CONFIG.MOTORBIKE;
+
+    const attackPosition = this.vehicle.getPosition();
     this._tempVehicleDir.set(0, 0, 1).applyAxisAngle(this._yAxis, this.vehicle.getRotationY());
 
     const attackRadius = cfg.attackRadius;
@@ -1427,6 +1562,7 @@ export class Engine {
         this.stats.kills += pedResult.kills;
         this.stats.combo += pedResult.kills;
         this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.lastCombatTime = this.stats.gameTime;
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (pedResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_PED_KILL));
 
         totalKills += pedResult.kills;
@@ -1455,7 +1591,7 @@ export class Engine {
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += copResult.kills * pointsPerKill;
         this.stats.copKills += copResult.kills;
-        this.updateWantedStars();
+        this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (copResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_COP_KILL));
         totalKills += copResult.kills;
         allKillPositions.push(...copResult.positions);
@@ -1480,7 +1616,7 @@ export class Engine {
         const pointsPerKill = basePoints * SCORING_CONFIG.PURSUIT_MULTIPLIER;
         this.stats.score += motoResult.kills * pointsPerKill + motoResult.points;
         this.stats.copKills += motoResult.kills;
-        this.updateWantedStars();
+        this.updateWantedStars(true);
         this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + (motoResult.kills * SCORING_CONFIG.HEAT_PER_MOTORBIKE_COP_KILL));
         totalKills += motoResult.kills;
         allKillPositions.push(...motoResult.positions);
@@ -1511,6 +1647,7 @@ export class Engine {
     this.stats.score += points;
     this.stats.combo++;
     this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.lastCombatTime = this.stats.gameTime;
     this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + SCORING_CONFIG.HEAT_PER_PED_KILL);
 
     this.particles.emitBlood(position, cfg.particleCount);
@@ -1543,6 +1680,7 @@ export class Engine {
     this.stats.score += points;
     this.stats.combo++;
     this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.lastCombatTime = this.stats.gameTime;
     this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + 50); // Big heat boost!
 
     // Debris explosion (not blood!)
@@ -1574,7 +1712,21 @@ export class Engine {
     this.animationId = requestAnimationFrame(this.animate);
 
     const frameStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
-    const deltaTime = this.clock.getDelta();
+    const rawDeltaTime = this.clock.getDelta();
+
+    // Apply slow-mo effect (Burnout-style impact frame on tier unlock)
+    if (this.slowmoTimer > 0) {
+      this.slowmoTimer -= rawDeltaTime;
+      // Ease out of slowmo in final 20% of duration
+      if (this.slowmoTimer < this.SLOWMO_DURATION * 0.2) {
+        const t = this.slowmoTimer / (this.SLOWMO_DURATION * 0.2);
+        this.slowmoScale = this.SLOWMO_SCALE + (1 - this.SLOWMO_SCALE) * (1 - t);
+      }
+      if (this.slowmoTimer <= 0) {
+        this.slowmoScale = 1.0;
+      }
+    }
+    const deltaTime = rawDeltaTime * this.slowmoScale;
     this.update(deltaTime);
 
     const renderStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
@@ -1686,9 +1838,18 @@ export class Engine {
       }
     }
 
+    // Check for combo milestone announcements
+    this.checkComboMilestones();
+
     if (this.stats.heat > 0) {
-      this.stats.heat = Math.max(0, this.stats.heat - (0.5 * dt));
+      // Faster heat decay when not in combat for 10+ seconds (3x normal rate)
+      const timeSinceCombat = this.stats.gameTime - this.lastCombatTime;
+      const heatDecayRate = timeSinceCombat > 10 ? 1.5 : 0.5; // 3x decay when idle
+      this.stats.heat = Math.max(0, this.stats.heat - (heatDecayRate * dt));
     }
+
+    // Update wanted stars decay (stars decrease over time without cop kills)
+    this.updateWantedStars(false);
 
     // --- Entity Updates ---
     const entitiesStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
@@ -1791,6 +1952,7 @@ export class Engine {
     if (this.crowd) {
       this.crowd.update(dt, currentPos);
       this.crowd.updateTables(currentPos);
+      this.crowd.updateSurge(dt); // Handle tier unlock crowd surge
 
       const isBicycle = this.getCurrentVehicleType() === VehicleType.BICYCLE;
       const isTruck = this.getCurrentVehicleType() === VehicleType.TRUCK;
@@ -1893,6 +2055,7 @@ export class Engine {
           if (trampleResult.kills > 0) {
             this.stats.score += trampleResult.points;
             this.stats.copKills += trampleResult.kills;
+            this.updateWantedStars(true);
             this.shakeCamera(2.0);
             for (const pos of trampleResult.positions) {
               this.particles.emitBlood(pos, 80);
@@ -2225,6 +2388,97 @@ export class Engine {
         this.shockwaveRing.visible = false;
       }
     }
+
+    // Update motorbike blast sprite
+    if (this.blastLife > 0 && this.blastSprite) {
+      this.blastLife -= dt;
+      const progress = 1 - (this.blastLife / 0.3);
+      this.blastSprite.material.opacity = 1 - progress;
+      const scale = 1.5 + progress * 8; // Expand from 1.5 to 9.5
+      this.blastSprite.scale.set(scale, scale, 1);
+
+      if (this.blastLife <= 0) {
+        this.blastSprite.visible = false;
+      }
+    }
+
+    // Update motorbike blast ring
+    if (this.blastRingLife > 0 && this.blastRing) {
+      this.blastRingLife -= dt;
+      const progress = 1 - (this.blastRingLife / 0.4);
+      (this.blastRing.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - progress);
+      const scale = 0.5 + progress * 12; // Expand from 0.5 to 12.5
+      this.blastRing.scale.set(scale, scale, 1);
+
+      if (this.blastRingLife <= 0) {
+        this.blastRing.visible = false;
+      }
+    }
+  }
+
+  /**
+   * Show motorbike blast visual effect (cyan/white energy wave)
+   */
+  private showMotorbikeBlast(position: THREE.Vector3): void {
+    // Create blast sprite (bright cyan flash)
+    if (!this.blastSprite) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d')!;
+
+      // Cyan energy blast gradient
+      const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      gradient.addColorStop(0.2, 'rgba(150, 255, 255, 1)');
+      gradient.addColorStop(0.4, 'rgba(0, 200, 255, 0.8)');
+      gradient.addColorStop(0.7, 'rgba(0, 100, 200, 0.4)');
+      gradient.addColorStop(1, 'rgba(0, 50, 150, 0)');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(64, 64, 64, 0, Math.PI * 2);
+      ctx.fill();
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+
+      this.blastSprite = new THREE.Sprite(material);
+      this.scene.add(this.blastSprite);
+    }
+
+    // Create blast ring (expanding cyan ring)
+    if (!this.blastRing) {
+      const ringGeometry = new THREE.RingGeometry(0.3, 0.8, 32);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ccff,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide,
+      });
+      this.blastRing = new THREE.Mesh(ringGeometry, ringMaterial);
+      this.blastRing.rotation.x = -Math.PI / 2; // Lay flat
+      this.scene.add(this.blastRing);
+    }
+
+    // Position and activate blast
+    this.blastSprite.position.set(position.x, position.y + 0.8, position.z);
+    this.blastSprite.scale.set(1.5, 1.5, 1);
+    this.blastSprite.visible = true;
+    this.blastSprite.material.opacity = 1;
+    this.blastLife = 0.3;
+
+    // Position and activate blast ring
+    this.blastRing.position.set(position.x, 0.15, position.z);
+    this.blastRing.scale.set(0.5, 0.5, 1);
+    this.blastRing.visible = true;
+    (this.blastRing.material as THREE.MeshBasicMaterial).opacity = 0.7;
+    this.blastRingLife = 0.4;
   }
 
   /**
@@ -2239,7 +2493,43 @@ export class Engine {
    */
   private triggerKillNotification(message: string, isPursuit: boolean, points: number): void {
     if (this.callbacks.onKillNotification) {
-      this.callbacks.onKillNotification({ message, isPursuit, points });
+      this.callbacks.onKillNotification({ message, isPursuit, points, combo: this.stats.combo });
+    }
+  }
+
+  /**
+   * Trigger slow-motion effect (Burnout-style impact frame)
+   */
+  private triggerSlowmo(): void {
+    this.slowmoTimer = this.SLOWMO_DURATION;
+    this.slowmoScale = this.SLOWMO_SCALE;
+  }
+
+  /**
+   * Check and announce combo milestones (5, 10, 15, 20, 30, 50)
+   */
+  private checkComboMilestones(): void {
+    // Find the highest milestone we've crossed
+    let highestMilestone = 0;
+    let milestoneMessage = '';
+
+    for (const milestone of Engine.COMBO_MILESTONES) {
+      if (this.stats.combo >= milestone.threshold && milestone.threshold > this.lastAnnouncedComboMilestone) {
+        highestMilestone = milestone.threshold;
+        milestoneMessage = milestone.message;
+      }
+    }
+
+    // Announce if we crossed a new milestone
+    if (highestMilestone > this.lastAnnouncedComboMilestone) {
+      this.lastAnnouncedComboMilestone = highestMilestone;
+      this.triggerKillNotification(milestoneMessage, true, 0);
+      this.shakeCamera(2.0 + highestMilestone * 0.05); // Bigger shake for bigger milestones
+    }
+
+    // Reset milestone tracker when combo resets
+    if (this.stats.combo === 0) {
+      this.lastAnnouncedComboMilestone = 0;
     }
   }
 

@@ -46,6 +46,7 @@ export interface KillNotification {
   message: string;
   isPursuit: boolean;
   points: number;
+  combo: number; // For score popup scaling
 }
 
 export interface GameStats {

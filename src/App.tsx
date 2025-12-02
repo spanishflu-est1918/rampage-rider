@@ -60,7 +60,7 @@ function App() {
   const handleKillNotification = useCallback((notification: KillNotification) => {
     if (notificationControllerRef.current) {
       const type = notification.isPursuit ? 'pursuit' : 'kill';
-      notificationControllerRef.current.addNotification(type, notification.message, `+${notification.points}`);
+      notificationControllerRef.current.addNotification(type, notification.message, `+${notification.points}`, notification.combo);
     }
   }, []);
 

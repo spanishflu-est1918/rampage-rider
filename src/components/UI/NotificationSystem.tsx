@@ -10,10 +10,11 @@ interface TransientNotification {
   type: NotificationType;
   message: string;
   subtext?: string;
+  combo: number; // For score popup scaling
 }
 
 interface NotificationController {
-  addNotification: (type: NotificationType, message: string, subtext?: string) => void;
+  addNotification: (type: NotificationType, message: string, subtext?: string, combo?: number) => void;
 }
 
 interface NotificationSystemProps {
@@ -63,18 +64,19 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
   const [notifications, setNotifications] = useState<TransientNotification[]>([]);
   const nextIdRef = useRef(0);
 
-  const addNotification = useCallback((type: NotificationType, message: string, subtext?: string) => {
+  const addNotification = useCallback((type: NotificationType, message: string, subtext?: string, combo: number = 0) => {
     const id = nextIdRef.current++;
 
     setNotifications(prev => {
       const limited = prev.length >= 3 ? prev.slice(1) : prev;
-      return [...limited, { id, type, message, subtext }];
+      return [...limited, { id, type, message, subtext, combo }];
     });
 
-    // Auto-remove after animation
+    // Auto-remove after animation (longer for high combo)
+    const duration = combo >= 20 ? 1800 : combo >= 10 ? 1500 : 1200;
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 1200);
+    }, duration);
   }, []);
 
   useEffect(() => {
@@ -86,26 +88,37 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
       {/* Transient notifications (kills, etc) */}
       {notifications.map((notification, index) => {
         const style = NOTIFICATION_STYLES[notification.type];
+        // Scale based on combo: 1.0 at 0, up to 2.0 at 50+ combo
+        const comboScale = 1 + Math.min(notification.combo, 50) * 0.02;
+        // Extra glow intensity at high combo
+        const glowIntensity = notification.combo >= 20 ? 1.5 : notification.combo >= 10 ? 1.2 : 1;
         return (
           <div
             key={notification.id}
             className="absolute"
             style={{
               top: `calc(40% - ${index * 50}px)`,
-              animation: 'notif-fadeSlideUp 1.2s ease-out forwards',
+              animation: `notif-fadeSlideUp ${notification.combo >= 10 ? '1.5s' : '1.2s'} ease-out forwards`,
+              transform: `scale(${comboScale})`,
             }}
           >
             <div className="text-center">
               <div
                 className={`font-black retro ${style.textClass}`}
-                style={{ textShadow: style.textShadow }}
+                style={{
+                  textShadow: style.textShadow,
+                  filter: glowIntensity > 1 ? `brightness(${glowIntensity})` : undefined,
+                }}
               >
                 {notification.message}
               </div>
               {notification.subtext && style.subtextClass && (
                 <div
                   className={`font-bold retro ${style.subtextClass}`}
-                  style={{ textShadow: style.subtextShadow }}
+                  style={{
+                    textShadow: style.subtextShadow,
+                    filter: glowIntensity > 1 ? `brightness(${glowIntensity})` : undefined,
+                  }}
                 >
                   {notification.subtext}
                 </div>

@@ -28,7 +28,7 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   },
   [Tier.MOTO]: {
     name: "Moto Maniac",
-    minScore: 2000, // ~80 kills - harder to unlock (was 1000)
+    minScore: 1200, // ~50 kills - smoother Bike→Moto progression
     speedMultiplier: 2.2,
     maxHealth: 100,
     color: 0xff3333, // Aggressive Red
@@ -492,6 +492,11 @@ export const PLAYER_ATTACK_CONFIG = {
     decalCount: 30,
     cameraShakeHit: 0.8,
     cameraShakeMiss: 0.3,
+    // Blast attack (360° knockback around player)
+    blastRadius: 6.0, // Knockback radius
+    blastForce: 12, // Force applied to entities
+    blastDamage: 1, // Damage to entities in blast
+    blastMaxKills: 5, // Max kills per blast
   },
   VEHICLE_HIT: {
     particleCount: 40,
