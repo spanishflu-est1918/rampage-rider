@@ -1460,7 +1460,7 @@ export class Engine {
 
     // --- BLAST ATTACK: 360° knockback around player ---
     // Blast max kills scales with combo: 5 base → 8 at 10+ → unlimited at 15+
-    let blastMaxKills = cfg.blastMaxKills; // Base: 5
+    let blastMaxKills: number = cfg.blastMaxKills; // Base: 5
     if (this.stats.combo >= 15) {
       blastMaxKills = Infinity;
     } else if (this.stats.combo >= 10) {

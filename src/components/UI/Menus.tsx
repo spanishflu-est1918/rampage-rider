@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { GameStats } from "../../types";
 import { TIER_CONFIGS } from "../../constants";
-import { Button } from "@/components/UI/8bit/button";
+import { Button } from "@/components/ui/8bit/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/components/UI/8bit/card";
-import { Badge } from "@/components/UI/8bit/badge";
+} from "@/components/ui/8bit/card";
+import { Badge } from "@/components/ui/8bit/badge";
 
 const TAGLINES = [
   "YOUR UBER RATING: ZERO STARS.",

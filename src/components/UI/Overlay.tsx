@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { GameStats, TierConfig, Tier } from '../../types';
 import { TIER_CONFIGS, DEBUG_PERFORMANCE_PANEL } from '../../constants';
-import { Badge } from '@/components/UI/8bit/badge';
-import { Button } from '@/components/UI/8bit/button';
-import HealthBar from '@/components/UI/8bit/health-bar';
-import HeatBar from '@/components/UI/8bit/heat-bar';
-import { Progress } from '@/components/UI/8bit/progress';
+import { Badge } from '@/components/ui/8bit/badge';
+import { Button } from '@/components/ui/8bit/button';
+import HealthBar from '@/components/ui/8bit/health-bar';
+import HeatBar from '@/components/ui/8bit/heat-bar';
+import { Progress } from '@/components/ui/8bit/progress';
 
 interface OverlayProps {
   stats: GameStats;
