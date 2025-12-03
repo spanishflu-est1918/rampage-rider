@@ -51,6 +51,8 @@ export class CopCar extends THREE.Group {
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
   // PERF: Pre-allocated for getPosition() return value
   private readonly _positionResult: THREE.Vector3 = new THREE.Vector3();
+  private static readonly RAM_DISTANCE_SQ =
+    COP_CAR_CONFIG.RAM_DISTANCE * COP_CAR_CONFIG.RAM_DISTANCE;
 
   constructor(
     position: THREE.Vector3,
@@ -271,13 +273,13 @@ export class CopCar extends THREE.Group {
     this._tempPosition.set(currentPos.x, currentPos.y, currentPos.z);
 
     // Calculate distance to target
-    let distanceToTarget = Infinity;
+    let distanceToTargetSq = Infinity;
     if (this.lastTarget) {
-      distanceToTarget = this._tempPosition.distanceTo(this.lastTarget);
+      distanceToTargetSq = this._tempPosition.distanceToSquared(this.lastTarget);
     }
 
     // Check for ram attack
-    if (distanceToTarget <= COP_CAR_CONFIG.RAM_DISTANCE && this.attackCooldown <= 0) {
+    if (distanceToTargetSq <= CopCar.RAM_DISTANCE_SQ && this.attackCooldown <= 0) {
       this.ramAttack();
     }
 
@@ -300,16 +302,19 @@ export class CopCar extends THREE.Group {
     const deltaX = desiredX - currentPos.x;
     const deltaZ = desiredZ - currentPos.z;
 
-    const moveLen = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
     const maxMove = this.currentSpeed * deltaTime;
+    const moveLenSq = deltaX * deltaX + deltaZ * deltaZ;
+    const maxMoveSq = maxMove * maxMove;
 
     let moveX = deltaX;
     let moveZ = deltaZ;
-    if (moveLen > maxMove) {
-      const scale = maxMove / moveLen;
+    if (moveLenSq > maxMoveSq && moveLenSq > 0) {
+      const scale = maxMove / Math.sqrt(moveLenSq);
       moveX *= scale;
       moveZ *= scale;
     }
+
+    const moveLen = Math.sqrt(moveX * moveX + moveZ * moveZ);
 
     // Apply movement
     const newPosition = {

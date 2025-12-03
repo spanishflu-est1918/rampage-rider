@@ -64,6 +64,7 @@ export class BikeCop extends THREE.Group {
 
   // Config
   private static readonly RAM_RANGE = 2.0; // Close range ram attack
+  private static readonly RAM_RANGE_SQ = BikeCop.RAM_RANGE * BikeCop.RAM_RANGE;
   private static readonly RAM_COOLDOWN = 1.5;
   private static readonly RAM_DAMAGE = 10; // Damage to vehicle
   private static readonly HIT_STUN_DURATION = 0.6;
@@ -73,6 +74,7 @@ export class BikeCop extends THREE.Group {
 
   // Sprint burst - become threatening when close
   private static readonly SPRINT_DISTANCE = 10; // Trigger sprint when within 10 units
+  private static readonly SPRINT_DISTANCE_SQ = BikeCop.SPRINT_DISTANCE * BikeCop.SPRINT_DISTANCE;
   private static readonly SPRINT_SPEED = 15; // Faster than player bike (14) when sprinting
   private static readonly BASE_SPEED = 11; // Normal chase speed
 
@@ -357,19 +359,19 @@ export class BikeCop extends THREE.Group {
     this._tempPosition.set(currentPos.x, currentPos.y, currentPos.z);
 
     // Calculate distance to target
-    let distanceToTarget = Infinity;
+    let distanceToTargetSq = Infinity;
     if (this.lastTarget) {
-      distanceToTarget = this._tempPosition.distanceTo(this.lastTarget);
+      distanceToTargetSq = this._tempPosition.distanceToSquared(this.lastTarget);
     }
 
     // Check for ram attack (close range damage)
-    if (distanceToTarget <= BikeCop.RAM_RANGE && this.attackCooldown <= 0 && this.lastTarget) {
+    if (distanceToTargetSq <= BikeCop.RAM_RANGE_SQ && this.attackCooldown <= 0 && this.lastTarget) {
       this.ramAttack();
     }
 
     // Sprint burst when close to target - become a real threat
     const targetSpeed =
-      distanceToTarget <= BikeCop.SPRINT_DISTANCE
+      distanceToTargetSq <= BikeCop.SPRINT_DISTANCE_SQ
         ? BikeCop.SPRINT_SPEED
         : BikeCop.BASE_SPEED;
     this.maxSpeed = targetSpeed;

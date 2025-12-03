@@ -413,13 +413,14 @@ export class Cop extends THREE.Group {
     this._tempPosition.set(currentPos.x, currentPos.y, currentPos.z);
 
     // Check distance to target for attack logic
-    let distanceToTarget = Infinity;
+    let distanceToTargetSq = Infinity;
     if (this.lastTarget) {
-      distanceToTarget = this._tempPosition.distanceTo(this.lastTarget);
+      distanceToTargetSq = this._tempPosition.distanceToSquared(this.lastTarget);
     }
 
     // Get attack parameters based on current heat level
     const attackParams = this.getAttackParams();
+    const attackRangeSq = attackParams.range * attackParams.range;
 
     // Update bullet projectile movement
     this.updateBulletProjectile(deltaTime);
@@ -434,7 +435,7 @@ export class Cop extends THREE.Group {
     }
 
     // Attack logic: if within range and cooldown ready, execute attack
-    if (distanceToTarget <= attackParams.range && this.attackCooldown <= 0) {
+    if (distanceToTargetSq <= attackRangeSq && this.attackCooldown <= 0) {
       // Stop moving
       this.yukaVehicle.velocity.set(0, 0, 0);
 
@@ -479,7 +480,7 @@ export class Cop extends THREE.Group {
 
       // Set cooldown for next attack
       this.attackCooldown = attackParams.cooldown;
-    } else if (distanceToTarget > attackParams.range) {
+    } else if (distanceToTargetSq > attackRangeSq) {
       this.isCurrentlyAttacking = false;
 
       // Simple position sync from Yuka AI (no expensive character controller)
@@ -511,8 +512,8 @@ export class Cop extends THREE.Group {
 
       // Update animation based on movement (only if not attacking)
       if (!this.isCurrentlyAttacking) {
-        const speed = this.yukaVehicle.velocity.length();
-        if (speed > 0.5) {
+        const speedSq = this.yukaVehicle.velocity.lengthSquared();
+        if (speedSq > 0.25) {
           if (this.currentAnimation !== 'Run') {
             this.playAnimation('Run', 0.1);
           }

@@ -100,6 +100,8 @@ export class Player extends THREE.Group {
   // Taser escape explosion callback (knockback nearby cops)
   private onTaserEscapeCallback: ((position: THREE.Vector3, radius: number, force: number) => void) | null = null;
 
+  private readonly _taserStateCache = { isTased: false, escapeProgress: 0 };
+
   // Fake blob shadow (cheaper than real shadows)
   private blobShadow: BlobShadow;
 
@@ -813,10 +815,9 @@ export class Player extends THREE.Group {
    * Get taser stun state (for UI display)
    */
   getTaserState(): { isTased: boolean; escapeProgress: number } {
-    return {
-      isTased: this.isTased,
-      escapeProgress: this.taseEscapeProgress
-    };
+    this._taserStateCache.isTased = this.isTased;
+    this._taserStateCache.escapeProgress = this.taseEscapeProgress;
+    return this._taserStateCache;
   }
 
   /**
