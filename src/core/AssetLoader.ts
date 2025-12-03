@@ -1,5 +1,6 @@
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
@@ -10,6 +11,41 @@ import * as THREE from 'three';
  * Preloads and caches all game assets (models, textures) before game starts
  * Also pre-clones pedestrian models during preload to avoid runtime stutter
  */
+const MESHOPT_OVERRIDES: Record<string, string> = {
+  '/assets/boxman.glb': '/assets/boxman.meshopt.glb',
+
+  // Pedestrians
+  '/assets/pedestrians/BlueSoldier_Female.gltf': '/assets/pedestrians/BlueSoldier_Female.meshopt.glb',
+  '/assets/pedestrians/BlueSoldier_Male.gltf': '/assets/pedestrians/BlueSoldier_Male.meshopt.glb',
+  '/assets/pedestrians/Casual2_Female.gltf': '/assets/pedestrians/Casual2_Female.meshopt.glb',
+  '/assets/pedestrians/Casual2_Male.gltf': '/assets/pedestrians/Casual2_Male.meshopt.glb',
+  '/assets/pedestrians/Casual3_Female.gltf': '/assets/pedestrians/Casual3_Female.meshopt.glb',
+  '/assets/pedestrians/Casual3_Male.gltf': '/assets/pedestrians/Casual3_Male.meshopt.glb',
+  '/assets/pedestrians/Casual_Bald.gltf': '/assets/pedestrians/Casual_Bald.meshopt.glb',
+  '/assets/pedestrians/Casual_Female.gltf': '/assets/pedestrians/Casual_Female.meshopt.glb',
+  '/assets/pedestrians/Casual_Male.gltf': '/assets/pedestrians/Casual_Male.meshopt.glb',
+  '/assets/pedestrians/Chef_Female.gltf': '/assets/pedestrians/Chef_Female.meshopt.glb',
+  '/assets/pedestrians/Chef_Male.gltf': '/assets/pedestrians/Chef_Male.meshopt.glb',
+  '/assets/pedestrians/Doctor_Female_Young.gltf': '/assets/pedestrians/Doctor_Female_Young.meshopt.glb',
+  '/assets/pedestrians/Doctor_Male_Young.gltf': '/assets/pedestrians/Doctor_Male_Young.meshopt.glb',
+  '/assets/pedestrians/Ninja_Female.gltf': '/assets/pedestrians/Ninja_Female.meshopt.glb',
+  '/assets/pedestrians/Ninja_Male.gltf': '/assets/pedestrians/Ninja_Male.meshopt.glb',
+  '/assets/pedestrians/Ninja_Sand.gltf': '/assets/pedestrians/Ninja_Sand.meshopt.glb',
+  '/assets/pedestrians/Ninja_Sand_Female.gltf': '/assets/pedestrians/Ninja_Sand_Female.meshopt.glb',
+  '/assets/pedestrians/Soldier_Female.gltf': '/assets/pedestrians/Soldier_Female.meshopt.glb',
+  '/assets/pedestrians/Soldier_Male.gltf': '/assets/pedestrians/Soldier_Male.meshopt.glb',
+  '/assets/pedestrians/Suit_Female.gltf': '/assets/pedestrians/Suit_Female.meshopt.glb',
+  '/assets/pedestrians/Suit_Male.gltf': '/assets/pedestrians/Suit_Male.meshopt.glb',
+  '/assets/pedestrians/Worker_Female.gltf': '/assets/pedestrians/Worker_Female.meshopt.glb',
+  '/assets/pedestrians/Worker_Male.gltf': '/assets/pedestrians/Worker_Male.meshopt.glb',
+
+  // Vehicles
+  '/assets/vehicles/bicycle.glb': '/assets/vehicles/bicycle.meshopt.glb',
+  '/assets/vehicles/motorbike.glb': '/assets/vehicles/motorbike.meshopt.glb',
+  '/assets/vehicles/car.glb': '/assets/vehicles/car.meshopt.glb',
+  '/assets/vehicles/truck.glb': '/assets/vehicles/truck.meshopt.glb',
+};
+
 export class AssetLoader {
   private static instance: AssetLoader;
   private loader: GLTFLoader;
@@ -39,6 +75,7 @@ export class AssetLoader {
     this.dracoLoader = new DRACOLoader();
     this.dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
     this.loader.setDRACOLoader(this.dracoLoader);
+    this.loader.setMeshoptDecoder(MeshoptDecoder);
   }
 
   static getInstance(): AssetLoader {
@@ -91,24 +128,37 @@ export class AssetLoader {
 
       // Props
       '/assets/props/christmas-market.glb',
-      '/models/christmas_lamp_post.glb',
     ];
 
     let loaded = 0;
     const total = assetPaths.length;
 
     const loadPromises = assetPaths.map(async (path) => {
+      const resolvedPath = this.resolveAssetPath(path);
       try {
-        const gltf = await this.loader.loadAsync(path);
+        const gltf = await this.loader.loadAsync(resolvedPath);
         this.cache.set(path, gltf);
         loaded++;
 
         if (onProgress) {
           onProgress(loaded / total);
         }
+      } catch (error) {
+        if (resolvedPath !== path) {
+          try {
+            const fallbackGltf = await this.loader.loadAsync(path);
+            this.cache.set(path, fallbackGltf);
+            loaded++;
+            if (onProgress) {
+              onProgress(loaded / total);
+            }
+            return;
+          } catch (fallbackError) {
+            console.warn(`[AssetLoader] Failed fallback load for ${path}`, fallbackError);
+          }
+        }
 
-      } catch {
-        // Silently continue - missing assets are handled gracefully
+        console.warn(`[AssetLoader] Failed to load asset: ${path}`, error);
       }
     });
 
@@ -222,6 +272,23 @@ export class AssetLoader {
     return { scene: clonedScene, animations: gltf.animations };
   }
 
+  returnCopRiderToPool(copType: string, scene: THREE.Group): void {
+    let pool = this.copRiderPool.get(copType);
+    if (!pool) {
+      pool = [];
+      this.copRiderPool.set(copType, pool);
+    }
+
+    if (pool.length >= this.COP_CLONES_PER_MODEL) {
+      return;
+    }
+
+    scene.position.set(0, 0, 0);
+    scene.rotation.set(0, 0, 0);
+    scene.scale.set(1, 1, 1);
+    pool.push(scene);
+  }
+
   /**
    * Get a pre-cloned vehicle model from the pool
    * Falls back to runtime clone if pool is empty
@@ -240,6 +307,23 @@ export class AssetLoader {
     console.warn(`[AssetLoader] Vehicle pool empty for ${path}, cloning at runtime`);
     const clonedScene = gltf.scene.clone() as THREE.Group;
     return { scene: clonedScene, animations: gltf.animations };
+  }
+
+  returnVehicleToPool(path: string, scene: THREE.Group): void {
+    let pool = this.vehiclePool.get(path);
+    if (!pool) {
+      pool = [];
+      this.vehiclePool.set(path, pool);
+    }
+
+    if (pool.length >= this.VEHICLE_CLONES) {
+      return;
+    }
+
+    scene.position.set(0, 0, 0);
+    scene.rotation.set(0, 0, 0);
+    scene.scale.set(1, 1, 1);
+    pool.push(scene);
   }
 
   /**
@@ -299,5 +383,8 @@ export class AssetLoader {
     this.copRiderPool.clear();
     this.vehiclePool.clear();
     this.isLoaded = false;
+  }
+  private resolveAssetPath(path: string): string {
+    return MESHOPT_OVERRIDES[path] ?? path;
   }
 }

@@ -139,11 +139,13 @@ export class CopCarManager {
 
   /**
    * Trample cop cars in radius (for truck)
+   * Only tramples cop cars that are in front of the truck (within ~90° frontal cone)
    * Returns number of cars trampled and their positions
    */
   trampleInRadius(
     position: THREE.Vector3,
-    radius: number
+    radius: number,
+    forwardDirection: THREE.Vector3
   ): { kills: number; positions: THREE.Vector3[]; points: number } {
     let killCount = 0;
     let totalPoints = 0;
@@ -160,14 +162,25 @@ export class CopCarManager {
       const distanceSq = this._tempCarPos.distanceToSquared(position);
 
       if (distanceSq < radiusSq) {
-        car.trample();
-        killCount++;
-        totalPoints += car.getPointValue();
-        // PERF: Use pre-allocated pool instead of clone()
-        if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
-          const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
-          pooledPos.copy(this._tempCarPos);
-          killPositions.push(pooledPos);
+        // Check if cop car is in front of the truck
+        // Calculate direction from truck to cop car
+        this._tempSpawnDir.subVectors(this._tempCarPos, position).normalize();
+        
+        // Dot product: 1 = directly in front, -1 = directly behind, 0 = perpendicular
+        const dot = forwardDirection.dot(this._tempSpawnDir);
+        
+        // Only trample if cop car is in frontal cone (>0.3 ≈ ±72° from center)
+        // This means truck only kills with its front ~144° arc
+        if (dot > 0.3) {
+          car.trample();
+          killCount++;
+          totalPoints += car.getPointValue();
+          // PERF: Use pre-allocated pool instead of clone()
+          if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+            const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+            pooledPos.copy(this._tempCarPos);
+            killPositions.push(pooledPos);
+          }
         }
       }
     }

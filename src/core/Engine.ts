@@ -353,7 +353,7 @@ export class Engine {
 
     await this.physics.init();
     this.ai.init();
-    this.createTestGround();
+    await this.createTestGround();
 
     // Initialize managers (pass shared AIManager to avoid duplicate Yuka updates)
     const world = this.physics.getWorld();
@@ -369,19 +369,25 @@ export class Engine {
     }
   }
 
-  private createTestGround(): void {
+  private async createTestGround(): Promise<void> {
     const groundSize = RENDERING_CONFIG.GROUND_SIZE;
     const geometry = new THREE.PlaneGeometry(groundSize, groundSize);
 
     const textureLoader = new THREE.TextureLoader();
-    const albedoMap = textureLoader.load('/assets/textures/cobblestone/color.jpg');
-    const normalMap = textureLoader.load('/assets/textures/cobblestone/normal.jpg');
-    const roughnessMap = textureLoader.load('/assets/textures/cobblestone/roughness.jpg');
-    const aoMap = textureLoader.load('/assets/textures/cobblestone/ao.jpg');
+    const cobblestoneWebp = '/assets/textures/cobblestone/color.webp';
+    const cobblestoneJpg = '/assets/textures/cobblestone/color.jpg';
+
+    let albedoMap: THREE.Texture;
+    try {
+      albedoMap = await textureLoader.loadAsync(cobblestoneWebp);
+    } catch (error) {
+      console.warn('[Engine] Failed to load cobblestone WebP, falling back to JPG', error);
+      albedoMap = await textureLoader.loadAsync(cobblestoneJpg);
+    }
 
     albedoMap.colorSpace = THREE.SRGBColorSpace;
 
-    [albedoMap, normalMap, roughnessMap, aoMap].forEach(tex => {
+    [albedoMap].forEach(tex => {
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
       tex.repeat.set(400, 400);
@@ -389,10 +395,6 @@ export class Engine {
 
     const material = new THREE.MeshStandardMaterial({
       map: albedoMap,
-      normalMap: normalMap,
-      roughnessMap: roughnessMap,
-      aoMap: aoMap,
-      aoMapIntensity: 0.5,
       roughness: 0.9
     });
     this.groundMesh = new THREE.Mesh(geometry, material);
@@ -2134,7 +2136,11 @@ export class Engine {
 
         // Truck tramples cop cars
         if (this.currentVehicleTier === Tier.TRUCK && this.vehicle) {
-          const trampleResult = this.copCars.trampleInRadius(currentPos, 6.0);
+          // Get truck's forward direction from its rotation
+          const truckRotation = this.vehicle.getRotationY();
+          this._tempVehicleDir.set(Math.sin(truckRotation), 0, Math.cos(truckRotation));
+          
+          const trampleResult = this.copCars.trampleInRadius(currentPos, 6.0, this._tempVehicleDir);
           if (trampleResult.kills > 0) {
             const comboMultiplier = this.getComboMultiplier();
             this.stats.score += Math.floor(trampleResult.points * comboMultiplier);

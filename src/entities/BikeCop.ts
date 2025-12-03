@@ -22,6 +22,7 @@ export class BikeCop extends THREE.Group {
   private modelLoaded: boolean = false;
   private modelContainer: THREE.Group;
   private wheels: THREE.Object3D[] = [];
+  private bikeModel: THREE.Group | null = null;
 
   // Yuka AI (only seek behavior for performance)
   private yukaVehicle: YUKA.Vehicle;
@@ -43,10 +44,11 @@ export class BikeCop extends THREE.Group {
 
   // Rider
   private riderMixer: THREE.AnimationMixer | null = null;
-  private riderModel: THREE.Object3D | null = null;
+  private riderModel: THREE.Group | null = null;
   private riderAnimations: THREE.AnimationClip[] = [];
   private currentAction: THREE.AnimationAction | null = null;
   private seatedAction: THREE.AnimationAction | null = null;
+  private riderType: string | null = null;
 
   // Scene reference (kept for interface compatibility)
   private parentScene: THREE.Scene | null = null;
@@ -151,6 +153,7 @@ export class BikeCop extends THREE.Group {
       }
 
       const model = precloned.scene;
+      this.bikeModel = model;
       AnimationHelper.setupShadows(model, false, false);
 
       // Apply scale and rotation
@@ -240,6 +243,7 @@ export class BikeCop extends THREE.Group {
       }
 
       this.riderModel = rider;
+      this.riderType = randomCop;
       this.modelContainer.add(rider);
     } catch (error) {
       console.error('[BikeCop] Failed to load rider:', error);
@@ -516,14 +520,18 @@ export class BikeCop extends THREE.Group {
       this.riderMixer = null;
     }
 
-    this.modelContainer.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
-        } else if (child.material) {
-          child.material.dispose();
-        }
-      }
-    });
+    if (this.bikeModel) {
+      this.modelContainer.remove(this.bikeModel);
+      const bikeConfig = VEHICLE_CONFIGS[VehicleType.BICYCLE];
+      AssetLoader.getInstance().returnVehicleToPool(bikeConfig.modelPath, this.bikeModel);
+      this.bikeModel = null;
+    }
+
+    if (this.riderModel && this.riderType) {
+      this.modelContainer.remove(this.riderModel);
+      AssetLoader.getInstance().returnCopRiderToPool(this.riderType, this.riderModel as THREE.Group);
+      this.riderModel = null;
+      this.riderType = null;
+    }
   }
 }
