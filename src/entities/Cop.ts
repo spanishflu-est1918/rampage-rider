@@ -32,7 +32,7 @@ export class Cop extends THREE.Group {
   // Note: characterController removed - using simple position sync instead for performance
   private world: RAPIER.World;
   private mixer: THREE.AnimationMixer | null = null;
-  private animations: THREE.AnimationClip[] = [];
+  private animationClips: THREE.AnimationClip[] = [];
   private currentAnimation: string = 'Idle';
   private modelLoaded: boolean = false;
 
@@ -182,7 +182,7 @@ export class Cop extends THREE.Group {
       // Setup animations
       this.mixer = new THREE.AnimationMixer(clonedScene);
       this.mixer.timeScale = 1.5;
-      this.animations = precloned.animations;
+      this.animationClips = precloned.animations;
 
       this.playAnimation('Run', 0.3);
       this.modelLoaded = true;
@@ -210,9 +210,9 @@ export class Cop extends THREE.Group {
    * Play animation by name
    */
   private playAnimation(clipName: string, fadeIn: number): void {
-    if (!this.mixer || this.animations.length === 0) return;
+    if (!this.mixer || this.animationClips.length === 0) return;
 
-    const clip = THREE.AnimationClip.findByName(this.animations, clipName);
+    const clip = THREE.AnimationClip.findByName(this.animationClips, clipName);
     if (!clip) {
       console.warn(`[Cop] Animation '${clipName}' not found`);
       return;
@@ -293,9 +293,9 @@ export class Cop extends THREE.Group {
     AnimationHelper.flashWhite(this as THREE.Group);
 
     // Try to play a hit animation if available
-    if (this.mixer && this.animations.length > 0) {
+    if (this.mixer && this.animationClips.length > 0) {
       const hitAnimNames = ['RecieveHit', 'HitReact', 'Hit_Reaction', 'GetHit', 'TakeDamage', 'Damage'];
-      const hitAnim = AnimationHelper.findAnimationByNames(this.animations, hitAnimNames);
+      const hitAnim = AnimationHelper.findAnimationByNames(this.animationClips, hitAnimNames);
 
       if (hitAnim) {
         const action = this.mixer.clipAction(hitAnim);
@@ -318,7 +318,7 @@ export class Cop extends THREE.Group {
     this.yukaVehicle.maxSpeed = 0;
     this.yukaVehicle.steering.clear();
 
-    if (this.mixer && this.animations.length > 0) {
+    if (this.mixer && this.animationClips.length > 0) {
       this.playAnimation('Death', 0.1);
     }
 
@@ -447,8 +447,8 @@ export class Cop extends THREE.Group {
       }
 
       // Execute attack: play animation once and hold final pose
-      if (this.mixer && this.animations.length > 0) {
-        const clip = THREE.AnimationClip.findByName(this.animations, attackParams.animation);
+      if (this.mixer && this.animationClips.length > 0) {
+        const clip = THREE.AnimationClip.findByName(this.animationClips, attackParams.animation);
         if (clip) {
           this.mixer.stopAllAction();
           const action = this.mixer.clipAction(clip);
@@ -698,9 +698,9 @@ export class Cop extends THREE.Group {
     this.hitStunTimer = 2.0; // Long stun after ragdoll
 
     // Play hit animation
-    if (this.mixer && this.animations.length > 0) {
+    if (this.mixer && this.animationClips.length > 0) {
       const hitAnimNames = ['RecieveHit', 'HitReact', 'Hit_Reaction', 'GetHit'];
-      const hitAnim = AnimationHelper.findAnimationByNames(this.animations, hitAnimNames);
+      const hitAnim = AnimationHelper.findAnimationByNames(this.animationClips, hitAnimNames);
       if (hitAnim) {
         const action = this.mixer.clipAction(hitAnim);
         action.setLoop(THREE.LoopOnce, 1);
@@ -846,8 +846,6 @@ export class Cop extends THREE.Group {
     if (!Cop.sharedBulletMaterial) {
       Cop.sharedBulletMaterial = new THREE.MeshBasicMaterial({
         color: 0xffcc00,
-        emissive: 0xffcc00,
-        emissiveIntensity: 1,
       });
     }
 

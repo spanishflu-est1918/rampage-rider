@@ -85,7 +85,7 @@ export class Player extends THREE.Group {
 
   // Animation
   private mixer: THREE.AnimationMixer | null = null;
-  private animations: THREE.AnimationClip[] = [];
+  private animationClips: THREE.AnimationClip[] = [];
   private currentAnimation: string = 'idle';
   private attackAction: THREE.AnimationAction | null = null;
   private attackTimer: number = 0; // Timeout to force reset isAttacking
@@ -167,7 +167,7 @@ export class Player extends THREE.Group {
       // Setup animation mixer
       this.mixer = new THREE.AnimationMixer(cachedGltf.scene);
       this.mixer.timeScale = 1.5;
-      this.animations = cachedGltf.animations;
+      this.animationClips = cachedGltf.animations;
 
       // Play idle animation by default
       this.playAnimation('Idle_A', 0.3);
@@ -197,11 +197,11 @@ export class Player extends THREE.Group {
    * Play animation by name (matching Sketchbook setAnimation - line 499)
    */
   private playAnimation(clipName: string, fadeIn: number, force: boolean = false): void {
-    if (!this.mixer || this.animations.length === 0) return;
+    if (!this.mixer || this.animationClips.length === 0) return;
 
     if (this.debugAnimationLock && !force) return;
 
-    const clip = THREE.AnimationClip.findByName(this.animations, clipName);
+    const clip = THREE.AnimationClip.findByName(this.animationClips, clipName);
     if (!clip) return;
 
     this.mixer.stopAllAction();
@@ -217,12 +217,12 @@ export class Player extends THREE.Group {
    * Locks normal animation updates until complete
    */
   playAnimationWithCallback(clipName: string, onComplete: () => void, fadeIn: number = 0.1): void {
-    if (!this.mixer || this.animations.length === 0) {
+    if (!this.mixer || this.animationClips.length === 0) {
       onComplete();
       return;
     }
 
-    const clip = THREE.AnimationClip.findByName(this.animations, clipName);
+    const clip = THREE.AnimationClip.findByName(this.animationClips, clipName);
     if (!clip) {
       console.warn(`[Player] Animation not found: ${clipName}`);
       onComplete();
@@ -316,7 +316,7 @@ export class Player extends THREE.Group {
     ];
     const randomAttack = attackAnimations[Math.floor(Math.random() * attackAnimations.length)];
 
-    const clip = THREE.AnimationClip.findByName(this.animations, randomAttack);
+    const clip = THREE.AnimationClip.findByName(this.animationClips, randomAttack);
     if (clip && this.mixer) {
       this.attackAction = this.mixer.clipAction(clip);
       this.attackAction.setLoop(THREE.LoopOnce, 1);
@@ -711,9 +711,9 @@ export class Player extends THREE.Group {
     this.onDeathComplete = onComplete;
 
     // Play random death animation (Death_A or Death_B)
-    if (this.mixer && this.animations.length > 0) {
+    if (this.mixer && this.animationClips.length > 0) {
       const deathAnim = Math.random() < 0.5 ? 'Death_A' : 'Death_B';
-      const clip = THREE.AnimationClip.findByName(this.animations, deathAnim);
+      const clip = THREE.AnimationClip.findByName(this.animationClips, deathAnim);
 
       if (clip) {
         this.mixer.stopAllAction();
@@ -835,7 +835,7 @@ export class Player extends THREE.Group {
 
     this.debugAnimationLock = true;
 
-    const clip = THREE.AnimationClip.findByName(this.animations, 'Melee_Blocking');
+    const clip = THREE.AnimationClip.findByName(this.animationClips, 'Melee_Blocking');
     if (!clip) return;
 
     this.mixer.stopAllAction();
@@ -869,11 +869,11 @@ export class Player extends THREE.Group {
    * Plays a quick attack then returns to seated pose
    */
   playBicycleAttack(): void {
-    if (!this.mixer || this.animations.length === 0) return;
+    if (!this.mixer || this.animationClips.length === 0) return;
 
     // Use horizontal slice for bike attack (looks like a swing)
-    const attackClip = THREE.AnimationClip.findByName(this.animations, 'Melee_1H_Attack_Slice_Horizontal');
-    const seatedClip = THREE.AnimationClip.findByName(this.animations, 'Melee_Blocking');
+    const attackClip = THREE.AnimationClip.findByName(this.animationClips, 'Melee_1H_Attack_Slice_Horizontal');
+    const seatedClip = THREE.AnimationClip.findByName(this.animationClips, 'Melee_Blocking');
 
     if (!attackClip || !seatedClip) {
       console.warn('[Player] Missing animation clips for bicycle attack');
@@ -908,11 +908,11 @@ export class Player extends THREE.Group {
    * Plays one-handed shooting then returns to seated pose
    */
   playMotorbikeShoot(): void {
-    if (!this.mixer || this.animations.length === 0) return;
+    if (!this.mixer || this.animationClips.length === 0) return;
 
     // Use one-handed shooting for drive-by
-    const shootClip = THREE.AnimationClip.findByName(this.animations, 'Throw');
-    const seatedClip = THREE.AnimationClip.findByName(this.animations, 'Melee_Blocking');
+    const shootClip = THREE.AnimationClip.findByName(this.animationClips, 'Throw');
+    const seatedClip = THREE.AnimationClip.findByName(this.animationClips, 'Melee_Blocking');
 
     if (!shootClip || !seatedClip) {
       console.warn('[Player] Missing animation clips for motorbike shoot');
@@ -1017,7 +1017,7 @@ export class Player extends THREE.Group {
    * DEBUG: Get list of all available animation names
    */
   getAnimationNames(): string[] {
-    return this.animations.map(clip => clip.name);
+    return this.animationClips.map(clip => clip.name);
   }
 
   /**

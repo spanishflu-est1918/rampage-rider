@@ -55,6 +55,7 @@ function App() {
     gameTime: 0,
     heat: 0,
     wantedStars: 0,
+    inPursuit: false,
     killHistory: [],
     copHealthBars: [],
     isTased: false,

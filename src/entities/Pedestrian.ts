@@ -26,7 +26,7 @@ export class Pedestrian extends THREE.Group {
   private characterController: RAPIER.KinematicCharacterController;
   private world: RAPIER.World;
   private mixer: THREE.AnimationMixer | null = null;
-  private animations: THREE.AnimationClip[] = [];
+  private animationClips: THREE.AnimationClip[] = [];
   private currentAnimation: string = 'Idle';
   private modelLoaded: boolean = false;
 
@@ -161,7 +161,7 @@ export class Pedestrian extends THREE.Group {
 
       // Setup animation mixer
       this.mixer = new THREE.AnimationMixer(gltf.scene);
-      this.animations = gltf.animations;
+      this.animationClips = gltf.animations;
 
       // Play idle by default
       this.playAnimation('Idle', 0.3);
@@ -179,7 +179,7 @@ export class Pedestrian extends THREE.Group {
   private playAnimation(name: string, fadeTime: number = 0.2): void {
     if (!this.mixer || this.currentAnimation === name) return;
 
-    const clip = THREE.AnimationClip.findByName(this.animations, name);
+    const clip = THREE.AnimationClip.findByName(this.animationClips, name);
     if (!clip) {
       console.warn(`[Pedestrian] Animation '${name}' not found`);
       return;
