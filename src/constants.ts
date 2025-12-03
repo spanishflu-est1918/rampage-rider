@@ -218,6 +218,8 @@ export interface VehicleConfig {
   // Model transform
   modelScale: number;
   modelRotationY: number; // Radians to rotate model to face forward
+  modelRotationX?: number;
+  modelRotationZ?: number;
   modelOffsetY: number; // Y offset to sit on ground
   // Rider position (relative to vehicle position)
   riderOffsetY: number; // Y offset for seated player
@@ -269,8 +271,9 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     colliderLength: 1.2,
     modelScale: 0.0045, // Model is ~462 units tall, need ~2.1 units (1.5x larger)
     modelRotationY: 0, // GLTF Y-forward becomes Three.js -Z (default forward)
-    modelOffsetY: 0.3, // Raise model to sit on ground properly
-    riderOffsetY: 0.2, // Height for motorbike seat
+    modelRotationX: 0,
+    modelOffsetY: 0.6, // Raise model to sit on ground properly
+    riderOffsetY: 0.5, // Height for motorbike seat
     riderOffsetZ: -0.5, // Move back to sit on seat
     hideRider: false, // Show rider on motorbike
     killRadius: 2.0,
@@ -288,7 +291,7 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     colliderLength: 1.7,
     modelScale: 0.012, // Monster truck needs heavy scaling
     modelRotationY: -Math.PI / 2, // Rotate to face forward
-    modelOffsetY: -0.2,
+    modelOffsetY: 0.2,
     riderOffsetY: 0, // Not used - rider hidden
     riderOffsetZ: 0, // Not used - rider hidden
     hideRider: true, // Hide rider in enclosed vehicle
@@ -340,7 +343,7 @@ export const COP_BIKE_CONFIG = {
   modelPath: '/assets/vehicles/motorbike.glb',
   modelScale: 0.004,
   modelRotationY: 0,
-  modelOffsetY: 0.3,
+  modelOffsetY: 0.6,
   colliderWidth: 0.35,
   colliderHeight: 0.5,
   colliderLength: 1.0,
@@ -415,12 +418,13 @@ export const MOTORBIKE_COP_CONFIG = {
 
 /**
  * Cop car configuration (uses player's car model with police colors)
+ * TODO: Find proper police car model to replace car.glb
  */
 export const COP_CAR_CONFIG = {
   modelPath: '/assets/vehicles/car.glb',
-  modelScale: 0.01, // Slightly smaller than player's monster truck
+  modelScale: 0.01,
   modelRotationY: -Math.PI / 2,
-  modelOffsetY: -0.2,
+  modelOffsetY: 0,
   colliderWidth: 0.8,
   colliderHeight: 0.5,
   colliderLength: 1.5,

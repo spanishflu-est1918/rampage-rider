@@ -14,6 +14,7 @@ export class Vehicle extends THREE.Group {
 
   private modelContainer: THREE.Group;
   private modelLoaded: boolean = false;
+  private vehicleModel: THREE.Group | null = null;
   private wheels: THREE.Object3D[] = [];
   private frontWheels: THREE.Object3D[] = [];
   private rearWheels: THREE.Object3D[] = [];
@@ -114,16 +115,16 @@ export class Vehicle extends THREE.Group {
   private async loadModel(): Promise<void> {
     try {
       const assetLoader = AssetLoader.getInstance();
-      const cachedGltf = assetLoader.getModel(this.config.modelPath);
+      const precloned = assetLoader.getPreClonedVehicle(this.config.modelPath);
 
-      if (!cachedGltf) {
-        console.error(`[Vehicle] Model not in cache: ${this.config.modelPath}`);
+      if (!precloned) {
+        console.error(`[Vehicle] Model not available: ${this.config.modelPath}`);
         this.createFallbackMesh();
         return;
       }
 
-      // Clone the model scene
-      const model = cachedGltf.scene.clone();
+      const model = precloned.scene;
+      this.vehicleModel = model;
 
       // Setup shadows
       // Disable real shadows (shadow mapping disabled for performance)
@@ -132,6 +133,12 @@ export class Vehicle extends THREE.Group {
       // Apply scale first (needed for accurate bounding box)
       model.scale.setScalar(this.config.modelScale);
       model.rotation.y = this.config.modelRotationY;
+      if (this.config.modelRotationX) {
+        model.rotation.x = this.config.modelRotationX;
+      }
+      if (this.config.modelRotationZ) {
+        model.rotation.z = this.config.modelRotationZ;
+      }
 
       // Auto-center the model based on bounding box
       const box = new THREE.Box3().setFromObject(model);
@@ -218,7 +225,6 @@ export class Vehicle extends THREE.Group {
    */
   createPhysicsBody(world: RAPIER.World, position: THREE.Vector3): void {
     this.world = world;
-
     // Create kinematic position-based body
     const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
       .setTranslation(position.x, position.y, position.z);
@@ -363,7 +369,8 @@ export class Vehicle extends THREE.Group {
 
       const newPosition = this._rapierPosition;
       newPosition.x = translation.x + correctedMovement.x;
-      newPosition.y = Math.max(0.5, translation.y + correctedMovement.y);
+      const minHeight = 0.5;
+      newPosition.y = Math.max(minHeight, translation.y + correctedMovement.y);
       newPosition.z = translation.z + correctedMovement.z;
 
       this.rigidBody.setNextKinematicTranslation(newPosition);
@@ -560,15 +567,10 @@ export class Vehicle extends THREE.Group {
       this.rigidBody = null;
     }
 
-    this.modelContainer.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry?.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
-        } else if (child.material) {
-          child.material.dispose();
-        }
-      }
-    });
+    if (this.vehicleModel) {
+      this.modelContainer.remove(this.vehicleModel);
+      AssetLoader.getInstance().returnVehicleToPool(this.config.modelPath, this.vehicleModel);
+      this.vehicleModel = null;
+    }
   }
 }

@@ -21,6 +21,7 @@ export class CopCar extends THREE.Group {
   private world: RAPIER.World;
   private modelLoaded: boolean = false;
   private modelContainer: THREE.Group;
+  private vehicleModel: THREE.Group | null = null;
 
   // Yuka AI
   private yukaVehicle: YUKA.Vehicle;
@@ -130,6 +131,7 @@ export class CopCar extends THREE.Group {
       }
 
       const model = precloned.scene;
+      this.vehicleModel = model;
       AnimationHelper.setupShadows(model, false, false);
 
       // Apply scale and rotation
@@ -386,14 +388,10 @@ export class CopCar extends THREE.Group {
       this.world.removeRigidBody(this.rigidBody);
     }
 
-    this.modelContainer.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
-        } else if (child.material) {
-          child.material.dispose();
-        }
-      }
-    });
+    if (this.vehicleModel) {
+      this.modelContainer.remove(this.vehicleModel);
+      AssetLoader.getInstance().returnVehicleToPool(COP_CAR_CONFIG.modelPath, this.vehicleModel);
+      this.vehicleModel = null;
+    }
   }
 }

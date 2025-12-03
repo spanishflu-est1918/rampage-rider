@@ -85,7 +85,9 @@ export class MotorbikeCop extends THREE.Group {
 
   // Rider (cop on the bike)
   private riderMixer: THREE.AnimationMixer | null = null;
-  private riderModel: THREE.Object3D | null = null;
+  private riderModel: THREE.Group | null = null;
+  private bikeModel: THREE.Group | null = null;
+  private riderType: string | null = null;
 
   // Attack effects
   private taserBeam: THREE.Line | null = null;
@@ -241,6 +243,7 @@ export class MotorbikeCop extends THREE.Group {
       }
 
       const model = precloned.scene;
+      this.bikeModel = model;
       // Disable real shadow casting (we use blob shadows instead)
       AnimationHelper.setupShadows(model, false, false);
 
@@ -355,6 +358,7 @@ export class MotorbikeCop extends THREE.Group {
       }
 
       this.riderModel = rider;
+      this.riderType = randomCop;
       this.modelContainer.add(rider);
     } catch (error) {
       console.error('[MotorbikeCop] Failed to load rider:', error);
@@ -985,16 +989,17 @@ export class MotorbikeCop extends THREE.Group {
 
     // Dispose cloned materials (SkeletonUtils.clone DOES clone materials)
     // But DON'T dispose geometries - those ARE shared by reference
-    this.modelContainer.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        // Dispose materials (cloned per instance)
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
-        } else if (child.material) {
-          child.material.dispose();
-        }
-        // DON'T dispose geometry - shared across all clones
-      }
-    });
+    if (this.bikeModel) {
+      this.modelContainer.remove(this.bikeModel);
+      AssetLoader.getInstance().returnVehicleToPool(COP_BIKE_CONFIG.modelPath, this.bikeModel);
+      this.bikeModel = null;
+    }
+
+    if (this.riderModel && this.riderType) {
+      this.modelContainer.remove(this.riderModel);
+      AssetLoader.getInstance().returnCopRiderToPool(this.riderType, this.riderModel);
+      this.riderModel = null;
+      this.riderType = null;
+    }
   }
 }
