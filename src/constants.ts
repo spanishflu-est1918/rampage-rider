@@ -421,9 +421,9 @@ export const MOTORBIKE_COP_CONFIG = {
  * TODO: Find proper police car model to replace car.glb
  */
 export const COP_CAR_CONFIG = {
-  modelPath: '/assets/vehicles/car.glb',
-  modelScale: 0.01,
-  modelRotationY: -Math.PI / 2,
+  modelPath: '/assets/vehicles/police_muscle.glb',
+  modelScale: 1.0,
+  modelRotationY: Math.PI,
   modelOffsetY: 0,
   colliderWidth: 0.8,
   colliderHeight: 0.5,
