@@ -47,7 +47,8 @@
       "Bash(brew install:*)",
       "Bash(cp:*)",
       "Bash(git fetch:*)",
-      "SlashCommand(/code-review:code-review)"
+      "SlashCommand(/code-review:code-review)",
+      "mcp__morph-mcp__edit_file"
     ],
     "deny": [],
     "ask": []

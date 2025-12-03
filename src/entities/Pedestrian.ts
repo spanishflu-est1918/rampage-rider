@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
-import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { AssetLoader } from '../core/AssetLoader';
@@ -126,23 +125,22 @@ export class Pedestrian extends THREE.Group {
 
   /**
    * Load pedestrian character model with animations
+   * Uses pre-cloned models from AssetLoader pool (cloned during preload, not runtime)
    */
   private async loadModel(characterType: string): Promise<void> {
     try {
-      // Use cached model from AssetLoader instead of loading fresh!
+      // Use pre-cloned model from pool (cloned during preload, instant at runtime!)
       const assetLoader = AssetLoader.getInstance();
-      const cachedGltf = assetLoader.getModel(`/assets/pedestrians/${characterType}.gltf`);
+      const precloned = assetLoader.getPreClonedPedestrian(characterType);
 
-      if (!cachedGltf) {
-        console.error(`[Pedestrian] Model not in cache: ${characterType}`);
+      if (!precloned) {
+        console.error(`[Pedestrian] Model not available: ${characterType}`);
         return;
       }
 
-      // Use SkeletonUtils to properly clone animated models
-      const clonedScene = SkeletonUtils.clone(cachedGltf.scene);
       const gltf = {
-        scene: clonedScene,
-        animations: cachedGltf.animations
+        scene: precloned.scene,
+        animations: precloned.animations
       };
 
       // Disable real shadow casting (we use blob shadows instead)

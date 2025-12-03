@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
-import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { KinematicCharacterHelper } from '../utils/KinematicCharacterHelper';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { AssetLoader } from '../core/AssetLoader';
@@ -143,7 +142,7 @@ export class Cop extends THREE.Group {
   }
 
   /**
-   * Load cop character model from cache
+   * Load cop character model from pre-cloned pool (instant, no runtime cloning)
    */
   private async loadModel(): Promise<void> {
     // 80% male, 20% female distribution
@@ -153,22 +152,19 @@ export class Cop extends THREE.Group {
 
     const copTypes = isFemale ? femaleTypes : maleTypes;
     const randomCop = AnimationHelper.randomElement(copTypes);
-    const modelPath = `/assets/pedestrians/${randomCop}.gltf`;
-
 
     try {
-      // Use cached model from AssetLoader instead of loading fresh
+      // Use pre-cloned model from pool (cloned during preload, instant at runtime!)
       const assetLoader = AssetLoader.getInstance();
-      const cachedGltf = assetLoader.getModel(modelPath);
+      const precloned = assetLoader.getPreClonedCopRider(randomCop);
 
-      if (!cachedGltf) {
-        console.error(`[Cop] Model not in cache: ${modelPath}`);
+      if (!precloned) {
+        console.error(`[Cop] Model not available: ${randomCop}`);
         this.createFallbackMesh();
         return;
       }
 
-      // Clone the cached model to avoid sharing state between instances
-      const clonedScene = SkeletonUtils.clone(cachedGltf.scene);
+      const clonedScene = precloned.scene;
 
       // Disable real shadow casting (we use blob shadows instead)
       AnimationHelper.setupShadows(clonedScene, false, false);
@@ -186,7 +182,7 @@ export class Cop extends THREE.Group {
       // Setup animations
       this.mixer = new THREE.AnimationMixer(clonedScene);
       this.mixer.timeScale = 1.5;
-      this.animations = cachedGltf.animations;
+      this.animations = precloned.animations;
 
       this.playAnimation('Run', 0.3);
       this.modelLoaded = true;
