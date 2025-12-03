@@ -55,6 +55,30 @@ export class CopManager {
   }
 
   /**
+   * Spawn a single cop at a specific position (used for vehicle cop replacement)
+   * No limit check - used when cops dismount from vehicles
+   */
+  spawnCopAt(position: THREE.Vector3): void {
+    let cop: Cop;
+
+    // Reuse from pool if available
+    if (this.copPool.length > 0) {
+      cop = this.copPool.pop()!;
+      cop.reset(position);
+    } else {
+      cop = new Cop(position, this.world, this.aiManager.getEntityManager());
+    }
+
+    cop.setParentScene(this.scene);
+    if (this.damageCallback) {
+      cop.setDamageCallback(this.damageCallback);
+    }
+
+    this.scene.add(cop);
+    this.cops.push(cop);
+  }
+
+  /**
    * Update cop spawns based on heat level
    */
   updateSpawns(heat: number, playerPosition: THREE.Vector3): void {

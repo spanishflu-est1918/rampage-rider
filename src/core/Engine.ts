@@ -524,7 +524,7 @@ export class Engine {
 
     if (this.bikeCops) {
       this.bikeCops.clear();
-      // Bike cops ram attack damages vehicle, then player if dismounted
+      // Set damage callback once (not every frame)
       this.bikeCops.setDamageCallback((damage: number) => {
         if (this.isInVehicle && this.vehicle) {
           // Damage the bicycle
@@ -800,6 +800,59 @@ export class Engine {
     return playerPos.clone();
   }
 
+  /**
+   * Despawn all cops associated with a specific tier
+   * Called when player changes tier to prevent unfair deaths from cops they can no longer handle
+   * Vehicle cops dismount and become foot cops at their current positions
+   */
+  private despawnCopsFromTier(tier: Tier | null): void {
+    if (!tier || !this.cops) return;
+
+    const positions: THREE.Vector3[] = [];
+
+    switch (tier) {
+      case Tier.FOOT:
+        // Don't clear foot cops - they manage themselves via heat-based spawning
+        break;
+      case Tier.BIKE:
+        // Collect bike cop positions before clearing
+        if (this.bikeCops) {
+          const copData = this.bikeCops.getCopData();
+          for (const data of copData) {
+            positions.push(data.position.clone());
+          }
+          this.bikeCops.clear();
+        }
+        break;
+      case Tier.MOTO:
+        // Collect motorbike cop positions before clearing
+        if (this.motorbikeCops) {
+          const copData = this.motorbikeCops.getCopData();
+          for (const data of copData) {
+            positions.push(data.position.clone());
+          }
+          this.motorbikeCops.clear();
+        }
+        break;
+      case Tier.SEDAN:
+      case Tier.TRUCK:
+        // Collect cop car positions before clearing
+        if (this.copCars) {
+          const copData = this.copCars.getCopData();
+          for (const data of copData) {
+            positions.push(data.position.clone());
+          }
+          this.copCars.clear();
+        }
+        break;
+    }
+
+    // Spawn foot cops at the collected positions (cops "dismount" from vehicles)
+    for (const pos of positions) {
+      this.cops.spawnCopAt(pos);
+    }
+  }
+
   private enterVehicle(): void {
     if (!this.player || !this.vehicle || this.isInVehicle) return;
 
@@ -991,6 +1044,9 @@ export class Engine {
   private switchToAwaitingVehicle(): void {
     if (!this.awaitingVehicle || !this.player) return;
 
+    // Store the tier we're leaving so we can despawn its cops
+    const previousTier = this.currentVehicleTier;
+
     // Exit current vehicle if in one
     if (this.isInVehicle && this.vehicle) {
       // Remove player from current vehicle
@@ -1014,6 +1070,9 @@ export class Engine {
     this.vehicle = this.awaitingVehicle;
     this.currentVehicleTier = this.awaitingVehicleTier;
     this.vehicleSpawned = true;
+
+    // Despawn cops from the tier we just left
+    this.despawnCopsFromTier(previousTier);
 
     // Clear awaiting state
     this.awaitingVehicle = null;
@@ -1050,6 +1109,9 @@ export class Engine {
   private exitVehicle(): void {
     if (!this.vehicle || !this.player) return;
 
+    // Store the tier we're leaving so we can despawn its cops
+    const previousTier = this.currentVehicleTier;
+
     const vehiclePos = this.vehicle.getPosition();
     const safePos = this.findSafeExitPosition(vehiclePos);
 
@@ -1083,6 +1145,12 @@ export class Engine {
     this.isInVehicle = false;
     this.vehicleSpawned = false;
     this.stats.tier = Tier.FOOT;
+
+    // When player vehicle destroyed, ALL cops dismount (not just the tier we left)
+    // Clear all vehicle cops and spawn them as foot cops
+    this.despawnCopsFromTier(Tier.BIKE);
+    this.despawnCopsFromTier(Tier.MOTO);
+    this.despawnCopsFromTier(Tier.SEDAN); // Also handles TRUCK
 
     // Start vehicle respawn cooldown
     this.vehicleRespawnCooldown = Engine.VEHICLE_RESPAWN_COOLDOWN_TIME;
@@ -1813,7 +1881,7 @@ export class Engine {
       this.performanceStats.fps = 1000 / (frameStart - this.performanceStats.lastFrameTime);
       this.performanceStats.lastFrameTime = frameStart;
 
-      // Capture Three.js renderer stats (draw calls, triangles, memory)
+      // Capture Three.js renderer stats (draw calls, triangles, etc.)
       const info = this.renderer.info;
       this.performanceStats.renderer = {
         drawCalls: info.render.calls,
@@ -1841,6 +1909,8 @@ export class Engine {
       history.cops.push(this.performanceStats.cops);
       history.pedestrians.push(this.performanceStats.pedestrians);
       history.world.push(this.performanceStats.world);
+      history.particles.push(this.performanceStats.particles);
+      history.bloodDecals.push(this.performanceStats.bloodDecals);
       history.rendering.push(this.performanceStats.rendering);
       history.drawCalls.push(this.performanceStats.renderer.drawCalls);
 
@@ -1852,11 +1922,13 @@ export class Engine {
       this.performanceStats.avgCops = history.cops.average();
       this.performanceStats.avgPedestrians = history.pedestrians.average();
       this.performanceStats.avgWorld = history.world.average();
+      this.performanceStats.avgParticles = history.particles.average();
+      this.performanceStats.avgBloodDecals = history.bloodDecals.average();
       this.performanceStats.avgRendering = history.rendering.average();
       this.performanceStats.avgDrawCalls = history.drawCalls.average();
 
       if (this.performanceStats.frameTime > this.performanceStats.worstFrame.frameTime) {
-        const { physics, entities, player, cops, pedestrians, world, rendering, renderer } = this.performanceStats;
+        const { physics, entities, player, cops, pedestrians, world, particles, bloodDecals, rendering, renderer } = this.performanceStats;
 
         let bottleneck: typeof this.performanceStats.worstFrame.bottleneck = 'none';
         let maxTime = 0;
@@ -1866,6 +1938,8 @@ export class Engine {
         if (cops > maxTime) { maxTime = cops; bottleneck = 'cops'; }
         if (pedestrians > maxTime) { maxTime = pedestrians; bottleneck = 'pedestrians'; }
         if (world > maxTime) { maxTime = world; bottleneck = 'world'; }
+        if (particles > maxTime) { maxTime = particles; bottleneck = 'particles'; }
+        if (bloodDecals > maxTime) { maxTime = bloodDecals; bottleneck = 'bloodDecals'; }
         if (rendering > maxTime) { maxTime = rendering; bottleneck = 'rendering'; }
 
         this.performanceStats.worstFrame = {
@@ -1876,8 +1950,8 @@ export class Engine {
           cops,
           pedestrians,
           world,
-          particles: this.performanceStats.particles,
-          bloodDecals: this.performanceStats.bloodDecals,
+          particles,
+          bloodDecals,
           rendering,
           bottleneck,
           counts: { ...this.performanceStats.counts },
@@ -2370,7 +2444,7 @@ export class Engine {
       gradient.addColorStop(0.2, 'rgba(255, 255, 200, 0.9)');
       gradient.addColorStop(0.4, 'rgba(255, 200, 50, 0.7)');
       gradient.addColorStop(0.7, 'rgba(255, 150, 0, 0.3)');
-      gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+      gradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
 
       ctx.fillStyle = gradient;
       ctx.beginPath();
@@ -2629,7 +2703,7 @@ export class Engine {
 
   /**
    * Calculate combo score multiplier (x1.0 → x3.5 based on combo count)
-   * Uses half-rate of visual multiplier for balanced scoring
+   * Uses half-rate-of visual multiplier for balanced scoring
    */
   private getComboMultiplier(): number {
     const { COMBO_MULTIPLIER_MAX, COMBO_MULTIPLIER_SCALE } = SCORING_CONFIG;
