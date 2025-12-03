@@ -12,6 +12,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-12-03]
 
+### Vehicle Cops Dismount on Tier Change
+
+**Added:**
+- **Cop dismounting system**: When player's vehicle is destroyed or tier changes, all vehicle cops (bike, moto, car) dismount and pursue on foot
+- `despawnCopsFromTier()` method in `Engine.ts` to handle cop tier transitions
+- `spawnCopAt()` method in `CopManager.ts` to spawn foot cops at specific positions
+
+**Implementation:**
+- When vehicle destroyed: All vehicle cops collect positions, clear from scene, spawn as foot cops at those positions
+- Uses existing object pool system to avoid memory leaks
+- No limit on dismounted cops (allows pressure to build when vehicle destroyed)
+- Vehicle cops properly transition to foot pursuit
+
+**Files Modified:**
+- `src/core/Engine.ts` - Added dismount logic in `exitVehicle()` and `switchToAwaitingVehicle()`
+- `src/managers/CopManager.ts` - Added `spawnCopAt()` for positional spawning
+
+**Behavior:**
+- Destroy bike → bike cops dismount and chase on foot
+- Destroy moto → all vehicle cops (moto, bike) dismount
+- Destroy car → all vehicle cops (car, moto, bike) dismount
+- Upgrade tiers → cops from previous tier dismount
+
+---
+
+## [2024-12-03]
+
 ### Motorbike Model Fix
 
 **Fixed:**
