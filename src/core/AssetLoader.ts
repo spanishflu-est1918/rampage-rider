@@ -280,6 +280,8 @@ export class AssetLoader {
     }
 
     if (pool.length >= this.COP_CLONES_PER_MODEL) {
+      // Pool is full, dispose of the model to prevent memory leak
+      this.disposeObject(scene);
       return;
     }
 
@@ -317,6 +319,8 @@ export class AssetLoader {
     }
 
     if (pool.length >= this.VEHICLE_CLONES) {
+      // Pool is full, dispose of the model to prevent memory leak
+      this.disposeObject(scene);
       return;
     }
 
@@ -324,6 +328,19 @@ export class AssetLoader {
     scene.rotation.set(0, 0, 0);
     scene.scale.set(1, 1, 1);
     pool.push(scene);
+  }
+
+  private disposeObject(obj: THREE.Object3D): void {
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach((m) => m.dispose());
+        } else if (child.material) {
+          child.material.dispose();
+        }
+      }
+    });
   }
 
   /**
