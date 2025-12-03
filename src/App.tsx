@@ -68,6 +68,7 @@ function App() {
     heat: 0,
     wantedStars: 0,
     inPursuit: false,
+    inRampageMode: false,
     killHistory: [],
     copHealthBars: [],
     isTased: false,

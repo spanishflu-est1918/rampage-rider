@@ -64,8 +64,8 @@ export class RampageDimension {
     this.rayMaterial = material;
     this.scene.add(this.radialRays);
 
-    // Create speed line pool
-    this.speedLineGeometry = new THREE.PlaneGeometry(0.08, 1);
+    // Create speed line pool (thicker for visibility)
+    this.speedLineGeometry = new THREE.PlaneGeometry(0.15, 1);
     this.speedLineMaterial = new THREE.MeshBasicMaterial({
       color: RAMPAGE_DIMENSION.SPEED_LINE_COLOR,
       transparent: true,
@@ -125,7 +125,7 @@ export class RampageDimension {
       color: RAY_COLOR,
       transparent: true,
       opacity: 0,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending, // Normal instead of Additive for visibility on white
       depthWrite: false,
       depthTest: false,
       side: THREE.DoubleSide,

@@ -583,8 +583,15 @@ export class BuildingManager {
    * Set visibility of all buildings (for Rampage Dimension effect)
    */
   setAllVisible(visible: boolean): void {
+    console.log('BuildingManager.setAllVisible', visible, 'buildings:', this.buildings.length);
     for (const building of this.buildings) {
-      building.mesh.visible = visible;
+      // Traverse all children to ensure complete visibility toggle
+      let count = 0;
+      building.mesh.traverse((child) => {
+        child.visible = visible;
+        count++;
+      });
+      console.log('  building mesh children:', count);
       building.shadow.visible = visible;
       for (const light of building.lights) {
         light.visible = visible;
@@ -592,7 +599,9 @@ export class BuildingManager {
     }
     // Also hide/show light strands
     for (const strand of this.lightStrands) {
-      strand.visible = visible;
+      strand.traverse((child) => {
+        child.visible = visible;
+      });
     }
   }
 

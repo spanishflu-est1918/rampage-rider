@@ -395,7 +395,10 @@ export class ChristmasTreeManager {
    */
   setAllVisible(visible: boolean): void {
     for (const tree of this.trees) {
-      tree.mesh.visible = visible;
+      // Traverse all children to ensure complete visibility toggle
+      tree.mesh.traverse((child) => {
+        child.visible = visible;
+      });
     }
   }
 }

@@ -267,6 +267,7 @@ export class Engine {
     heat: 0,
     wantedStars: 0,
     inPursuit: false,
+    inRampageMode: false,
     killHistory: [],
     copHealthBars: [],
     isTased: false,
@@ -626,6 +627,7 @@ export class Engine {
       heat: 0,
       wantedStars: 0,
       inPursuit: false,
+      inRampageMode: false,
       killHistory: [],
       copHealthBars: [],
       isTased: false,
@@ -1579,7 +1581,7 @@ export class Engine {
     }
   }
 
-  private handleMotorbikeShoot(): void {
+  private handleMotorbikeBlast(): void {
     if (!this.vehicle || !this.player) return;
     const cfg = PLAYER_ATTACK_CONFIG.MOTORBIKE;
 
@@ -2067,8 +2069,11 @@ export class Engine {
                 this.handleBicycleAttack();
                 this.player.playBicycleAttack();
               } else if (vehicleType === VehicleType.MOTORBIKE) {
-                this.handleMotorbikeShoot();
-                this.player.playMotorbikeShoot();
+                // Blast attack only available in rampage mode (10+ combo)
+                if (this.stats.inRampageMode) {
+                  this.handleMotorbikeBlast();
+                  this.player.playMotorbikeShoot();
+                }
               }
             }
           }
@@ -2119,6 +2124,10 @@ export class Engine {
     // Update Rampage Dimension effect
     if (this.rampageDimension) {
       this.rampageDimension.update(dt, this.camera);
+      // Keep environment hidden while in rampage dimension (needed because buildings load async)
+      if (this.inRampageDimension) {
+        this.setEnvironmentVisible(false);
+      }
     }
     if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.world = performance.now() - worldStart;
 
@@ -2758,7 +2767,21 @@ export class Engine {
   /**
    * Check and announce combo milestones (5, 10, 15, 20, 30, 50)
    */
+  /**
+   * Check for combo milestones and activate/deactivate rampage mode
+   * Rampage mode activates at 10+ combo, unlocking powerful abilities
+   */
   private checkComboMilestones(): void {
+    // Update rampage mode state (activates at 10+ combo)
+    const wasInRampageMode = this.stats.inRampageMode;
+    this.stats.inRampageMode = this.stats.combo >= 10;
+
+    // Announce rampage mode activation
+    if (!wasInRampageMode && this.stats.inRampageMode) {
+      this.triggerKillNotification('RAMPAGE MODE!', true, 0, 'alert');
+      this.shakeCamera(3.0);
+    }
+
     // Find the highest milestone we've crossed
     let highestMilestone = 0;
     let milestoneMessage = '';
@@ -2841,18 +2864,46 @@ export class Engine {
    * Toggle visibility of all environment objects (for Rampage Dimension)
    */
   private setEnvironmentVisible(visible: boolean): void {
-    // Ground
-    if (this.groundMesh) {
-      this.groundMesh.visible = visible;
+    // Collect all objects we want to KEEP visible
+    const keepVisible = new Set<THREE.Object3D>();
+
+    // Player and all children (RogueHooded_*, dagger)
+    if (this.player) {
+      this.player.traverse((child) => keepVisible.add(child));
     }
 
-    // Buildings (market stalls), lamp posts, trees
-    this.buildings?.setAllVisible(visible);
-    this.lampPosts?.setAllVisible(visible);
-    this.christmasTrees?.setAllVisible(visible);
+    // Vehicle and all children
+    if (this.vehicle) {
+      this.vehicle.traverse((child) => keepVisible.add(child));
+    }
 
-    // Tables (biergarten tables in the market)
-    this.crowd?.setTablesVisible(visible);
+    // Pedestrians
+    if (this.crowd) {
+      for (const ped of this.crowd.getPedestrians()) {
+        ped.traverse((child) => keepVisible.add(child));
+      }
+    }
+
+
+    // Traverse and hide/show
+    this.scene.traverse((object) => {
+      // Only affect renderable objects
+      if (!(object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh || object instanceof THREE.SkinnedMesh || object instanceof THREE.Points || object instanceof THREE.Line)) {
+        return;
+      }
+
+      // Keep rampage dimension effects (renderOrder >= 999)
+      if (object.renderOrder >= 999) return;
+
+      // Keep particles (Points = snow)
+      if (object instanceof THREE.Points) return;
+
+      // Keep player, vehicle, pedestrians
+      if (keepVisible.has(object)) return;
+
+      // Hide/show everything else (buildings, ground, trees, tables, lamp posts, shadows)
+      object.visible = visible;
+    });
   }
 
   /**
@@ -2878,11 +2929,29 @@ export class Engine {
   }
 
   /**
-   * Cleanup
+   * Cleanup - dispose all resources to free WASM memory
    */
   dispose(): void {
     this.stop();
-    this.physics.dispose();
+
+    // Dispose entities BEFORE physics world (they hold rigid body references)
+    if (this.player) {
+      this.player.dispose();
+      this.scene.remove(this.player);
+      this.player = null;
+    }
+    if (this.vehicle) {
+      this.vehicle.dispose();
+      this.scene.remove(this.vehicle);
+      this.vehicle = null;
+    }
+    if (this.awaitingVehicle) {
+      this.awaitingVehicle.dispose();
+      this.scene.remove(this.awaitingVehicle);
+      this.awaitingVehicle = null;
+    }
+
+    // Clear managers (they also dispose physics bodies)
     this.ai.clear();
     if (this.crowd) {
       this.crowd.clear();
@@ -2890,6 +2959,14 @@ export class Engine {
     if (this.cops) {
       this.cops.clear();
     }
+    if (this.motorbikeCops) {
+      this.motorbikeCops.clear();
+    }
+
+    // Now safe to dispose physics world
+    this.physics.dispose();
+
+    // Dispose visual resources
     if (this.buildings) {
       this.buildings.clear();
     }

@@ -327,7 +327,10 @@ export class LampPostManager {
    */
   setAllVisible(visible: boolean): void {
     for (const lampPost of this.lampPosts) {
-      lampPost.mesh.visible = visible;
+      // Traverse all children to ensure complete visibility toggle
+      lampPost.mesh.traverse((child) => {
+        child.visible = visible;
+      });
     }
   }
 }
