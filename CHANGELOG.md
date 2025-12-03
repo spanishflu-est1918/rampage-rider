@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2024-12-03]
+
+### Motorbike Model Fix
+
+**Fixed:**
+- **Motorbike Y-axis positioning bug**: Model was unresponsive to `modelOffsetY` changes due to nested Sketchfab transforms with -90° X rotation baked into child nodes
+- **Root cause**: GLTF had `Sketchfab_model` child node with `translation: [0, 0.3, 0]` and `-90° X rotation` that transformed Y offsets into Z movement
+- **Solution**: Re-exported model in Blender with flattened hierarchy and applied transforms
+  - Cleared parent relationships (Alt+P → Keep Transform)
+  - Applied all transforms (Ctrl+A → All Transforms)
+  - Positioned wheels at Y=0, centered on X/Z
+  - Rotated to face correct direction (-Z forward)
+
+**Changed:**
+- `modelScale`: 0.0045 → 1.0 (model now game-scale, ~2m tall)
+- `modelOffsetY`: 0.6 → -0.01 (wheels at ground level)
+- `modelRotationY`: 0 (rotation baked into model)
+- `riderOffsetY`: 0.5 → 1.0 (adjusted for new bike scale)
+- `COP_BIKE_CONFIG`: Same scale/offset updates
+- `MotorbikeCop.ts` rider scale: 0.0035 → 0.9 (proportional to new bike)
+
+**Files Modified:**
+- `public/assets/vehicles/motorbike.glb` - Clean re-export from Blender
+- `public/assets/vehicles/motorbike.meshopt.glb` - Regenerated with draco compression
+- `src/constants.ts` - MOTORBIKE and COP_BIKE_CONFIG values
+- `src/entities/MotorbikeCop.ts` - Rider scale and position
+
+---
+
 ## [2024-12-02]
 
 ### Cop Escalation Balance & Code Quality

@@ -317,13 +317,13 @@ export class MotorbikeCop extends THREE.Group {
       const rider = precloned.scene;
       const animations = precloned.animations;
 
-      // Scale rider to match bike scale (bike is 0.004, rider needs to be proportional)
-      const riderScale = 0.0035;
+      // Scale rider to match bike scale (bike is now 1.0 scale, ~2m tall)
+      const riderScale = 0.9;
       rider.scale.setScalar(riderScale);
 
       // Position rider on the bike seat
       // Note: modelContainer already has bike positioned, rider sits relative to that
-      rider.position.set(0, 0.7, 0); // Seat height on motorbike
+      rider.position.set(0, 1.0, 0); // Seat height on motorbike (model is ~2m tall)
       rider.rotation.y = 0; // Face forward
 
       // Disable shadows (using blob shadow)
