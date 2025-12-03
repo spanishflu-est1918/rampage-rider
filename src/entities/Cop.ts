@@ -512,8 +512,8 @@ export class Cop extends THREE.Group {
 
       // Update animation based on movement (only if not attacking)
       if (!this.isCurrentlyAttacking) {
-        const speedSq = this.yukaVehicle.velocity.lengthSquared();
-        if (speedSq > 0.25) {
+        const speed = this.yukaVehicle.velocity.length();
+        if (speed > 0.5) {
           if (this.currentAnimation !== 'Run') {
             this.playAnimation('Run', 0.1);
           }
