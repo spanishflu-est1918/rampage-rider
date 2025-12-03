@@ -34,6 +34,10 @@ This project uses a two-file documentation system to track progress:
 
 ### Workflow Rules
 
+**CRITICAL - NEVER DO THESE:**
+- ❌ **NEVER commit without user testing and approval first**
+- ❌ **NEVER run `npm run dev` - user manages the dev server**
+
 **When completing tasks:**
 1. Mark the task as complete in IMPLEMENTATION_PLAN.md (`[x]`)
 2. Add a detailed entry to CHANGELOG.md with:
@@ -42,7 +46,8 @@ This project uses a two-file documentation system to track progress:
    - Files created/modified
    - Code examples where relevant
    - Any breaking changes or migration notes
-3. Commit both files together
+3. **WAIT FOR USER TO TEST**
+4. Only commit after user approves
 
 **When planning new work:**
 1. Add tasks to IMPLEMENTATION_PLAN.md under appropriate phase
@@ -53,7 +58,8 @@ This project uses a two-file documentation system to track progress:
 - Run `npx tsc --noEmit` to check for type errors
 - Fix any blocking type errors (non-blocking 8bitcn library errors are acceptable)
 - Update both IMPLEMENTATION_PLAN.md and CHANGELOG.md
-- Commit with descriptive message
+- **WAIT FOR USER TO TEST**
+- Commit with descriptive message only after user approval
 
 ## Development Commands
 

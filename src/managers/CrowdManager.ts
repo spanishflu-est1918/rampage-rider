@@ -671,11 +671,11 @@ export class CrowdManager {
    */
   clear(): void {
     for (const pedestrian of this.pedestrians) {
-      pedestrian.destroy(this.world);
+      pedestrian.destroy();
     }
 
     for (const pedestrian of this.pedestrianPool) {
-      pedestrian.destroy(this.world);
+      pedestrian.destroy();
     }
 
     this.pedestrians = [];
