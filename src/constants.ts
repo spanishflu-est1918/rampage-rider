@@ -273,8 +273,8 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     modelRotationY: 0, // Model already faces correct direction
     modelRotationX: 0,
     modelOffsetY: -0.01, // Wheels at Y=0, slight adjustment to touch ground
-    riderOffsetY: 0.5, // Height for motorbike seat
-    riderOffsetZ: -0.5, // Move back to sit on seat
+    riderOffsetY: 1.0, // Height for motorbike seat (bike is ~2m tall)
+    riderOffsetZ: 0, // Centered on seat
     hideRider: false, // Show rider on motorbike
     killRadius: 2.0,
     causesRagdoll: false, // Too light to send bodies flying
