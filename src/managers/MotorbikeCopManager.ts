@@ -46,6 +46,10 @@ export class MotorbikeCopManager {
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempSpawnPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempBehindDir: THREE.Vector3 = new THREE.Vector3();
+  private readonly _coneDirection: THREE.Vector3 = new THREE.Vector3();
+  private readonly _killPositionPool: THREE.Vector3[] = [];
+  private readonly MAX_KILL_POSITIONS = MOTORBIKE_COP_CONFIG.MAX_TOTAL;
+  private _killPositionPoolIndex = 0;
 
   // Pre-calculated squared distances for attack range checks (avoid sqrt in hot loop)
   private static readonly SHOOT_RANGE_SQ = MOTORBIKE_COP_CONFIG.SHOOT_RANGE * MOTORBIKE_COP_CONFIG.SHOOT_RANGE;
@@ -64,6 +68,10 @@ export class MotorbikeCopManager {
     this.scene = scene;
     this.world = world;
     this.aiManager = aiManager;
+
+    for (let i = 0; i < this.MAX_KILL_POSITIONS; i++) {
+      this._killPositionPool.push(new THREE.Vector3());
+    }
   }
 
   /**
@@ -338,23 +346,31 @@ export class MotorbikeCopManager {
     let killCount = 0;
     let totalPoints = 0;
     const killPositions: THREE.Vector3[] = [];
+    const radiusSq = radius * radius;
+
+    this._killPositionPoolIndex = 0;
+    let normalizedDirection: THREE.Vector3 | null = null;
+    let coneThreshold = 0;
+    if (direction) {
+      normalizedDirection = this._coneDirection.copy(direction).normalize();
+      coneThreshold = Math.cos(coneAngle * 0.5);
+    }
 
     for (const cop of this.cops) {
       if (cop.isDeadState()) continue;
       if (killCount >= maxKills) break;
 
       const copPos = cop.getPosition();
-      const distance = copPos.distanceTo(position);
+      const distanceSq = copPos.distanceToSquared(position);
 
-      if (distance < radius) {
+      if (distanceSq < radiusSq) {
         let inCone = true;
 
-        if (direction) {
+        if (normalizedDirection) {
           // Reuse pre-allocated vector for cone check
           this._tempDirection.subVectors(copPos, position).normalize();
-          const dotProduct = direction.dot(this._tempDirection);
-          const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
-          inCone = angle <= coneAngle / 2;
+          const dotProduct = normalizedDirection.dot(this._tempDirection);
+          inCone = dotProduct >= coneThreshold;
         }
 
         if (inCone) {
@@ -365,7 +381,11 @@ export class MotorbikeCopManager {
 
           if (cop.isDeadState()) {
             killCount++;
-            killPositions.push(copPos.clone());
+            if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+              const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+              pooledPos.copy(copPos);
+              killPositions.push(pooledPos);
+            }
 
             // Add points based on variant
             const variantConfig = MOTORBIKE_COP_CONFIG.VARIANTS[cop.getVariant()];

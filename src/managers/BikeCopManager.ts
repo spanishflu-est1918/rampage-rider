@@ -28,11 +28,20 @@ export class BikeCopManager {
   private readonly _tempSpawnPos = new THREE.Vector3();
   private readonly _tempCopPos = new THREE.Vector3();
   private readonly _tempAttackDir = new THREE.Vector3();
+  private readonly _coneDirection = new THREE.Vector3();
+  private readonly _killPositionPool: THREE.Vector3[] = [];
+  private readonly MAX_KILL_POSITIONS = 4;
+  private _killPositionPoolIndex = 0;
+  private readonly _copDataResult: Array<{ position: THREE.Vector3; health: number; maxHealth: number }> = [];
 
   constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
     this.world = world;
     this.aiManager = aiManager;
+
+    for (let i = 0; i < this.MAX_KILL_POSITIONS; i++) {
+      this._killPositionPool.push(new THREE.Vector3());
+    }
   }
 
   setDamageCallback(callback: (damage: number) => void): void {
@@ -120,6 +129,14 @@ export class BikeCopManager {
     let killCount = 0;
     const killPositions: THREE.Vector3[] = [];
     const radiusSq = radius * radius;
+    this._killPositionPoolIndex = 0;
+
+    let normalizedDirection: THREE.Vector3 | null = null;
+    let coneThreshold = 0;
+    if (direction) {
+      normalizedDirection = this._coneDirection.copy(direction).normalize();
+      coneThreshold = Math.cos(coneAngle * 0.5);
+    }
 
     for (const cop of this.cops) {
       if (cop.isDeadState()) continue;
@@ -131,11 +148,10 @@ export class BikeCopManager {
       if (distanceSq < radiusSq) {
         let inCone = true;
 
-        if (direction) {
+        if (normalizedDirection) {
           this._tempAttackDir.subVectors(this._tempCopPos, position).normalize();
-          const dotProduct = direction.dot(this._tempAttackDir);
-          const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
-          inCone = angle <= coneAngle / 2;
+          const dotProduct = normalizedDirection.dot(this._tempAttackDir);
+          inCone = dotProduct >= coneThreshold;
         }
 
         if (inCone) {
@@ -144,7 +160,11 @@ export class BikeCopManager {
 
           if (cop.isDeadState()) {
             killCount++;
-            killPositions.push(this._tempCopPos.clone());
+            if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+              const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+              pooledPos.copy(this._tempCopPos);
+              killPositions.push(pooledPos);
+            }
           }
         }
       }
@@ -187,11 +207,11 @@ export class BikeCopManager {
   }
 
   getCopData(): Array<{ position: THREE.Vector3; health: number; maxHealth: number }> {
-    const result: Array<{ position: THREE.Vector3; health: number; maxHealth: number }> = [];
+    this._copDataResult.length = 0;
 
     for (const cop of this.cops) {
       if (!cop.isDeadState()) {
-        result.push({
+        this._copDataResult.push({
           position: cop.getPosition(),
           health: cop.getHealth(),
           maxHealth: cop.getMaxHealth(),
@@ -199,7 +219,7 @@ export class BikeCopManager {
       }
     }
 
-    return result;
+    return this._copDataResult;
   }
 
   clear(): void {

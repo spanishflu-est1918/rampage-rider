@@ -328,7 +328,10 @@ export class Pedestrian extends THREE.Group {
 
     // Deer-in-headlights: freeze briefly before fleeing (gives player time to catch)
     this.panicFreezeTimer = 0.6;
-    this.pendingDangerPosition = dangerPosition.clone();
+    if (!this.pendingDangerPosition) {
+      this.pendingDangerPosition = new THREE.Vector3();
+    }
+    this.pendingDangerPosition.copy(dangerPosition);
 
     // Stop moving during freeze
     this.yukaVehicle.steering.clear();

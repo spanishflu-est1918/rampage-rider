@@ -28,10 +28,21 @@ export class CopCarManager {
   private readonly _tempSpawnDir = new THREE.Vector3();
   private readonly _tempPerpDir = new THREE.Vector3();
 
+  // PERF: Pre-allocated kill position pool (avoids per-kill allocations)
+  private readonly _killPositionPool: THREE.Vector3[] = [];
+  private readonly MAX_KILL_POSITIONS = 5; // Max cop cars killed per attack
+  private _killPositionPoolIndex = 0;
+  private readonly _copDataResult: Array<{ position: THREE.Vector3; health: number; maxHealth: number }> = [];
+
   constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
     this.world = world;
     this.aiManager = aiManager;
+
+    // PERF: Pre-allocate kill position pool
+    for (let i = 0; i < this.MAX_KILL_POSITIONS; i++) {
+      this._killPositionPool.push(new THREE.Vector3());
+    }
   }
 
   setDamageCallback(callback: (damage: number, attackerPosition: THREE.Vector3) => void): void {
@@ -47,16 +58,19 @@ export class CopCarManager {
     playerVelocity: THREE.Vector3,
     deltaTime: number
   ): void {
-    // Remove dead cars
-    this.cars = this.cars.filter((car) => {
+    // PERF: Remove dead cars using splice loop instead of filter (avoids array allocation)
+    let activeCars = 0;
+    for (let i = this.cars.length - 1; i >= 0; i--) {
+      const car = this.cars[i];
       if (car.isDeadState() && !(car as THREE.Group).visible) {
         this.scene.remove(car);
         this.scene.remove(car.getBlobShadow());
         car.dispose();
-        return false;
+        this.cars.splice(i, 1);
+      } else if (!car.isDeadState()) {
+        activeCars++;
       }
-      return true;
-    });
+    }
 
     // Update spawn cooldown
     this.spawnCooldown -= deltaTime;
@@ -71,8 +85,7 @@ export class CopCarManager {
         ? COP_CAR_CONFIG.MAX_CARS
         : COP_CAR_CONFIG.MAX_CARS_INITIAL;
 
-    // Check if we need more cars
-    const activeCars = this.cars.filter((car) => !car.isDeadState()).length;
+    // Check if we need more cars (activeCars already counted above)
     if (activeCars >= maxCars) return;
 
     // Spawn behind player
@@ -137,6 +150,9 @@ export class CopCarManager {
     const killPositions: THREE.Vector3[] = [];
     const radiusSq = radius * radius;
 
+    // PERF: Reset kill position pool index for this attack
+    this._killPositionPoolIndex = 0;
+
     for (const car of this.cars) {
       if (car.isDeadState()) continue;
 
@@ -147,7 +163,12 @@ export class CopCarManager {
         car.trample();
         killCount++;
         totalPoints += car.getPointValue();
-        killPositions.push(this._tempCarPos.clone());
+        // PERF: Use pre-allocated pool instead of clone()
+        if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+          const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+          pooledPos.copy(this._tempCarPos);
+          killPositions.push(pooledPos);
+        }
       }
     }
 
@@ -165,6 +186,8 @@ export class CopCarManager {
     const killPositions: THREE.Vector3[] = [];
     const radiusSq = radius * radius;
 
+    this._killPositionPoolIndex = 0;
+
     for (const car of this.cars) {
       if (car.isDeadState()) continue;
 
@@ -179,7 +202,11 @@ export class CopCarManager {
         if (car.isDeadState()) {
           killCount++;
           totalPoints += car.getPointValue();
-          killPositions.push(this._tempCarPos.clone());
+          if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+            const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+            pooledPos.copy(this._tempCarPos);
+            killPositions.push(pooledPos);
+          }
         }
       }
     }
@@ -197,11 +224,11 @@ export class CopCarManager {
   }
 
   getCopData(): Array<{ position: THREE.Vector3; health: number; maxHealth: number }> {
-    const result: Array<{ position: THREE.Vector3; health: number; maxHealth: number }> = [];
+    this._copDataResult.length = 0;
 
     for (const car of this.cars) {
       if (!car.isDeadState()) {
-        result.push({
+        this._copDataResult.push({
           position: car.getPosition(),
           health: car.getHealth(),
           maxHealth: car.getMaxHealth(),
@@ -209,7 +236,7 @@ export class CopCarManager {
       }
     }
 
-    return result;
+    return this._copDataResult;
   }
 
   clear(): void {

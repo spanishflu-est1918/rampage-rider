@@ -2272,35 +2272,34 @@ export class Engine {
       // Reset and reuse pre-allocated array
       this._healthBarResult.length = 0;
 
-      // Collect cop data from all cop managers
-      const allCopData: Array<{ position: THREE.Vector3; health: number; maxHealth: number }> = [];
+      const processCopData = (copData: Array<{ position: THREE.Vector3; health: number; maxHealth: number }>) => {
+        for (const cop of copData) {
+          // Project 3D world position to 2D screen coordinates
+          this._tempScreenPos.copy(cop.position);
+          this._tempScreenPos.y += 1.5; // Offset up to above head
+          this._tempScreenPos.project(this.camera);
+
+          // Convert normalized device coordinates to screen pixels
+          const x = (this._tempScreenPos.x * 0.5 + 0.5) * canvas.clientWidth;
+          const y = (-(this._tempScreenPos.y * 0.5) + 0.5) * canvas.clientHeight;
+
+          this._healthBarResult.push({
+            x,
+            y,
+            health: cop.health,
+            maxHealth: cop.maxHealth
+          });
+        }
+      };
+
       if (this.cops) {
-        allCopData.push(...this.cops.getCopData());
+        processCopData(this.cops.getCopData());
       }
       if (this.bikeCops) {
-        allCopData.push(...this.bikeCops.getCopData());
+        processCopData(this.bikeCops.getCopData());
       }
       if (this.copCars) {
-        allCopData.push(...this.copCars.getCopData());
-      }
-
-      for (const cop of allCopData) {
-        // Project 3D world position to 2D screen coordinates
-        // Just offset up from cop's actual position for head height
-        this._tempScreenPos.copy(cop.position);
-        this._tempScreenPos.y += 1.5; // Offset up to above head
-        this._tempScreenPos.project(this.camera);
-
-        // Convert normalized device coordinates to screen pixels
-        const x = (this._tempScreenPos.x * 0.5 + 0.5) * canvas.clientWidth;
-        const y = (-(this._tempScreenPos.y * 0.5) + 0.5) * canvas.clientHeight;
-
-        this._healthBarResult.push({
-          x,
-          y,
-          health: cop.health,
-          maxHealth: cop.maxHealth
-        });
+        processCopData(this.copCars.getCopData());
       }
 
       this.stats.copHealthBars = this._healthBarResult;

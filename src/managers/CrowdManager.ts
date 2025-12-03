@@ -98,6 +98,7 @@ export class CrowdManager {
   private readonly _tempDirection: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempKillPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempSpawnPos: THREE.Vector3 = new THREE.Vector3();
+  private readonly _tempConeDirection: THREE.Vector3 = new THREE.Vector3();
 
   // PERF: Pre-allocated kill position pool (avoids per-kill allocations during combos)
   private readonly _killPositionPool: THREE.Vector3[] = [];
@@ -286,6 +287,14 @@ export class CrowdManager {
     // Pre-calculate squared radius to avoid sqrt in hot loop
     const radiusSq = radius * radius;
 
+    // Precompute cone threshold and normalized direction once per attack
+    let normalizedDirection: THREE.Vector3 | null = null;
+    let coneThreshold = 0;
+    if (direction) {
+      normalizedDirection = this._tempConeDirection.copy(direction).normalize();
+      coneThreshold = Math.cos(coneAngle * 0.5);
+    }
+
     for (const pedestrian of this.pedestrians) {
       if (pedestrian.isDeadState()) continue;
       if (killCount >= maxKills) break;
@@ -296,12 +305,11 @@ export class CrowdManager {
       if (distanceSq < radiusSq) {
         let inCone = true;
 
-        if (direction) {
+        if (normalizedDirection) {
           // Reuse pre-allocated vector for cone check
           this._tempDirection.subVectors(pedPos, position).normalize();
-          const dotProduct = direction.dot(this._tempDirection);
-          const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
-          inCone = angle <= coneAngle / 2;
+          const dotProduct = normalizedDirection.dot(this._tempDirection);
+          inCone = dotProduct >= coneThreshold;
         }
 
         if (inCone) {
@@ -634,8 +642,8 @@ export class CrowdManager {
       this.spawnPedestrian(playerPosition);
     }
 
-    // Clear the queue
-    this.pedestriansToRemove = [];
+    // Clear the queue without allocating a new array
+    this.pedestriansToRemove.length = 0;
   }
 
   /**

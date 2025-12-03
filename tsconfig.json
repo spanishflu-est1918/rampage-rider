@@ -24,9 +24,11 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "strict": true
   },
   "exclude": [
-    "sketchbook-ref"
+    "sketchbook-ref",
+    "old-code"
   ]
 }

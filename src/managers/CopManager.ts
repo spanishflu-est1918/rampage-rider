@@ -25,6 +25,10 @@ export class CopManager {
   // Pre-allocated vectors to avoid GC pressure in hot paths
   private _tempDirection = new THREE.Vector3();
   private _tempSpawnPos = new THREE.Vector3();
+  private readonly _coneDirection = new THREE.Vector3();
+  private readonly _killPositionPool: THREE.Vector3[] = [];
+  private readonly MAX_KILL_POSITIONS = 8;
+  private _killPositionPoolIndex = 0;
 
   // Pre-allocated array for getCopData (reused each call, avoids filter/map allocations)
   private _copDataResult: Array<{ position: THREE.Vector3; health: number; maxHealth: number }> = [];
@@ -33,6 +37,10 @@ export class CopManager {
     this.scene = scene;
     this.world = world;
     this.aiManager = aiManager;
+
+    for (let i = 0; i < this.MAX_KILL_POSITIONS; i++) {
+      this._killPositionPool.push(new THREE.Vector3());
+    }
   }
 
   /**
@@ -156,6 +164,14 @@ export class CopManager {
     const killPositions: THREE.Vector3[] = [];
     const radiusSq = radius * radius;
 
+    this._killPositionPoolIndex = 0;
+    let normalizedDirection: THREE.Vector3 | null = null;
+    let coneThreshold = 0;
+    if (direction) {
+      normalizedDirection = this._coneDirection.copy(direction).normalize();
+      coneThreshold = Math.cos(coneAngle * 0.5);
+    }
+
     for (const cop of this.cops) {
       if (cop.isDeadState()) continue;
       if (killCount >= maxKills) break;
@@ -166,11 +182,10 @@ export class CopManager {
       if (distanceSq < radiusSq) {
         let inCone = true;
 
-        if (direction) {
+        if (normalizedDirection) {
           this._tempDirection.subVectors(copPos, position).normalize();
-          const dotProduct = direction.dot(this._tempDirection);
-          const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
-          inCone = angle <= coneAngle / 2;
+          const dotProduct = normalizedDirection.dot(this._tempDirection);
+          inCone = dotProduct >= coneThreshold;
         }
 
         if (inCone) {
@@ -178,7 +193,11 @@ export class CopManager {
 
           if (cop.isDeadState()) {
             killCount++;
-            killPositions.push(copPos.clone()); // Only allocates on kill, acceptable
+            if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+              const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+              pooledPos.copy(copPos);
+              killPositions.push(pooledPos);
+            }
           }
         }
       }
