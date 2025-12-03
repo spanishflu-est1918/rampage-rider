@@ -2898,6 +2898,7 @@ export class Engine {
     }
     this.particles.clear();
     this.bloodDecals.dispose();
+    this.rampageDimension?.dispose();
     this.renderer.dispose();
 
     // Clear scene

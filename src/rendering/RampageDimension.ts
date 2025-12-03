@@ -50,8 +50,9 @@ export class RampageDimension {
   private rayRotation = 0;
   private rayPulsePhase = 0;
 
-  // Pre-allocated vectors
+  // Pre-allocated vectors and colors (avoid per-frame allocations)
   private readonly _tempVec = new THREE.Vector3();
+  private readonly _tempColor = new THREE.Color();
 
   constructor(scene: THREE.Scene, normalBackground: THREE.Color) {
     this.scene = scene;
@@ -269,9 +270,9 @@ export class RampageDimension {
       ? 1 - Math.pow(1 - this.transitionProgress, 3) // ease-out cubic
       : this.transitionProgress; // linear
 
-    // Lerp background color
-    const bgColor = this.normalBackground.clone().lerp(this.voidBackground, eased);
-    this.scene.background = bgColor;
+    // Lerp background color (reuse pre-allocated color to avoid GC pressure)
+    this._tempColor.copy(this.normalBackground).lerp(this.voidBackground, eased);
+    this.scene.background = this._tempColor;
   }
 
   /**

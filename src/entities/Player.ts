@@ -1111,14 +1111,18 @@ export class Player extends THREE.Group {
 
     this.modelContainer.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
-        const mat = child.material as THREE.MeshStandardMaterial;
-        if (mat.emissive) {
-          if (active) {
-            mat.emissive.setHex(0xff2200); // Red-orange glow
-            mat.emissiveIntensity = 0.4;
-          } else {
-            mat.emissive.setHex(0x000000);
-            mat.emissiveIntensity = 0;
+        // Handle both single materials and material arrays
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        for (const mat of materials) {
+          const stdMat = mat as THREE.MeshStandardMaterial;
+          if (stdMat.emissive) {
+            if (active) {
+              stdMat.emissive.setHex(0xff2200); // Red-orange glow
+              stdMat.emissiveIntensity = 0.4;
+            } else {
+              stdMat.emissive.setHex(0x000000);
+              stdMat.emissiveIntensity = 0;
+            }
           }
         }
       }
