@@ -671,11 +671,11 @@ export class CrowdManager {
    */
   clear(): void {
     for (const pedestrian of this.pedestrians) {
-      pedestrian.destroy(this.world);
+      pedestrian.destroy();
     }
 
     for (const pedestrian of this.pedestrianPool) {
-      pedestrian.destroy(this.world);
+      pedestrian.destroy();
     }
 
     this.pedestrians = [];
@@ -1129,5 +1129,14 @@ export class CrowdManager {
    */
   isTablePedestrian(pedestrian: Pedestrian): boolean {
     return this.tablePedestrians.has(pedestrian);
+  }
+
+  /**
+   * Set visibility of all tables (for Rampage Dimension effect)
+   */
+  setTablesVisible(visible: boolean): void {
+    for (const table of this.tableInstances) {
+      table.mesh.visible = visible;
+    }
   }
 }

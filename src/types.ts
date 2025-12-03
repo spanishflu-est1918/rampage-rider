@@ -47,6 +47,7 @@ export interface KillNotification {
   isPursuit: boolean;
   points: number;
   combo: number; // For score popup scaling
+  type?: 'kill' | 'pursuit' | 'prompt' | 'alert'; // Optional override for notification type
 }
 
 export interface GameStats {
@@ -69,6 +70,8 @@ export interface GameStats {
   vehicleMaxHealth?: number; // Car max health
   isInVehicle?: boolean; // True when player is in a car
   isNearCar?: boolean; // True when player is near car (can enter)
+  inRampageDimension?: boolean; // True when in rampage mode (combo >= 10)
+  rampageProgress?: number; // 0-100, progress toward rampage threshold (combo/10 * 100)
   performance?: {
     fps: number;
     frameTime: number;

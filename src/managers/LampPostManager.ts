@@ -321,4 +321,13 @@ export class LampPostManager {
   getLampPostCount(): number {
     return this.lampPosts.length;
   }
+
+  /**
+   * Set visibility of all lamp posts (for Rampage Dimension effect)
+   */
+  setAllVisible(visible: boolean): void {
+    for (const lampPost of this.lampPosts) {
+      lampPost.mesh.visible = visible;
+    }
+  }
 }

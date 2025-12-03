@@ -12,6 +12,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2024-12-03]
 
+### Vehicle Switch Notification
+
+**Added:**
+- **Proximity notification for vehicle switching**: When player gets near an awaiting upgrade vehicle, shows "PRESS SPACE - {VEHICLE}" notification
+- `awaitingVehicleNotificationShown` flag to prevent notification spam
+- Notification triggers once when entering proximity range of glowing upgrade vehicle
+
+**Implementation:**
+- Notification shown when `isPlayerNearAwaitingVehicle()` returns true for the first time
+- Flag resets when new awaiting vehicle spawns
+- Uses existing `triggerKillNotification()` system for consistency
+
+**Files Modified:**
+- `src/core/Engine.ts` - Added proximity check and notification in update loop
+
+**User Experience:**
+1. Reach score threshold → "{VEHICLE} UNLOCKED!" notification + glowing vehicle spawns
+2. Drive near upgrade vehicle → "PRESS SPACE - {VEHICLE}" notification appears
+3. Press SPACE → Switch to new vehicle seamlessly
+
+---
+
+## [2024-12-03]
+
 ### Vehicle Cops Dismount on Tier Change
 
 **Added:**

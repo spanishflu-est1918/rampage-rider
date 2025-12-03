@@ -580,6 +580,23 @@ export class BuildingManager {
   }
 
   /**
+   * Set visibility of all buildings (for Rampage Dimension effect)
+   */
+  setAllVisible(visible: boolean): void {
+    for (const building of this.buildings) {
+      building.mesh.visible = visible;
+      building.shadow.visible = visible;
+      for (const light of building.lights) {
+        light.visible = visible;
+      }
+    }
+    // Also hide/show light strands
+    for (const strand of this.lightStrands) {
+      strand.visible = visible;
+    }
+  }
+
+  /**
    * Check if a position is inside any building collider
    * Used by truck to detect building collisions
    */

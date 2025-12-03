@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/8bit/button';
 import HealthBar from '@/components/ui/8bit/health-bar';
 import HeatBar from '@/components/ui/8bit/heat-bar';
 import { Progress } from '@/components/ui/8bit/progress';
+import RampageBar from './RampageBar';
+import RampageVignette from './RampageVignette';
 
 interface OverlayProps {
   stats: GameStats;
@@ -24,6 +26,10 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
   const healthPercent = (stats.health / currentConfig.maxHealth) * 100;
 
   return (
+    <>
+    {/* Rampage Vignette - below UI */}
+    <RampageVignette active={stats.inRampageDimension || false} />
+
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex flex-col justify-between z-10">
 
       {/* Screenshot Mode Toggle Button - always visible */}
@@ -155,6 +161,16 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
           )}
         </div>
 
+        {/* Rampage Bar - Center Top */}
+        <div className="flex-1 flex justify-center">
+          <RampageBar
+            combo={stats.combo}
+            comboTimer={stats.comboTimer}
+            inRampageDimension={stats.inRampageDimension || false}
+            rampageProgress={stats.rampageProgress || 0}
+          />
+        </div>
+
         <div className="bg-black/80 backdrop-blur-sm p-4 rounded-none text-right" style={{ transform: 'scale(0.75)', transformOrigin: 'top right' }}>
           <div className="text-xs text-muted-foreground font-bold uppercase tracking-widest retro">Kills</div>
           <Badge variant="destructive" className="text-4xl">
@@ -271,6 +287,7 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
 
       </>}
     </div>
+    </>
   );
 };
 

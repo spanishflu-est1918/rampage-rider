@@ -88,8 +88,10 @@ function App() {
 
   const handleKillNotification = useCallback((notification: KillNotification) => {
     if (notificationControllerRef.current) {
-      const type = notification.isPursuit ? 'pursuit' : 'kill';
-      notificationControllerRef.current.addNotification(type, notification.message, `+${notification.points}`, notification.combo);
+      // Use explicit type if provided, otherwise infer from isPursuit
+      const type = notification.type || (notification.isPursuit ? 'pursuit' : 'kill');
+      const subtext = notification.points > 0 ? `+${notification.points}` : undefined;
+      notificationControllerRef.current.addNotification(type, notification.message, subtext, notification.combo);
     }
   }, []);
 

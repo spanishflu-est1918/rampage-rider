@@ -613,3 +613,41 @@ export const COLLISION_GROUPS = {
 export function makeCollisionGroups(membership: number, filter: number): number {
   return (filter << 16) | membership;
 }
+
+// ============================================================================
+// Rampage Dimension Visual Effect (Mob Psycho ???% Style)
+// When combo >= 10, reality breaks - white void with anime rays
+// ============================================================================
+
+export const RAMPAGE_DIMENSION = {
+  // Trigger
+  COMBO_THRESHOLD: 10, // Combo level to enter dimension
+
+  // Transition timing
+  ENTER_DURATION: 0.3, // 300ms snap-in (punchy)
+  EXIT_DURATION: 0.4, // 400ms fade-out
+
+  // Radial rays (blood red wedges from center)
+  RAY_COUNT: 16,
+  RAY_COLOR: 0xcc0000, // Blood red
+  RAY_INNER_RADIUS: 0.5,
+  RAY_OUTER_RADIUS: 50, // Extends beyond camera frustum
+  RAY_ROTATION_SPEED: 0.1, // Radians per second (slow rotation)
+  RAY_PULSE_FREQUENCY: 3, // Hz
+  RAY_OPACITY_MIN: 0.15,
+  RAY_OPACITY_MAX: 0.45,
+
+  // Speed lines (black streaks radiating outward)
+  SPEED_LINE_COUNT: 24,
+  SPEED_LINE_COLOR: 0x000000, // Black on white void
+  SPEED_LINE_OPACITY: 0.6,
+  SPEED_LINE_MIN_SPEED: 15, // Units per second
+  SPEED_LINE_MAX_SPEED: 25,
+  SPEED_LINE_MIN_LENGTH: 2,
+  SPEED_LINE_MAX_LENGTH: 5,
+  SPEED_LINE_MIN_LIFE: 0.5, // Seconds
+  SPEED_LINE_MAX_LIFE: 0.8,
+
+  // Void background
+  VOID_COLOR: 0xffffff, // Stark white
+} as const;

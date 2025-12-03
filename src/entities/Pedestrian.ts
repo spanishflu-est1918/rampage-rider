@@ -719,14 +719,11 @@ export class Pedestrian extends THREE.Group {
   /**
    * Cleanup
    */
-  destroy(world: RAPIER.World): void {
-    // Release shadow index back to pool
-    if (this.shadowIndex >= 0) {
-      this.shadowManager.releaseIndex(this.shadowIndex);
-      this.shadowIndex = -1;
-    }
+  destroy(): void {
+    const world = this.world;
+    if (!world) return;
 
-    // Remove from Yuka
+    // Remove from Yuka AI
     this.yukaEntityManager.remove(this.yukaVehicle);
 
     // Stop and dispose animation mixer FIRST (before physics)
@@ -735,8 +732,10 @@ export class Pedestrian extends THREE.Group {
       this.mixer.uncacheRoot(this.mixer.getRoot());
     }
 
-    // Remove Rapier body
-    world.removeRigidBody(this.rigidBody);
+    // Remove Rapier body (check if still valid before removing)
+    if (this.rigidBody && world.bodies.contains(this.rigidBody.handle)) {
+      world.removeRigidBody(this.rigidBody);
+    }
 
     // Dispose cloned materials (SkeletonUtils.clone DOES clone materials)
     // But DON'T dispose geometries - those ARE shared by reference

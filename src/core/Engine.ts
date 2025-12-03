@@ -28,9 +28,11 @@ import {
   DEBUG_PERFORMANCE_PANEL,
 } from '../constants';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
+import { RampageDimension } from '../rendering/RampageDimension';
 import { GameState, Tier, InputState, GameStats, KillNotification } from '../types';
 import { ActionController, ActionType } from './ActionController';
 import { CircularBuffer } from '../utils/CircularBuffer';
+import { RAMPAGE_DIMENSION } from '../constants';
 
 export class Engine {
   private scene: THREE.Scene;
@@ -50,6 +52,11 @@ export class Engine {
   public christmasTrees: ChristmasTreeManager | null = null;
   public particles: ParticleEmitter;
   public bloodDecals: BloodDecalSystem;
+
+  // Rampage Dimension visual effect
+  private rampageDimension: RampageDimension | null = null;
+  private inRampageDimension = false;
+  private readonly normalBackground = new THREE.Color(0x1a1a1a);
 
   private state: GameState = GameState.MENU;
   private isDying: boolean = false;
@@ -176,6 +183,10 @@ export class Engine {
   private slowmoScale: number = 1.0;
   private readonly SLOWMO_DURATION: number = 0.8;
   private readonly SLOWMO_SCALE: number = 0.15; // 15% speed during slowmo
+
+  // Hit stop (complete freeze frame for anime power-up effect)
+  private hitStopTimer: number = 0;
+  private readonly HIT_STOP_DURATION: number = 0.08; // 80ms freeze
   private lastPlayerPosition: THREE.Vector3 = new THREE.Vector3();
   private cameraMoveThreshold: number = 0; // Update every frame (0.1 caused jerk)
   private healthBarUpdateCounter: number = 0; // Throttle health bar projection
@@ -286,6 +297,7 @@ export class Engine {
   private awaitingVehicleTier: Tier | null = null;
   private awaitingVehicleGlowTime: number = 0; // For pulsing glow animation
   private vehiclesToCleanup: Array<{ vehicle: Vehicle; timer: number }> = [];
+  private awaitingVehicleNotificationShown: boolean = false; // Track if proximity notification was shown
 
   private actionController: ActionController = new ActionController();
   private static readonly KILL_MESSAGES = ['SPLAT!', 'CRUSHED!', 'DEMOLISHED!', 'OBLITERATED!', 'TERMINATED!'];
@@ -367,6 +379,9 @@ export class Engine {
       this.lampPosts = new LampPostManager(this.scene);
       this.christmasTrees = new ChristmasTreeManager(this.scene);
     }
+
+    // Initialize Rampage Dimension effect
+    this.rampageDimension = new RampageDimension(this.scene, this.normalBackground);
   }
 
   private async createTestGround(): Promise<void> {
@@ -978,6 +993,7 @@ export class Engine {
 
     this.awaitingVehicleTier = tier;
     this.awaitingVehicleGlowTime = 0;
+    this.awaitingVehicleNotificationShown = false; // Reset notification flag
 
     // Start the glow effect and cache materials for efficient per-frame updates
     this.setVehicleGlow(this.awaitingVehicle, 1.0, 0x00ffaa, true); // Bright cyan-green, cache=true
@@ -1854,6 +1870,14 @@ export class Engine {
     const frameStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
     const rawDeltaTime = this.clock.getDelta();
 
+    // Hit stop - complete freeze frame (anime power-up moment)
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer -= rawDeltaTime;
+      // Still render, just don't update
+      this.render();
+      return;
+    }
+
     // Apply slow-mo effect (Burnout-style impact frame on tier unlock)
     if (this.slowmoTimer > 0) {
       this.slowmoTimer -= rawDeltaTime;
@@ -1987,24 +2011,6 @@ export class Engine {
     // Check for combo milestone announcements
     this.checkComboMilestones();
 
-    if (this.stats.heat > 0) {
-      // Track if heat has ever hit threshold (activates floor)
-      if (this.stats.heat >= SCORING_CONFIG.HEAT_FLOOR_THRESHOLD) {
-        this.heatFloorActive = true;
-      }
-
-      // Faster heat decay when not in combat for 10+ seconds (3x normal rate)
-      const timeSinceCombat = this.stats.gameTime - this.lastCombatTime;
-      const heatDecayRate = timeSinceCombat > 10 ? 1.5 : 0.5; // 3x decay when idle
-
-      // Apply floor if active (can't drop below 25% once you've hit 50%)
-      const heatFloor = this.heatFloorActive ? SCORING_CONFIG.HEAT_FLOOR_MIN : 0;
-      this.stats.heat = Math.max(heatFloor, this.stats.heat - (heatDecayRate * dt));
-    }
-
-    // Update wanted stars decay (stars decrease over time without cop kills)
-    this.updateWantedStars(false);
-
     // --- Entity Updates ---
     const entitiesStart = DEBUG_PERFORMANCE_PANEL ? performance.now() : 0;
 
@@ -2025,6 +2031,14 @@ export class Engine {
     const taserState = this.player?.getTaserState() || this._defaultTaserState;
     const isNearCurrentVehicle = this.isPlayerNearVehicle();
     const isNearAwaitingVehicle = this.isPlayerNearAwaitingVehicle();
+    
+    // Show "PRESS SPACE TO SWITCH" notification when player gets near awaiting vehicle
+    if (this.awaitingVehicle && isNearAwaitingVehicle && !this.awaitingVehicleNotificationShown) {
+      this.awaitingVehicleNotificationShown = true;
+      const tierConfig = TIER_CONFIGS[this.awaitingVehicleTier!];
+      this.triggerKillNotification(`PRESS SPACE - ${tierConfig.name.toUpperCase()}`, true, 0, 'prompt');
+    }
+    
     this._actionContext.isTased = taserState.isTased;
     this._actionContext.isNearCar = this.vehicleSpawned && isNearCurrentVehicle;
     this._actionContext.isNearAwaitingVehicle = this.awaitingVehicle !== null && isNearAwaitingVehicle;
@@ -2101,6 +2115,10 @@ export class Engine {
     }
     if (this.christmasTrees) {
       this.christmasTrees.update(currentPos);
+    }
+    // Update Rampage Dimension effect
+    if (this.rampageDimension) {
+      this.rampageDimension.update(dt, this.camera);
     }
     if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.world = performance.now() - worldStart;
 
@@ -2406,6 +2424,8 @@ export class Engine {
       this.callbacks.onStatsUpdate({
         ...this.stats,
         ...vehicleStats,
+        inRampageDimension: this.inRampageDimension,
+        rampageProgress: Math.min(100, (this.stats.combo / RAMPAGE_DIMENSION.COMBO_THRESHOLD) * 100),
         performance: DEBUG_PERFORMANCE_PANEL ? this.performanceStats : undefined
       });
     }
@@ -2714,9 +2734,9 @@ export class Engine {
   /**
    * Trigger a kill notification
    */
-  private triggerKillNotification(message: string, isPursuit: boolean, points: number): void {
+  private triggerKillNotification(message: string, isPursuit: boolean, points: number, type?: 'kill' | 'pursuit' | 'prompt' | 'alert'): void {
     if (this.callbacks.onKillNotification) {
-      this.callbacks.onKillNotification({ message, isPursuit, points, combo: this.stats.combo });
+      this.callbacks.onKillNotification({ message, isPursuit, points, combo: this.stats.combo, type });
     }
   }
 
@@ -2726,6 +2746,13 @@ export class Engine {
   private triggerSlowmo(): void {
     this.slowmoTimer = this.SLOWMO_DURATION;
     this.slowmoScale = this.SLOWMO_SCALE;
+  }
+
+  /**
+   * Trigger hit stop (complete freeze frame for anime power-up effect)
+   */
+  private triggerHitStop(): void {
+    this.hitStopTimer = this.HIT_STOP_DURATION;
   }
 
   /**
@@ -2750,10 +2777,82 @@ export class Engine {
       this.shakeCamera(2.0 + highestMilestone * 0.05); // Bigger shake for bigger milestones
     }
 
-    // Reset milestone tracker when combo resets
+    // Rampage Dimension: Enter when combo >= threshold
+    if (this.stats.combo >= RAMPAGE_DIMENSION.COMBO_THRESHOLD && !this.inRampageDimension) {
+      this.enterRampageDimension();
+    }
+
+    // Reset milestone tracker and exit dimension when combo resets
     if (this.stats.combo === 0) {
       this.lastAnnouncedComboMilestone = 0;
+      if (this.inRampageDimension) {
+        this.exitRampageDimension();
+      }
     }
+  }
+
+  /**
+   * Enter the Rampage Dimension - reality breaks
+   */
+  private enterRampageDimension(): void {
+    if (!this.rampageDimension || this.inRampageDimension) return;
+
+    this.inRampageDimension = true;
+
+    // Hide environment
+    this.setEnvironmentVisible(false);
+
+    // Activate dimension effects
+    this.rampageDimension.enter();
+
+    // Player glow - they're a god in this void
+    this.player?.setRampageGlow(true);
+
+    // BIG notification - reality just broke
+    this.triggerKillNotification('RAMPAGE!', true, 0, 'alert');
+
+    // Extra camera shake for impact
+    this.shakeCamera(2.5);
+
+    // Hit stop + slowmo on entry - anime power-up moment
+    this.triggerHitStop();
+    this.triggerSlowmo();
+  }
+
+  /**
+   * Exit the Rampage Dimension - reality returns
+   */
+  private exitRampageDimension(): void {
+    if (!this.rampageDimension || !this.inRampageDimension) return;
+
+    this.inRampageDimension = false;
+
+    // Show environment
+    this.setEnvironmentVisible(true);
+
+    // Deactivate dimension effects
+    this.rampageDimension.exit();
+
+    // Remove player glow
+    this.player?.setRampageGlow(false);
+  }
+
+  /**
+   * Toggle visibility of all environment objects (for Rampage Dimension)
+   */
+  private setEnvironmentVisible(visible: boolean): void {
+    // Ground
+    if (this.groundMesh) {
+      this.groundMesh.visible = visible;
+    }
+
+    // Buildings (market stalls), lamp posts, trees
+    this.buildings?.setAllVisible(visible);
+    this.lampPosts?.setAllVisible(visible);
+    this.christmasTrees?.setAllVisible(visible);
+
+    // Tables (biergarten tables in the market)
+    this.crowd?.setTablesVisible(visible);
   }
 
   /**
@@ -2799,6 +2898,7 @@ export class Engine {
     }
     this.particles.clear();
     this.bloodDecals.dispose();
+    this.rampageDimension?.dispose();
     this.renderer.dispose();
 
     // Clear scene

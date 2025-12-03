@@ -389,4 +389,13 @@ export class ChristmasTreeManager {
   getTreeCount(): number {
     return this.trees.length;
   }
+
+  /**
+   * Set visibility of all trees (for Rampage Dimension effect)
+   */
+  setAllVisible(visible: boolean): void {
+    for (const tree of this.trees) {
+      tree.mesh.visible = visible;
+    }
+  }
 }
