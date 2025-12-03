@@ -2,13 +2,12 @@ import * as THREE from 'three';
 import { RAMPAGE_DIMENSION } from '../constants';
 
 /**
- * Speed line instance data
+ * Speed line instance data - streaks past player based on movement
  */
 interface SpeedLine {
   mesh: THREE.Mesh;
-  angle: number;
-  distance: number;
-  speed: number;
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
   length: number;
   life: number;
   maxLife: number;
@@ -76,8 +75,10 @@ export class RampageDimension {
   private rayFlashTimer = 0;
   private rayOpacities: number[] = []; // Per-ray opacity for phased pulsing
 
-  // Player position for centered effects
+  // Player position and velocity for movement-based effects
   private playerPosition: THREE.Vector3 = new THREE.Vector3();
+  private playerVelocity: THREE.Vector3 = new THREE.Vector3();
+  private lastPlayerPosition: THREE.Vector3 = new THREE.Vector3();
 
   // Pre-allocated vectors and colors (avoid per-frame allocations)
   private readonly _tempVec = new THREE.Vector3();
@@ -98,7 +99,7 @@ export class RampageDimension {
       this.rayOpacities.push(1.0);
     }
 
-    // Create speed line pool (thicker for visibility)
+    // Create speed line pool - visible thickness
     this.speedLineGeometry = new THREE.PlaneGeometry(0.15, 1);
     this.speedLineMaterial = new THREE.MeshBasicMaterial({
       color: RAMPAGE_DIMENSION.SPEED_LINE_COLOR,
@@ -186,7 +187,7 @@ export class RampageDimension {
     for (let i = 0; i < SPEED_LINE_COUNT; i++) {
       const mesh = new THREE.Mesh(
         this.speedLineGeometry,
-        this.speedLineMaterial.clone() // Clone for per-line opacity
+        this.speedLineMaterial.clone()
       );
       mesh.visible = false;
       mesh.renderOrder = 999;
@@ -195,11 +196,10 @@ export class RampageDimension {
 
       this.speedLines.push({
         mesh,
-        angle: Math.random() * Math.PI * 2,
-        distance: 5 + Math.random() * 15,
-        speed: this.randomSpeed(),
+        position: new THREE.Vector3(),
+        velocity: new THREE.Vector3(),
         length: this.randomLength(),
-        life: Math.random(), // Stagger initial spawn
+        life: 999, // Start expired so they spawn fresh
         maxLife: this.randomLife(),
       });
     }
@@ -330,11 +330,6 @@ export class RampageDimension {
     mote.sprite.scale.setScalar(mote.size);
   }
 
-  private randomSpeed(): number {
-    const { SPEED_LINE_MIN_SPEED, SPEED_LINE_MAX_SPEED } = RAMPAGE_DIMENSION;
-    return SPEED_LINE_MIN_SPEED + Math.random() * (SPEED_LINE_MAX_SPEED - SPEED_LINE_MIN_SPEED);
-  }
-
   private randomLength(): number {
     const { SPEED_LINE_MIN_LENGTH, SPEED_LINE_MAX_LENGTH } = RAMPAGE_DIMENSION;
     return SPEED_LINE_MIN_LENGTH + Math.random() * (SPEED_LINE_MAX_LENGTH - SPEED_LINE_MIN_LENGTH);
@@ -356,10 +351,8 @@ export class RampageDimension {
     this.transitionProgress = 0;
 
     // Show effect meshes
-    this.radialRays.visible = true;
-    for (const line of this.speedLines) {
-      line.mesh.visible = true;
-    }
+    // this.radialRays.visible = true; // DISABLED FOR TESTING
+    // Speed lines now handled by SpeedLinesShader
 
     // Show energy motes
     for (const mote of this.energyMotes) {
@@ -409,8 +402,7 @@ export class RampageDimension {
     // Update ray animation (Phase 2: enhanced dynamics)
     this.updateRays(dt);
 
-    // Update speed lines
-    this.updateSpeedLines(dt, camera);
+    // Speed lines now handled by SpeedLinesShader (not here)
 
     // Phase 2: Update energy motes
     this.updateEnergyMotes(dt);
@@ -517,52 +509,90 @@ export class RampageDimension {
   }
 
   /**
-   * Update speed lines (radiate outward, respawn)
+   * Update speed lines - ALL parallel streaks flying past the player
+   * Creates anime-style motion blur effect
    */
   private updateSpeedLines(dt: number, camera: THREE.OrthographicCamera): void {
-    // Get camera look direction for positioning
-    const cameraDir = this._tempVec;
-    camera.getWorldDirection(cameraDir);
+    // Calculate player velocity from position delta
+    if (dt > 0) {
+      this.playerVelocity.subVectors(this.playerPosition, this.lastPlayerPosition).divideScalar(dt);
+      this.lastPlayerPosition.copy(this.playerPosition);
+    }
+
+    const speed = this.playerVelocity.length();
+    const isMoving = speed > 1.0; // Threshold for "moving"
+
+    // Get movement direction - ALL lines go this direction
+    const moveDir = this._tempVec;
+    if (isMoving) {
+      moveDir.copy(this.playerVelocity).normalize();
+    } else {
+      // Default: lines go diagonally (toward camera in isometric)
+      moveDir.set(-0.7, 0, -0.7).normalize();
+    }
+
+    const {
+      SPEED_LINE_MIN_SPEED,
+      SPEED_LINE_MAX_SPEED,
+      SPEED_LINE_OPACITY,
+    } = RAMPAGE_DIMENSION;
+
+    // Perpendicular direction for spawning spread
+    const perpX = -moveDir.z;
+    const perpZ = moveDir.x;
 
     for (const line of this.speedLines) {
       line.life += dt;
 
-      // Respawn when life exceeds max
+      // Respawn when expired
       if (line.life >= line.maxLife) {
-        line.angle = Math.random() * Math.PI * 2;
-        line.distance = 2 + Math.random() * 3; // Start near center
-        line.speed = this.randomSpeed();
+        // Spawn in a wide band AHEAD of player
+        const spawnDist = 15 + Math.random() * 10; // Distance ahead
+        const lateralSpread = (Math.random() - 0.5) * 25; // Wide side spread
+        const heightSpread = 0.3 + Math.random() * 4; // Height variation
+
+        line.position.set(
+          this.playerPosition.x + moveDir.x * spawnDist + perpX * lateralSpread,
+          heightSpread,
+          this.playerPosition.z + moveDir.z * spawnDist + perpZ * lateralSpread
+        );
+
+        // ALL lines move in SAME direction - opposite to player movement
+        const streakSpeed = SPEED_LINE_MIN_SPEED + Math.random() * (SPEED_LINE_MAX_SPEED - SPEED_LINE_MIN_SPEED);
+        line.velocity.set(
+          -moveDir.x * streakSpeed,
+          0,
+          -moveDir.z * streakSpeed
+        );
+
         line.length = this.randomLength();
         line.life = 0;
         line.maxLife = this.randomLife();
       }
 
-      // Move outward
-      line.distance += line.speed * dt;
+      // Move the line
+      line.position.x += line.velocity.x * dt;
+      line.position.z += line.velocity.z * dt;
 
-      // Calculate opacity (fade in at start, fade out at end)
+      // Calculate opacity
       const lifeRatio = line.life / line.maxLife;
-      const fadeIn = Math.min(1, lifeRatio * 5); // Quick fade in (first 20%)
-      const fadeOut = 1 - Math.pow(lifeRatio, 2); // Slow fade out
-      const opacity = fadeIn * fadeOut * this.transitionProgress * RAMPAGE_DIMENSION.SPEED_LINE_OPACITY;
+      const fadeIn = Math.min(1, lifeRatio * 10); // Instant fade in
+      const fadeOut = 1 - lifeRatio; // Linear fade out
+      const opacity = fadeIn * fadeOut * this.transitionProgress * SPEED_LINE_OPACITY;
 
       const mat = line.mesh.material as THREE.MeshBasicMaterial;
       mat.opacity = opacity;
 
-      // Position in screen space (relative to camera)
-      // For orthographic, we position on a plane perpendicular to camera
-      const x = Math.cos(line.angle) * line.distance;
-      const y = Math.sin(line.angle) * line.distance;
+      // Position mesh
+      line.mesh.position.copy(line.position);
 
-      // Position relative to camera, offset forward
-      line.mesh.position.set(
-        camera.position.x + x,
-        camera.position.y + y * 0.7, // Compress vertical slightly for isometric
-        camera.position.z - 30 // In front of camera
-      );
+      // Make lines face camera and align with movement direction
+      line.mesh.lookAt(camera.position);
 
-      // Rotate to point outward from center
-      line.mesh.rotation.z = line.angle - Math.PI / 2;
+      // Calculate screen-space angle for the streak direction
+      // Project movement direction to screen space
+      const screenAngle = Math.atan2(moveDir.x - moveDir.z, moveDir.x + moveDir.z);
+      line.mesh.rotateZ(screenAngle);
 
       // Scale length
       line.mesh.scale.y = line.length;

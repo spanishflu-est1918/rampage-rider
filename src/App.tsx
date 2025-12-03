@@ -165,7 +165,7 @@ function App() {
 
       {gameState === GameState.PLAYING && (
         <>
-          <SnowOverlay />
+          {!stats.inRampageMode && <SnowOverlay />}
           <Overlay stats={stats} />
           <NotificationSystem
             onRegister={registerNotificationController}

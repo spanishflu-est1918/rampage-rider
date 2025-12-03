@@ -29,6 +29,7 @@ import {
 } from '../constants';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
 import { RampageDimension } from '../rendering/RampageDimension';
+import { SpeedLinesEffect } from '../rendering/SpeedLinesShader';
 import { GameState, Tier, InputState, GameStats, KillNotification } from '../types';
 import { ActionController, ActionType } from './ActionController';
 import { CircularBuffer } from '../utils/CircularBuffer';
@@ -55,6 +56,7 @@ export class Engine {
 
   // Rampage Dimension visual effect
   private rampageDimension: RampageDimension | null = null;
+  private speedLinesEffect: SpeedLinesEffect | null = null;
   private inRampageDimension = false;
   private readonly normalBackground = new THREE.Color(0x1a1a1a);
 
@@ -390,6 +392,7 @@ export class Engine {
 
     // Initialize Rampage Dimension effect
     this.rampageDimension = new RampageDimension(this.scene, this.normalBackground);
+    this.speedLinesEffect = new SpeedLinesEffect();
   }
 
   private async createTestGround(): Promise<void> {
@@ -2146,6 +2149,22 @@ export class Engine {
         this.setEnvironmentVisible(false);
       }
     }
+    // Update speed lines shader with player direction from input
+    if (this.speedLinesEffect) {
+      // Use input state to determine direction (up/down/left/right)
+      const input = this.input;
+      if (input) {
+        let dx = 0, dz = 0;
+        if (input.up) dz -= 1;
+        if (input.down) dz += 1;
+        if (input.left) dx -= 1;
+        if (input.right) dx += 1;
+        if (dx !== 0 || dz !== 0) {
+          this.speedLinesEffect.setDirection(dx, dz);
+        }
+      }
+      this.speedLinesEffect.update(dt);
+    }
     if (DEBUG_PERFORMANCE_PANEL) this.performanceStats.world = performance.now() - worldStart;
 
     // Pedestrians (use entityDt for slow-mo during rampage)
@@ -2856,6 +2875,7 @@ export class Engine {
 
     // Activate dimension effects
     this.rampageDimension.enter();
+    this.speedLinesEffect?.enter();
 
     // Player glow - they're a god in this void
     this.player?.setRampageGlow(true);
@@ -2887,6 +2907,7 @@ export class Engine {
 
     // Deactivate dimension effects
     this.rampageDimension.exit();
+    this.speedLinesEffect?.exit();
 
     // Remove player glow
     this.player?.setRampageGlow(false);
@@ -2965,6 +2986,9 @@ export class Engine {
     this.camera.quaternion.copy(this.cameraBaseQuaternion);
 
     this.renderer.render(this.scene, this.camera);
+
+    // Render speed lines overlay on top
+    this.speedLinesEffect?.render(this.renderer);
   }
 
   /**
@@ -3015,6 +3039,7 @@ export class Engine {
     this.particles.clear();
     this.bloodDecals.dispose();
     this.rampageDimension?.dispose();
+    this.speedLinesEffect?.dispose();
     this.renderer.dispose();
 
     // Clear scene

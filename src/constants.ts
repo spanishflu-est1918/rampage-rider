@@ -637,16 +637,16 @@ export const RAMPAGE_DIMENSION = {
   RAY_OPACITY_MIN: 0.35,
   RAY_OPACITY_MAX: 0.65,
 
-  // Speed lines (red streaks radiating outward - matches rays)
-  SPEED_LINE_COUNT: 24,
-  SPEED_LINE_COLOR: 0xcc0000, // Blood red to match rays
-  SPEED_LINE_OPACITY: 0.7,
-  SPEED_LINE_MIN_SPEED: 15, // Units per second
-  SPEED_LINE_MAX_SPEED: 25,
-  SPEED_LINE_MIN_LENGTH: 2,
-  SPEED_LINE_MAX_LENGTH: 5,
-  SPEED_LINE_MIN_LIFE: 0.5, // Seconds
-  SPEED_LINE_MAX_LIFE: 0.8,
+  // Speed lines (streaks that fly past player based on movement)
+  SPEED_LINE_COUNT: 50,
+  SPEED_LINE_COLOR: 0xaa0000, // Dark blood red for visibility on white
+  SPEED_LINE_OPACITY: 1.0,
+  SPEED_LINE_MIN_SPEED: 40, // Units per second - FAST
+  SPEED_LINE_MAX_SPEED: 60,
+  SPEED_LINE_MIN_LENGTH: 4,
+  SPEED_LINE_MAX_LENGTH: 12,
+  SPEED_LINE_MIN_LIFE: 0.3, // Seconds - short life = more respawns
+  SPEED_LINE_MAX_LIFE: 0.5,
 
   // Void background
   VOID_COLOR: 0xf0f0f0, // Light gray for contrast with red rays
@@ -656,22 +656,22 @@ export const RAMPAGE_DIMENSION = {
 
   // Phase 2: Energy motes (ambient floating particles)
   ENERGY_MOTES: {
-    COUNT: 45,
-    SPAWN_RADIUS_MIN: 10,
-    SPAWN_RADIUS_MAX: 20,
+    COUNT: 60,
+    SPAWN_RADIUS_MIN: 5, // Closer to player for visibility
+    SPAWN_RADIUS_MAX: 15,
     SPAWN_HEIGHT_MIN: 0.5,
-    SPAWN_HEIGHT_MAX: 3.0,
-    DRIFT_SPEED_MIN: 2,
-    DRIFT_SPEED_MAX: 4,
-    WOBBLE_AMPLITUDE: 0.3,
-    WOBBLE_SPEED_MIN: 1.5,
-    WOBBLE_SPEED_MAX: 3.0,
+    SPAWN_HEIGHT_MAX: 4.0,
+    DRIFT_SPEED_MIN: 1.5,
+    DRIFT_SPEED_MAX: 3,
+    WOBBLE_AMPLITUDE: 0.4,
+    WOBBLE_SPEED_MIN: 2.0,
+    WOBBLE_SPEED_MAX: 4.0,
     LIFE_MIN: 2.0,
     LIFE_MAX: 4.0,
-    SIZE_MIN: 0.15,
-    SIZE_MAX: 0.35,
-    COLOR_INNER: 0xff4444,
-    COLOR_OUTER: 0xff6600,
+    SIZE_MIN: 0.3, // Bigger for visibility
+    SIZE_MAX: 0.6,
+    COLOR_INNER: 0xff6644, // Brighter orange-red
+    COLOR_OUTER: 0xff8800,
   },
 
   // Phase 2: Hit-stop on entry
