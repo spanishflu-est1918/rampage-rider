@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Engine } from '../core/Engine';
+import type { Engine } from '../core/Engine';
 import { GameStats, InputState, KillNotification } from '../types';
 import { VehicleType } from '../constants';
 
@@ -32,6 +32,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
     let _initializingEngine: Engine | null = null;
 
     const initEngine = async () => {
+      const { Engine } = await import('../core/Engine');
       const engine = new Engine(
         canvasRef.current!,
         window.innerWidth,

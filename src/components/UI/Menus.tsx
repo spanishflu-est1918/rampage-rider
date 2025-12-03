@@ -27,11 +27,13 @@ const TAGLINES = [
 interface MainMenuProps {
   onStart: () => void;
   isLoading?: boolean;
+  loadingProgress?: number;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
   onStart,
   isLoading = false,
+  loadingProgress = 0,
 }) => {
   const [taglineIndex, setTaglineIndex] = useState(() =>
     Math.floor(Math.random() * TAGLINES.length)
@@ -55,14 +57,23 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           {TAGLINES[taglineIndex]}
         </p>
 
-        <Button
-          onClick={onStart}
-          disabled={isLoading}
-          size="lg"
-          className="px-16 py-8 text-2xl bg-destructive text-white hover:bg-destructive/90 retro disabled:opacity-50"
-        >
-          {isLoading ? "LOADING..." : "START GAME"}
-        </Button>
+        <div className="space-y-3">
+          <Button
+            onClick={onStart}
+            disabled={isLoading}
+            size="lg"
+            className="px-16 py-8 text-2xl bg-destructive text-white hover:bg-destructive/90 retro disabled:opacity-50"
+          >
+            {isLoading
+              ? `LOADING... ${Math.round(loadingProgress * 100)}%`
+              : "START GAME"}
+          </Button>
+          {isLoading && (
+            <p className="text-sm text-muted-foreground retro tracking-widest">
+              PRELOADING RAPID RESPONSE UNITS...
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

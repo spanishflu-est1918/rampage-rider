@@ -13,6 +13,7 @@ class Preloader {
   private assetsLoaded = false;
   private rapierPromise: Promise<void> | null = null;
   private assetsPromise: Promise<void> | null = null;
+  private progressListeners = new Set<(progress: number, detail: string) => void>();
 
   private constructor() {}
 
@@ -47,6 +48,8 @@ class Preloader {
     }
 
     await Promise.all(promises);
+
+    this.notifyProgress('complete');
   }
 
   /**
@@ -57,6 +60,7 @@ class Preloader {
 
     await RAPIER.init();
     this.rapierLoaded = true;
+    this.notifyProgress('rapier-ready');
   }
 
   /**
@@ -69,6 +73,28 @@ class Preloader {
     await assetLoader.preloadAll();
 
     this.assetsLoaded = true;
+    this.notifyProgress('assets-ready');
+  }
+
+  addProgressListener(listener: (progress: number, detail: string) => void): () => void {
+    this.progressListeners.add(listener);
+    listener(this.getProgress(), this.isReady() ? 'complete' : 'pending');
+    return () => {
+      this.progressListeners.delete(listener);
+    };
+  }
+
+  getProgress(): number {
+    const stages = 2;
+    const completed = Number(this.rapierLoaded) + Number(this.assetsLoaded);
+    return completed / stages;
+  }
+
+  private notifyProgress(detail: string): void {
+    const progress = this.getProgress();
+    this.progressListeners.forEach(listener => {
+      listener(progress, detail);
+    });
   }
 
   /**

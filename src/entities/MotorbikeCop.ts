@@ -113,6 +113,13 @@ export class MotorbikeCop extends THREE.Group {
   private readonly _rapierMovement = { x: 0, y: 0, z: 0 };
   private readonly _rapierPosition = { x: 0, y: 0, z: 0 };
 
+  private static readonly PATROL_DISTANCE_SQ =
+    MOTORBIKE_COP_CONFIG.PATROL_DISTANCE * MOTORBIKE_COP_CONFIG.PATROL_DISTANCE;
+  private static readonly RAM_DISTANCE_SQ =
+    MOTORBIKE_COP_CONFIG.RAM_DISTANCE * MOTORBIKE_COP_CONFIG.RAM_DISTANCE;
+  private static readonly RAM_HIT_DISTANCE_SQ =
+    MOTORBIKE_COP_CONFIG.RAM_HIT_DISTANCE * MOTORBIKE_COP_CONFIG.RAM_HIT_DISTANCE;
+
   // Use centralized collision groups from constants
 
   constructor(
@@ -401,7 +408,7 @@ export class MotorbikeCop extends THREE.Group {
   /**
    * Update state machine based on distance to player
    */
-  private updateState(distanceToTarget: number): void {
+  private updateState(distanceToTargetSq: number): void {
     if (this.isHitStunned) {
       this.state = MotorbikeCopState.STUNNED;
       return;
@@ -409,9 +416,9 @@ export class MotorbikeCop extends THREE.Group {
 
     const config = MOTORBIKE_COP_CONFIG;
 
-    if (distanceToTarget > config.PATROL_DISTANCE) {
+    if (distanceToTargetSq > MotorbikeCop.PATROL_DISTANCE_SQ) {
       this.state = MotorbikeCopState.PATROL;
-    } else if (distanceToTarget > config.RAM_DISTANCE) {
+    } else if (distanceToTargetSq > MotorbikeCop.RAM_DISTANCE_SQ) {
       this.state = MotorbikeCopState.CHASE;
     } else {
       this.state = MotorbikeCopState.RAM;
@@ -579,13 +586,13 @@ export class MotorbikeCop extends THREE.Group {
     this._tempPosition.set(currentPos.x, currentPos.y, currentPos.z);
 
     // Calculate distance to target
-    let distanceToTarget = Infinity;
+    let distanceToTargetSq = Infinity;
     if (this.lastTarget) {
-      distanceToTarget = this._tempPosition.distanceTo(this.lastTarget);
+      distanceToTargetSq = this._tempPosition.distanceToSquared(this.lastTarget);
     }
 
     // Update state machine
-    this.updateState(distanceToTarget);
+    this.updateState(distanceToTargetSq);
 
     // Update AI behaviors
     this.updateBehaviors(deltaTime);
@@ -699,8 +706,8 @@ export class MotorbikeCop extends THREE.Group {
   private executeRamAttack(currentPosition: THREE.Vector3): void {
     if (!this.lastTarget || !this.onDealDamage) return;
 
-    const distance = currentPosition.distanceTo(this.lastTarget);
-    if (distance < MOTORBIKE_COP_CONFIG.RAM_HIT_DISTANCE) {
+    const distanceSq = currentPosition.distanceToSquared(this.lastTarget);
+    if (distanceSq < MotorbikeCop.RAM_HIT_DISTANCE_SQ) {
       const damage = MOTORBIKE_COP_CONFIG.VARIANTS[this.variant].ramDamage;
       this.onDealDamage(damage, true);
       this.attackCooldown = MOTORBIKE_COP_CONFIG.RAM_COOLDOWN;
@@ -847,21 +854,22 @@ export class MotorbikeCop extends THREE.Group {
     if (!this.bulletProjectile || !this.bulletTarget) return;
 
     // Use pre-allocated vector for direction calculation
-    this._tempDirection
-      .subVectors(this.bulletTarget, this.bulletProjectile.position)
-      .normalize();
+    this._tempDirection.subVectors(this.bulletTarget, this.bulletProjectile.position);
 
-    const distance = this.bulletProjectile.position.distanceTo(this.bulletTarget);
+    const distanceSq = this._tempDirection.lengthSq();
     const moveDistance = this.bulletSpeed * deltaTime;
+    const moveDistanceSq = moveDistance * moveDistance;
 
-    if (distance <= moveDistance) {
+    if (distanceSq <= moveDistanceSq) {
       // Hit target
       if (this.onDealDamage) {
         this.onDealDamage(MOTORBIKE_COP_CONFIG.SHOOT_DAMAGE, false);
       }
       this.removeBulletProjectile();
     } else {
-      this.bulletProjectile.position.add(this._tempDirection.multiplyScalar(moveDistance));
+      const distance = Math.sqrt(distanceSq) || 1;
+      const scale = moveDistance / distance;
+      this.bulletProjectile.position.add(this._tempDirection.multiplyScalar(scale));
     }
   }
 

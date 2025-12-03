@@ -37,12 +37,24 @@ const ANIMATIONS = [
 function App() {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(() => preloader.getProgress());
 
   // Preload heavy assets (Rapier WASM + models) on mount
   useEffect(() => {
-    preloader.preloadAll().then(() => {
-      setIsLoading(false);
+    const unsubscribe = preloader.addProgressListener((progress) => {
+      setLoadingProgress(progress);
+      if (progress >= 1) {
+        setIsLoading(false);
+      }
     });
+
+    preloader.preloadAll().catch(() => {
+      // Leave loading flag true so button stays disabled; errors already logged by loaders
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
   const [stats, setStats] = useState<GameStats>({
     kills: 0,
@@ -145,7 +157,7 @@ function App() {
 
       {/* UI Layers */}
       {gameState === GameState.MENU && (
-        <MainMenu onStart={startGame} isLoading={isLoading} />
+        <MainMenu onStart={startGame} isLoading={isLoading} loadingProgress={loadingProgress} />
       )}
 
       {gameState === GameState.PLAYING && (
