@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as YUKA from 'yuka';
-import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { BlobShadow, createBlobShadow } from '../rendering/BlobShadow';
@@ -139,15 +138,17 @@ export class BikeCop extends THREE.Group {
     try {
       const assetLoader = AssetLoader.getInstance();
       const bikeConfig = VEHICLE_CONFIGS[VehicleType.BICYCLE];
-      const cachedGltf = assetLoader.getModel(bikeConfig.modelPath);
 
-      if (!cachedGltf) {
-        console.error(`[BikeCop] Model not in cache: ${bikeConfig.modelPath}`);
+      // Use pre-cloned vehicle from pool (cloned during preload, instant at runtime!)
+      const precloned = assetLoader.getPreClonedVehicle(bikeConfig.modelPath);
+
+      if (!precloned) {
+        console.error(`[BikeCop] Model not available: ${bikeConfig.modelPath}`);
         this.createFallbackMesh();
         return;
       }
 
-      const model = cachedGltf.scene.clone();
+      const model = precloned.scene;
       AnimationHelper.setupShadows(model, false, false);
 
       // Apply scale and rotation
@@ -198,21 +199,16 @@ export class BikeCop extends THREE.Group {
       const assetLoader = AssetLoader.getInstance();
       const copModels = ['BlueSoldier_Male', 'Soldier_Male', 'BlueSoldier_Female', 'Soldier_Female'];
       const randomCop = copModels[Math.floor(Math.random() * copModels.length)];
-      const modelPath = `/assets/pedestrians/${randomCop}.gltf`;
 
-      const cachedGltf = assetLoader.getModel(modelPath);
-      if (!cachedGltf || !cachedGltf.scene) {
-        console.warn(`[BikeCop] Rider model not in cache: ${modelPath}`);
+      // Use pre-cloned cop rider from pool (cloned during preload, instant at runtime!)
+      const precloned = assetLoader.getPreClonedCopRider(randomCop);
+      if (!precloned) {
+        console.warn(`[BikeCop] Rider model not available: ${randomCop}`);
         return;
       }
 
-      let rider: THREE.Object3D;
-      try {
-        rider = SkeletonUtils.clone(cachedGltf.scene);
-      } catch (cloneError) {
-        console.warn('[BikeCop] Failed to clone rider model:', cloneError);
-        return;
-      }
+      const rider = precloned.scene;
+      const animations = precloned.animations;
 
       // Scale and position rider on bicycle
       rider.scale.setScalar(1.0); // Normal scale since bike is scaled via modelScale
@@ -223,7 +219,7 @@ export class BikeCop extends THREE.Group {
 
       // Setup animation mixer
       this.riderMixer = new THREE.AnimationMixer(rider);
-      this.riderAnimations = cachedGltf.animations || [];
+      this.riderAnimations = animations || [];
 
       if (this.riderAnimations.length > 0) {
         // Try to find seated animation

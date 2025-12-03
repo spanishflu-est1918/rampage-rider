@@ -117,15 +117,17 @@ export class CopCar extends THREE.Group {
   private async loadModel(): Promise<void> {
     try {
       const assetLoader = AssetLoader.getInstance();
-      const cachedGltf = assetLoader.getModel(COP_CAR_CONFIG.modelPath);
 
-      if (!cachedGltf) {
-        console.error(`[CopCar] Model not in cache: ${COP_CAR_CONFIG.modelPath}`);
+      // Use pre-cloned vehicle from pool (cloned during preload, instant at runtime!)
+      const precloned = assetLoader.getPreClonedVehicle(COP_CAR_CONFIG.modelPath);
+
+      if (!precloned) {
+        console.error(`[CopCar] Model not available: ${COP_CAR_CONFIG.modelPath}`);
         this.createFallbackMesh();
         return;
       }
 
-      const model = cachedGltf.scene.clone();
+      const model = precloned.scene;
       AnimationHelper.setupShadows(model, false, false);
 
       // Apply scale and rotation

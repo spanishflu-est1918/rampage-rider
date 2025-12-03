@@ -36,6 +36,8 @@ export class Player extends THREE.Group {
   private taseFlashTimer: number = 0;
   private taserImmunityTimer: number = 0;
   private jumpCooldown: number = 0; // Prevents jumping briefly after taser escape
+  private tasedDuration: number = 0; // How long player has been tased (for auto-escape)
+  private static readonly AUTO_ESCAPE_DURATION = 30; // Auto-escape after 30 seconds
 
   // Hit stun state (when damaged by cops)
   private isHitStunned: boolean = false;
@@ -409,17 +411,42 @@ export class Player extends THREE.Group {
       return;
     }
 
-    // Handle taser stun decay - EXPONENTIAL: faster drain as progress increases
-    if (this.isTased && this.taseEscapeProgress > 0) {
-      // Base decay + exponential multiplier based on progress
-      // At 0%: decay = base (15/s)
-      // At 50%: decay = base * 1.5 (~22/s)
-      // At 80%: decay = base * 2.9 (~44/s)
-      // At 95%: decay = base * 4.8 (~72/s)
-      const progressRatio = this.taseEscapeProgress / 100;
-      const exponentialMultiplier = 1 + Math.pow(progressRatio, 2.2) * 4.5; // 1x to 5.5x
-      const decayRate = TASER_CONFIG.ESCAPE_DECAY * exponentialMultiplier;
-      this.taseEscapeProgress = Math.max(0, this.taseEscapeProgress - (decayRate * deltaTime));
+    // Handle taser stun decay - EXPONENTIAL but CAPPED at 94%
+    if (this.isTased) {
+      // Track how long we've been tased for auto-escape
+      this.tasedDuration += deltaTime;
+
+      // Auto-escape after 30 seconds - mercy rule
+      if (this.tasedDuration >= Player.AUTO_ESCAPE_DURATION) {
+        // Force escape - same as reaching 100% progress
+        this.isTased = false;
+        this.taseEscapeProgress = 0;
+        this.tasedDuration = 0;
+        this.taserImmunityTimer = TASER_CONFIG.IMMUNITY_DURATION;
+        this.jumpCooldown = 0.5;
+        this.playAnimation('Idle_A', 0.1);
+
+        // Trigger explosion knockback to push away nearby cops
+        if (this.onTaserEscapeCallback) {
+          this.onTaserEscapeCallback(
+            (this as THREE.Group).position.clone(),
+            TASER_CONFIG.ESCAPE_KNOCKBACK,
+            TASER_CONFIG.ESCAPE_FORCE
+          );
+        }
+      } else if (this.taseEscapeProgress > 0) {
+        // Base decay + exponential multiplier based on progress
+        // CAP at 94% - above this, difficulty stays constant so escape is possible
+        // At 0%: decay = base (15/s)
+        // At 50%: decay = base * 1.5 (~22/s)
+        // At 80%: decay = base * 2.9 (~44/s)
+        // At 94%+: decay = base * 4.2 (~63/s) - CAPPED, no longer increases
+        const cappedProgress = Math.min(this.taseEscapeProgress, 94);
+        const progressRatio = cappedProgress / 100;
+        const exponentialMultiplier = 1 + Math.pow(progressRatio, 2.2) * 4.5; // 1x to ~5.2x max
+        const decayRate = TASER_CONFIG.ESCAPE_DECAY * exponentialMultiplier;
+        this.taseEscapeProgress = Math.max(0, this.taseEscapeProgress - (decayRate * deltaTime));
+      }
     }
 
     // Decrement taser immunity timer
@@ -670,6 +697,7 @@ export class Player extends THREE.Group {
     if (!this.isTased) {
       this.isTased = true;
       this.taseEscapeProgress = 0;
+      this.tasedDuration = 0; // Reset duration tracker
     }
   }
 
@@ -736,16 +764,19 @@ export class Player extends THREE.Group {
   /**
    * Handle Space key press for escaping taser
    * Uses INVERSE EXPONENTIAL: the higher your progress, the less each press adds
+   * CAPPED at 94% difficulty - above this, gains stay constant so escape is possible
    */
   handleEscapePress(): void {
     if (this.isTased) {
       // Diminishing returns: each press gives less as you get closer to 100%
+      // CAPPED at 94% - above this, gains stay constant
       // At 0%: gain = full (15%)
       // At 50%: gain = 80% of full (~12%)
       // At 80%: gain = 52% of full (~7.8%)
-      // At 95%: gain = 32% of full (~4.8%)
-      const progressRatio = this.taseEscapeProgress / 100;
-      const diminishingMultiplier = 1 - Math.pow(progressRatio, 1.9) * 0.66; // ~34% at 95%
+      // At 94%+: gain = 38% of full (~5.7%) - CAPPED, stays achievable
+      const cappedProgress = Math.min(this.taseEscapeProgress, 94);
+      const progressRatio = cappedProgress / 100;
+      const diminishingMultiplier = 1 - Math.pow(progressRatio, 1.9) * 0.66; // ~38% at 94%
       const actualGain = TASER_CONFIG.ESCAPE_PER_PRESS * diminishingMultiplier;
 
       this.taseEscapeProgress = Math.min(100, this.taseEscapeProgress + actualGain);
@@ -759,6 +790,7 @@ export class Player extends THREE.Group {
       if (this.taseEscapeProgress >= 100) {
         this.isTased = false;
         this.taseEscapeProgress = 0;
+        this.tasedDuration = 0; // Reset duration tracker
         this.taserImmunityTimer = TASER_CONFIG.IMMUNITY_DURATION;
         this.jumpCooldown = 0.5;
 

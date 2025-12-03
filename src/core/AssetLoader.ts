@@ -1,11 +1,14 @@
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as THREE from 'three';
 
 /**
  * AssetLoader
  *
  * Preloads and caches all game assets (models, textures) before game starts
+ * Also pre-clones pedestrian models during preload to avoid runtime stutter
  */
 export class AssetLoader {
   private static instance: AssetLoader;
@@ -13,6 +16,21 @@ export class AssetLoader {
   private dracoLoader: DRACOLoader;
   private cache: Map<string, GLTF> = new Map();
   private isLoaded: boolean = false;
+
+  // Pre-cloned pedestrian model pool (avoids SkeletonUtils.clone at runtime)
+  // Map: characterType -> array of pre-cloned THREE.Group ready to use
+  private pedestrianModelPool: Map<string, THREE.Group[]> = new Map();
+  private readonly CLONES_PER_MODEL = 10; // Pre-clone 10 of each pedestrian type
+
+  // Pre-cloned cop rider pool (BlueSoldier models for Cop, BikeCop, MotorbikeCop)
+  // These need SkeletonUtils.clone for animations
+  private copRiderPool: Map<string, THREE.Group[]> = new Map();
+  private readonly COP_CLONES_PER_MODEL = 8; // Max 8 motorbike cops + 3 foot cops + 2 bike cops = 13 total
+
+  // Pre-cloned vehicle pool (car, motorbike, bicycle for cops)
+  // These use simple .clone() - no skeletons
+  private vehiclePool: Map<string, THREE.Group[]> = new Map();
+  private readonly VEHICLE_CLONES = 8; // Max cop vehicles needed
 
   private constructor() {
     this.loader = new GLTFLoader();
@@ -96,7 +114,166 @@ export class AssetLoader {
 
     await Promise.all(loadPromises);
 
+    // Pre-clone models during preload (avoids runtime stutter)
+    await this.preClonePedestrianModels();
+    await this.preCloneCopModels();
+    await this.preCloneVehicleModels();
+
     this.isLoaded = true;
+  }
+
+  /**
+   * Pre-clone pedestrian models during preload phase
+   * This moves the expensive SkeletonUtils.clone() calls to the loading screen
+   */
+  private async preClonePedestrianModels(): Promise<void> {
+    const pedestrianTypes = [
+      'BlueSoldier_Female', 'BlueSoldier_Male',
+      'Casual2_Female', 'Casual2_Male',
+      'Casual3_Female', 'Casual3_Male',
+      'Casual_Bald', 'Casual_Female', 'Casual_Male',
+      'Chef_Female', 'Chef_Male',
+      'Doctor_Female_Young', 'Doctor_Male_Young',
+      'Ninja_Female', 'Ninja_Male', 'Ninja_Sand', 'Ninja_Sand_Female',
+      'Soldier_Female', 'Soldier_Male',
+      'Suit_Female', 'Suit_Male',
+      'Worker_Female', 'Worker_Male',
+    ];
+
+    for (const charType of pedestrianTypes) {
+      const path = `/assets/pedestrians/${charType}.gltf`;
+      const gltf = this.cache.get(path);
+      if (!gltf) continue;
+
+      const clones: THREE.Group[] = [];
+      for (let i = 0; i < this.CLONES_PER_MODEL; i++) {
+        // Pre-clone during loading screen (expensive operation happens here, not at runtime)
+        const clonedScene = SkeletonUtils.clone(gltf.scene) as THREE.Group;
+        clones.push(clonedScene);
+      }
+      this.pedestrianModelPool.set(charType, clones);
+    }
+  }
+
+  /**
+   * Pre-clone cop rider models (BlueSoldier variants) during preload
+   * Used by Cop, BikeCop, and MotorbikeCop entities
+   */
+  private async preCloneCopModels(): Promise<void> {
+    const copTypes = ['BlueSoldier_Male', 'BlueSoldier_Female', 'Soldier_Male', 'Soldier_Female'];
+
+    for (const copType of copTypes) {
+      const path = `/assets/pedestrians/${copType}.gltf`;
+      const gltf = this.cache.get(path);
+      if (!gltf) continue;
+
+      const clones: THREE.Group[] = [];
+      for (let i = 0; i < this.COP_CLONES_PER_MODEL; i++) {
+        const clonedScene = SkeletonUtils.clone(gltf.scene) as THREE.Group;
+        clones.push(clonedScene);
+      }
+      this.copRiderPool.set(copType, clones);
+    }
+  }
+
+  /**
+   * Pre-clone vehicle models (car, motorbike, bicycle) during preload
+   * Used by CopCar, MotorbikeCop, and BikeCop entities
+   */
+  private async preCloneVehicleModels(): Promise<void> {
+    const vehiclePaths = [
+      '/assets/vehicles/car.glb',
+      '/assets/vehicles/motorbike.glb',
+      '/assets/vehicles/bicycle.glb',
+    ];
+
+    for (const path of vehiclePaths) {
+      const gltf = this.cache.get(path);
+      if (!gltf) continue;
+
+      const clones: THREE.Group[] = [];
+      for (let i = 0; i < this.VEHICLE_CLONES; i++) {
+        // Vehicles don't have skeletons, use simple clone
+        const clonedScene = gltf.scene.clone() as THREE.Group;
+        clones.push(clonedScene);
+      }
+      this.vehiclePool.set(path, clones);
+    }
+  }
+
+  /**
+   * Get a pre-cloned cop rider model from the pool
+   * Falls back to runtime clone if pool is empty
+   */
+  getPreClonedCopRider(copType: string): { scene: THREE.Group; animations: THREE.AnimationClip[] } | null {
+    const path = `/assets/pedestrians/${copType}.gltf`;
+    const gltf = this.cache.get(path);
+    if (!gltf) return null;
+
+    const pool = this.copRiderPool.get(copType);
+    if (pool && pool.length > 0) {
+      const scene = pool.pop()!;
+      return { scene, animations: gltf.animations };
+    }
+
+    // Fallback: clone at runtime
+    console.warn(`[AssetLoader] Cop rider pool empty for ${copType}, cloning at runtime`);
+    const clonedScene = SkeletonUtils.clone(gltf.scene) as THREE.Group;
+    return { scene: clonedScene, animations: gltf.animations };
+  }
+
+  /**
+   * Get a pre-cloned vehicle model from the pool
+   * Falls back to runtime clone if pool is empty
+   */
+  getPreClonedVehicle(path: string): { scene: THREE.Group; animations: THREE.AnimationClip[] } | null {
+    const gltf = this.cache.get(path);
+    if (!gltf) return null;
+
+    const pool = this.vehiclePool.get(path);
+    if (pool && pool.length > 0) {
+      const scene = pool.pop()!;
+      return { scene, animations: gltf.animations };
+    }
+
+    // Fallback: clone at runtime
+    console.warn(`[AssetLoader] Vehicle pool empty for ${path}, cloning at runtime`);
+    const clonedScene = gltf.scene.clone() as THREE.Group;
+    return { scene: clonedScene, animations: gltf.animations };
+  }
+
+  /**
+   * Get a pre-cloned pedestrian model from the pool
+   * Falls back to runtime clone if pool is empty
+   */
+  getPreClonedPedestrian(characterType: string): { scene: THREE.Group; animations: THREE.AnimationClip[] } | null {
+    const path = `/assets/pedestrians/${characterType}.gltf`;
+    const gltf = this.cache.get(path);
+    if (!gltf) return null;
+
+    const pool = this.pedestrianModelPool.get(characterType);
+    if (pool && pool.length > 0) {
+      // Fast path: return pre-cloned model from pool
+      const scene = pool.pop()!;
+      return { scene, animations: gltf.animations };
+    }
+
+    // Fallback: clone at runtime (only happens if we spawn more than CLONES_PER_MODEL)
+    console.warn(`[AssetLoader] Pre-clone pool empty for ${characterType}, cloning at runtime`);
+    const clonedScene = SkeletonUtils.clone(gltf.scene) as THREE.Group;
+    return { scene: clonedScene, animations: gltf.animations };
+  }
+
+  /**
+   * Return a pedestrian model to the pool for reuse
+   */
+  returnPedestrianToPool(characterType: string, scene: THREE.Group): void {
+    let pool = this.pedestrianModelPool.get(characterType);
+    if (!pool) {
+      pool = [];
+      this.pedestrianModelPool.set(characterType, pool);
+    }
+    pool.push(scene);
   }
 
   /**
@@ -118,6 +295,9 @@ export class AssetLoader {
    */
   clear(): void {
     this.cache.clear();
+    this.pedestrianModelPool.clear();
+    this.copRiderPool.clear();
+    this.vehiclePool.clear();
     this.isLoaded = false;
   }
 }

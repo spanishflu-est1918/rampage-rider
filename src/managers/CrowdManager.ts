@@ -99,6 +99,9 @@ export class CrowdManager {
   private readonly _tempKillPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempSpawnPos: THREE.Vector3 = new THREE.Vector3();
 
+  // Initial spawn state
+  private initialSpawnDone: boolean = false;
+
   constructor(scene: THREE.Scene, world: RAPIER.World, aiManager: AIManager) {
     this.scene = scene;
     this.world = world;
@@ -152,32 +155,19 @@ export class CrowdManager {
     return pool[0].type;
   }
 
-  // PERF: Staggered spawn state to prevent 3-second stall from bulk model loading
-  private staggeredSpawnQueue: number = 0;
-  private staggeredSpawnPlayerPos: THREE.Vector3 = new THREE.Vector3();
-  private readonly SPAWNS_PER_FRAME: number = 5; // Spread 60 spawns over 12 frames
-
   /**
-   * Initialize crowd with pedestrians (staggered over multiple frames)
+   * Initialize crowd with pedestrians
+   * Now instant because models are pre-cloned during preload!
    */
   spawnInitialCrowd(playerPosition: THREE.Vector3): void {
-    // Queue staggered spawning instead of all-at-once
-    this.staggeredSpawnQueue = this.maxPedestrians;
-    this.staggeredSpawnPlayerPos.copy(playerPosition);
-    // Note: Actual spawning happens in update() to spread load across frames
-  }
+    if (this.initialSpawnDone) return;
 
-  /**
-   * Process staggered spawn queue (called from update)
-   */
-  private processStaggeredSpawns(): void {
-    if (this.staggeredSpawnQueue <= 0) return;
-
-    const toSpawn = Math.min(this.staggeredSpawnQueue, this.SPAWNS_PER_FRAME);
-    for (let i = 0; i < toSpawn; i++) {
-      this.spawnPedestrian(this.staggeredSpawnPlayerPos);
+    // Spawn all pedestrians immediately - models are pre-cloned so this is fast
+    for (let i = 0; i < this.maxPedestrians; i++) {
+      this.spawnPedestrian(playerPosition);
     }
-    this.staggeredSpawnQueue -= toSpawn;
+
+    this.initialSpawnDone = true;
   }
 
   /**
@@ -552,9 +542,6 @@ export class CrowdManager {
    * Update all pedestrians (Yuka AI updated by Engine's AIManager)
    */
   update(deltaTime: number, playerPosition: THREE.Vector3): void {
-    // PERF: Process staggered spawns first (spreads initial crowd over multiple frames)
-    this.processStaggeredSpawns();
-
     // Mark pedestrians for removal (don't remove during iteration)
     for (const pedestrian of this.pedestrians) {
       // Calculate squared distance once for both removal check and animation LOD
@@ -654,6 +641,7 @@ export class CrowdManager {
     this.deathTimers.clear();
     this.pedestriansToRemove = [];
     this.tablePedestrians.clear();
+    this.initialSpawnDone = false;
     // Note: AIManager is shared, don't clear it here
 
     // Clear table instances
