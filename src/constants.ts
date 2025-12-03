@@ -269,10 +269,10 @@ export const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
     colliderWidth: 0.4,
     colliderHeight: 0.6,
     colliderLength: 1.2,
-    modelScale: 0.0045, // Model is ~462 units tall, need ~2.1 units (1.5x larger)
-    modelRotationY: 0, // GLTF Y-forward becomes Three.js -Z (default forward)
+    modelScale: 1.0, // Model is already game-scale (~2m tall)
+    modelRotationY: 0, // Model already faces correct direction
     modelRotationX: 0,
-    modelOffsetY: 0.6, // Raise model to sit on ground properly
+    modelOffsetY: -0.01, // Wheels at Y=0, slight adjustment to touch ground
     riderOffsetY: 0.5, // Height for motorbike seat
     riderOffsetZ: -0.5, // Move back to sit on seat
     hideRider: false, // Show rider on motorbike
@@ -341,9 +341,9 @@ export const TIER_VEHICLE_MAP: Partial<Record<Tier, VehicleType>> = {
  */
 export const COP_BIKE_CONFIG = {
   modelPath: '/assets/vehicles/motorbike.glb',
-  modelScale: 0.004,
-  modelRotationY: 0,
-  modelOffsetY: 0.6,
+  modelScale: 1.0, // Model is already game-scale
+  modelRotationY: 0, // Model already faces correct direction
+  modelOffsetY: -0.01, // Wheels at ground level
   colliderWidth: 0.35,
   colliderHeight: 0.5,
   colliderLength: 1.0,
