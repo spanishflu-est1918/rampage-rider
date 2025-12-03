@@ -145,17 +145,6 @@ export class CopCar extends THREE.Group {
       model.position.z = -center.z;
       model.position.y = COP_CAR_CONFIG.modelOffsetY;
 
-      // Apply police colors (black and white)
-      model.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
-          const mat = child.material as THREE.MeshStandardMaterial;
-          if (mat.color) {
-            // Alternate black/white for police look
-            mat.color.setHex(0x111111); // Dark police car
-          }
-        }
-      });
-
       this.modelContainer.add(model);
       this.modelLoaded = true;
     } catch (error) {

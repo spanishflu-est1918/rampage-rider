@@ -125,6 +125,7 @@ export class AssetLoader {
       '/assets/vehicles/motorbike.glb',
       '/assets/vehicles/car.glb',
       '/assets/vehicles/truck.glb', // 18-wheeler
+      '/assets/vehicles/police_muscle.glb', // Police car
 
       // Props
       '/assets/props/christmas-market.glb',
@@ -235,6 +236,7 @@ export class AssetLoader {
       '/assets/vehicles/car.glb',
       '/assets/vehicles/motorbike.glb',
       '/assets/vehicles/bicycle.glb',
+      '/assets/vehicles/police_muscle.glb',
     ];
 
     for (const path of vehiclePaths) {
