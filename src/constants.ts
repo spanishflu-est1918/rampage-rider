@@ -634,13 +634,13 @@ export const RAMPAGE_DIMENSION = {
   RAY_OUTER_RADIUS: 50, // Extends beyond camera frustum
   RAY_ROTATION_SPEED: 0.1, // Radians per second (slow rotation)
   RAY_PULSE_FREQUENCY: 3, // Hz
-  RAY_OPACITY_MIN: 0.15,
-  RAY_OPACITY_MAX: 0.45,
+  RAY_OPACITY_MIN: 0.35,
+  RAY_OPACITY_MAX: 0.65,
 
-  // Speed lines (black streaks radiating outward)
+  // Speed lines (red streaks radiating outward - matches rays)
   SPEED_LINE_COUNT: 24,
-  SPEED_LINE_COLOR: 0x000000, // Black on white void
-  SPEED_LINE_OPACITY: 0.6,
+  SPEED_LINE_COLOR: 0xcc0000, // Blood red to match rays
+  SPEED_LINE_OPACITY: 0.7,
   SPEED_LINE_MIN_SPEED: 15, // Units per second
   SPEED_LINE_MAX_SPEED: 25,
   SPEED_LINE_MIN_LENGTH: 2,
@@ -649,5 +649,5 @@ export const RAMPAGE_DIMENSION = {
   SPEED_LINE_MAX_LIFE: 0.8,
 
   // Void background
-  VOID_COLOR: 0xffffff, // Stark white
+  VOID_COLOR: 0xf0f0f0, // Light gray for contrast with red rays
 } as const;

@@ -1136,7 +1136,10 @@ export class CrowdManager {
    */
   setTablesVisible(visible: boolean): void {
     for (const table of this.tableInstances) {
-      table.mesh.visible = visible;
+      // Traverse all children to ensure complete visibility toggle
+      table.mesh.traverse((child) => {
+        child.visible = visible;
+      });
     }
   }
 }

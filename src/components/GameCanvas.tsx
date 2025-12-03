@@ -87,7 +87,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
     return () => {
       cancelled = true;
 
-      // Only dispose if engine completed initialization
+      // Dispose engine if completed initialization
       if (engineRef.current) {
         try {
           engineRef.current.dispose();
@@ -97,7 +97,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
         }
       }
 
-      // Don't dispose initializingEngine - let it finish init and self-cleanup
+      // Also dispose engine that's still initializing (React Strict Mode)
+      if (_initializingEngine) {
+        try {
+          _initializingEngine.dispose();
+        } catch {
+          // Ignore disposal errors during cancel
+        }
+        _initializingEngine = null;
+      }
 
       window.removeEventListener('resize', handleResize);
     };
