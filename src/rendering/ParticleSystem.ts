@@ -15,6 +15,10 @@ export class ParticleEmitter {
     size: number;
   }> = [];
 
+  // PERF: Pre-allocated velocity vectors for blood particles (avoids per-emit allocations)
+  private readonly bloodVelocityPool: THREE.Vector3[] = [];
+  private readonly MAX_BLOOD_VELOCITIES = 200; // Match MAX_PARTICLES
+
   // Shared resources (created once, reused)
   private sharedTexture: THREE.Texture;
   private pointsMaterial: THREE.PointsMaterial;
@@ -41,6 +45,10 @@ export class ParticleEmitter {
   private debrisFreeIndices: number[] = [];
   private activeDebris: number = 0;
 
+  // PERF: Pre-allocated velocity vectors for debris particles (avoids per-emit allocations)
+  private readonly debrisVelocityPool: THREE.Vector3[] = [];
+  private readonly MAX_DEBRIS_VELOCITIES = 100; // Match MAX_DEBRIS
+
   // Buffer attributes
   private positions: Float32Array;
   private sizes: Float32Array;
@@ -66,10 +74,11 @@ export class ParticleEmitter {
     this.sizes = new Float32Array(this.MAX_PARTICLES);
     this.alphas = new Float32Array(this.MAX_PARTICLES);
 
-    // Initialize free indices pool
+    // Initialize free indices pool and velocity pool
     for (let i = 0; i < this.MAX_PARTICLES; i++) {
       this.freeIndices.push(i);
       this.alphas[i] = 0; // Start invisible
+      this.bloodVelocityPool.push(new THREE.Vector3()); // Pre-allocate velocity vectors
     }
 
     // Create geometry with buffer attributes
@@ -132,10 +141,11 @@ export class ParticleEmitter {
     this.debrisAlphas = new Float32Array(this.MAX_DEBRIS);
     this.debrisColors = new Float32Array(this.MAX_DEBRIS * 3);
 
-    // Initialize debris free indices pool
+    // Initialize debris free indices pool and velocity pool
     for (let i = 0; i < this.MAX_DEBRIS; i++) {
       this.debrisFreeIndices.push(i);
       this.debrisAlphas[i] = 0;
+      this.debrisVelocityPool.push(new THREE.Vector3()); // Pre-allocate velocity vectors
     }
 
     // Create debris geometry
@@ -281,8 +291,9 @@ export class ParticleEmitter {
       const angle = Math.random() * Math.PI * 2;
       const speed = 1 + Math.random() * 3;
 
-      // Create velocity vector for this particle (stored in particle object, not per-frame)
-      const velocity = new THREE.Vector3(
+      // PERF: Reuse pre-allocated velocity vector instead of new THREE.Vector3()
+      const velocity = this.bloodVelocityPool[index];
+      velocity.set(
         Math.cos(angle) * speed,
         1 + Math.random() * 2,
         Math.sin(angle) * speed
@@ -334,8 +345,9 @@ export class ParticleEmitter {
       // Normalize direction once (reuse temp vector for calculation)
       const dirLen = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z) || 1;
 
-      // Create velocity vector for this particle (stored in particle object, not per-frame)
-      const velocity = new THREE.Vector3(
+      // PERF: Reuse pre-allocated velocity vector instead of new THREE.Vector3()
+      const velocity = this.bloodVelocityPool[index];
+      velocity.set(
         (direction.x / dirLen) * speedMult + (Math.random() - 0.5) * spread,
         0.5 + Math.random() * 1.5,
         (direction.z / dirLen) * speedMult + (Math.random() - 0.5) * spread
@@ -486,7 +498,9 @@ export class ParticleEmitter {
       const speed = 4 + Math.random() * 8;
       const upSpeed = 3 + Math.random() * 6;
 
-      const velocity = new THREE.Vector3(
+      // PERF: Reuse pre-allocated velocity vector instead of new THREE.Vector3()
+      const velocity = this.debrisVelocityPool[index];
+      velocity.set(
         Math.cos(angle) * speed,
         upSpeed,
         Math.sin(angle) * speed
@@ -612,7 +626,9 @@ export class ParticleEmitter {
       const speed = 3 + Math.random() * 5;
       const upSpeed = 1 + Math.random() * 3;
 
-      const velocity = new THREE.Vector3(
+      // PERF: Reuse pre-allocated velocity vector instead of new THREE.Vector3()
+      const velocity = this.debrisVelocityPool[index];
+      velocity.set(
         Math.cos(angle) * speed,
         upSpeed,
         Math.sin(angle) * speed

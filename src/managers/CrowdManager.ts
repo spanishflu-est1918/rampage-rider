@@ -99,6 +99,11 @@ export class CrowdManager {
   private readonly _tempKillPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempSpawnPos: THREE.Vector3 = new THREE.Vector3();
 
+  // PERF: Pre-allocated kill position pool (avoids per-kill allocations during combos)
+  private readonly _killPositionPool: THREE.Vector3[] = [];
+  private readonly MAX_KILL_POSITIONS = 30; // Max kills per attack
+  private _killPositionPoolIndex = 0;
+
   // Initial spawn state
   private initialSpawnDone: boolean = false;
 
@@ -111,6 +116,11 @@ export class CrowdManager {
     this.shadowManager = new InstancedBlobShadows(scene, 80);
 
     this.totalWeight = this.characterPool.reduce((sum, char) => sum + char.weight, 0);
+
+    // PERF: Pre-allocate kill position pool
+    for (let i = 0; i < this.MAX_KILL_POSITIONS; i++) {
+      this._killPositionPool.push(new THREE.Vector3());
+    }
 
     // Table grid setup
     this.cellWidth = CITY_CONFIG.BUILDING_WIDTH + CITY_CONFIG.STREET_WIDTH;
@@ -270,6 +280,9 @@ export class CrowdManager {
     let panicKillCount = 0;
     const killPositions: THREE.Vector3[] = [];
 
+    // PERF: Reset kill position pool index for this attack
+    this._killPositionPoolIndex = 0;
+
     // Pre-calculate squared radius to avoid sqrt in hot loop
     const radiusSq = radius * radius;
 
@@ -299,7 +312,12 @@ export class CrowdManager {
 
           if (pedestrian.isDeadState()) {
             killCount++;
-            killPositions.push(pedPos.clone());
+            // PERF: Use pre-allocated pool instead of clone()
+            if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+              const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+              pooledPos.copy(pedPos);
+              killPositions.push(pooledPos);
+            }
             if (wasPanicking) {
               panicKillCount++;
             }
@@ -331,6 +349,9 @@ export class CrowdManager {
     const killPositions: THREE.Vector3[] = [];
     const radiusSq = radius * radius;
 
+    // PERF: Reset kill position pool index for this attack
+    this._killPositionPoolIndex = 0;
+
     for (const pedestrian of this.pedestrians) {
       if (pedestrian.isDeadState()) continue;
       if (killCount >= maxKills) break;
@@ -355,7 +376,12 @@ export class CrowdManager {
 
         if (pedestrian.isDeadState()) {
           killCount++;
-          killPositions.push(pedPos.clone());
+          // PERF: Use pre-allocated pool instead of clone()
+          if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+            const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+            pooledPos.copy(pedPos);
+            killPositions.push(pooledPos);
+          }
         }
       }
     }
@@ -390,6 +416,9 @@ export class CrowdManager {
     let killCount = 0;
     let panicKillCount = 0;
     const killPositions: THREE.Vector3[] = [];
+
+    // PERF: Reset kill position pool index for this attack
+    this._killPositionPoolIndex = 0;
 
     // Kill zone extends beyond physics collision box at front/back only
     // Sides don't need extra margin since rotation sweep handles that
@@ -448,7 +477,12 @@ export class CrowdManager {
 
         if (pedestrian.isDeadState()) {
           killCount++;
-          killPositions.push(pedPos.clone());
+          // PERF: Use pre-allocated pool instead of clone()
+          if (this._killPositionPoolIndex < this.MAX_KILL_POSITIONS) {
+            const pooledPos = this._killPositionPool[this._killPositionPoolIndex++];
+            pooledPos.copy(pedPos);
+            killPositions.push(pooledPos);
+          }
           if (wasPanicking) {
             panicKillCount++;
           }
