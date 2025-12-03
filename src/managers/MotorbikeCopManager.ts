@@ -127,9 +127,10 @@ export class MotorbikeCopManager {
       }
     }
 
-    // Check for wave clear
+    // Check for wave clear (only if cops existed previously)
     const activeCops = this.getActiveCopCount();
-    if (activeCops === 0 && this.previousHeat >= 25 && !this.currentWaveCleared) {
+    const hadCopsPreviously = this.scoutCount > 0 || this.swarmCount > 0 || this.bossCount > 0;
+    if (activeCops === 0 && this.previousHeat >= 25 && !this.currentWaveCleared && hadCopsPreviously) {
       this.currentWaveCleared = true;
       this.waveRespiteTimer = this.WAVE_RESPITE_DURATION;
     }
