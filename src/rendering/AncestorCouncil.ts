@@ -164,8 +164,12 @@ export class AncestorCouncil {
     this.createDebugLine();
   }
 
+  // Shader uniforms for animated ghost spiral
+  private spiralTime = 0;
+  private spiralMaterial: THREE.ShaderMaterial | null = null;
+
   /**
-   * Create ghostly spiral line
+   * Create animated ghostly spiral line
    */
   private createDebugLine(): void {
     // Create initial curve points (more points = smoother curve)
@@ -185,20 +189,71 @@ export class AncestorCouncil {
     }
 
     const curve = new THREE.CatmullRomCurve3(points);
-    this.debugLineGeometry = new THREE.TubeGeometry(curve, 300, 0.03, 6, false);
+    this.debugLineGeometry = new THREE.TubeGeometry(curve, 300, 0.04, 8, false);
 
-    // Ghostly material matching ancestors
-    const material = new THREE.MeshStandardMaterial({
-      color: SPIRAL_CONFIG.GHOST_COLOR,
-      emissive: SPIRAL_CONFIG.GHOST_EMISSIVE,
-      emissiveIntensity: 0.3,
+    // Custom shader for animated ghostly effect
+    this.spiralMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        baseColor: { value: new THREE.Color(0.9, 0.85, 1.0) },
+        glowColor: { value: new THREE.Color(0.8, 0.2, 0.3) },
+        opacity: { value: 0.35 },
+      },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        void main() {
+          vUv = uv;
+          vPosition = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform float time;
+        uniform vec3 baseColor;
+        uniform vec3 glowColor;
+        uniform float opacity;
+        varying vec2 vUv;
+        varying vec3 vPosition;
+
+        // Simple noise function
+        float noise(float x) {
+          return fract(sin(x * 12.9898) * 43758.5453);
+        }
+
+        void main() {
+          // Flowing waves along the spiral
+          float wave1 = sin(vUv.x * 20.0 - time * 3.0) * 0.5 + 0.5;
+          float wave2 = sin(vUv.x * 35.0 + time * 2.0) * 0.5 + 0.5;
+          float wave3 = sin(vUv.x * 8.0 - time * 1.5) * 0.5 + 0.5;
+
+          // Combine waves for ghostly pulsing
+          float pulse = wave1 * 0.4 + wave2 * 0.3 + wave3 * 0.3;
+
+          // Add some sparkle/flicker
+          float flicker = noise(vUv.x * 100.0 + time * 10.0);
+          float sparkle = step(0.97, flicker) * 0.5;
+
+          // Mix colors based on pulse
+          vec3 color = mix(baseColor, glowColor, pulse * 0.6);
+
+          // Final opacity with pulse and sparkle
+          float finalOpacity = opacity * (0.5 + pulse * 0.5) + sparkle;
+
+          // Fade at edges of tube
+          float edgeFade = 1.0 - abs(vUv.y - 0.5) * 2.0;
+          finalOpacity *= edgeFade;
+
+          gl_FragColor = vec4(color, finalOpacity);
+        }
+      `,
       transparent: true,
-      opacity: 0.15,
       depthTest: false,
       depthWrite: false,
+      side: THREE.DoubleSide,
     });
 
-    this.debugLine = new THREE.Mesh(this.debugLineGeometry, material) as unknown as THREE.Line;
+    this.debugLine = new THREE.Mesh(this.debugLineGeometry, this.spiralMaterial) as unknown as THREE.Line;
     this.debugLine.visible = false;
     this.debugLine.renderOrder = 999;
     this.scene.add(this.debugLine);
@@ -323,14 +378,20 @@ export class AncestorCouncil {
     }
 
     // Update debug line positions
-    this.updateDebugLine(expansion);
+    this.updateDebugLine(expansion, dt);
   }
 
   /**
    * Update debug tube position (follows player, rotates, and scales with expansion)
    */
-  private updateDebugLine(expansion: number): void {
+  private updateDebugLine(expansion: number, dt: number): void {
     if (!this.debugLine) return;
+
+    // Update shader time for animation
+    this.spiralTime += dt;
+    if (this.spiralMaterial) {
+      this.spiralMaterial.uniforms.time.value = this.spiralTime;
+    }
 
     // Move tube to player position and rotate with spiral
     this.debugLine.position.set(this.playerPosition.x, 0, this.playerPosition.z);
