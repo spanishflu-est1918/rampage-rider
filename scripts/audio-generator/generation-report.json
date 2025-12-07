@@ -1,17 +1,17 @@
 {
-  "timestamp": "2025-12-07T13:44:52.493Z",
+  "timestamp": "2025-12-07T14:02:46.240Z",
   "config": {
     "outputFormat": "mp3_44100_128",
     "promptInfluence": 0.3,
     "parallelRequests": 1
   },
-  "elapsed": "4.6s",
+  "elapsed": "12.3s",
   "results": {
     "success": [
       {
-        "id": "cop_freeze_female",
-        "path": "/Users/gorkolas/Documents/www/rampage/public/audio/sfx/cops/cop_freeze_female.mp3",
-        "size": 17180
+        "id": "table_crowd",
+        "path": "/Users/gorkolas/Documents/www/rampage/public/audio/ambient/table_crowd.mp3",
+        "size": 160958
       }
     ],
     "failed": []

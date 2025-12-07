@@ -824,6 +824,7 @@ export const gameAudio = {
    */
   startTableCrowd(): void {
     audioManager.startPositionalSound("table_crowd", SoundId.TABLE_CROWD);
+    audioManager.startPositionalSound("table_clink", SoundId.TABLE_CLINK);
   },
 
   /**
@@ -833,6 +834,7 @@ export const gameAudio = {
   updateTableCrowdDistance(distance: number): void {
     // Max volume 2.0 when very close, audible within 12 units
     audioManager.updatePositionalVolume("table_crowd", distance, 12, 2.0);
+    audioManager.updatePositionalVolume("table_clink", distance, 12, 1.5);
   },
 
   /**
@@ -840,6 +842,7 @@ export const gameAudio = {
    */
   stopTableCrowd(): void {
     audioManager.stopPositionalSound("table_crowd");
+    audioManager.stopPositionalSound("table_clink");
   },
 
   // ============================================

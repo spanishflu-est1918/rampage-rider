@@ -10,6 +10,7 @@ import {
   ENTITY_SPEEDS,
   PEDESTRIAN_CONFIG,
 } from '../constants';
+import { gameAudio } from '../audio';
 
 /**
  * Pedestrian Entity
@@ -324,6 +325,8 @@ export class Pedestrian extends THREE.Group {
     // Already panicking and past freeze? Don't restart
     if (this.isPanicking && this.panicFreezeTimer <= 0) return;
 
+    // Only scream if not already panicking (first panic trigger)
+    const wasNotPanicking = !this.isPanicking;
     this.isPanicking = true;
 
     // Deer-in-headlights: freeze briefly before fleeing (gives player time to catch)
@@ -339,6 +342,11 @@ export class Pedestrian extends THREE.Group {
 
     // Play startled/idle animation during freeze
     this.playAnimation('Idle', 0.1);
+
+    // Scream when first panicking (30% chance to avoid audio spam)
+    if (wasNotPanicking && Math.random() < 0.3) {
+      gameAudio.playPedestrianScream();
+    }
   }
 
   /**

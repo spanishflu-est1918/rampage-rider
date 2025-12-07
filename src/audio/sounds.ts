@@ -209,6 +209,7 @@ export enum SoundId {
   WIND_LOOP = 'wind_loop',
   CHRISTMAS_MARKET = 'christmas_market',
   TABLE_CROWD = 'table_crowd', // Positional crowd near tables
+  TABLE_CLINK = 'table_clink', // Glasses clinking at tables
   DEATH_AMBIENT = 'death_ambient', // Dark purgatory loop for game over
 
   // ========== VOICE ANNOUNCER ==========
@@ -1001,6 +1002,11 @@ export const SOUND_CONFIG: Record<SoundId, SoundConfig> = {
     pitch: 1.0,
     category: 'ambient',
   },
+  [SoundId.TABLE_CLINK]: {
+    volume: 0.25,
+    pitch: 1.0,
+    category: 'ambient',
+  },
   [SoundId.DEATH_AMBIENT]: {
     volume: 0.4,
     pitch: 1.0,
@@ -1317,6 +1323,7 @@ export const SOUND_PATHS: Partial<Record<SoundId, string>> = {
   [SoundId.WIND_LOOP]: '/audio/ambient/wind_loop.mp3',
   [SoundId.CHRISTMAS_MARKET]: '/audio/ambient/christmas_market.mp3',
   [SoundId.TABLE_CROWD]: '/audio/ambient/table_crowd.mp3',
+  [SoundId.TABLE_CLINK]: '/audio/ambient/table_clink.mp3',
   [SoundId.DEATH_AMBIENT]: '/audio/ambient/death_ambient.mp3',
 
   // ========== VOICE ANNOUNCER ==========
