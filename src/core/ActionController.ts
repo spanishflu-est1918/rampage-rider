@@ -9,6 +9,7 @@ export enum ActionType {
   ENTER_CAR = 'ENTER_CAR',
   SWITCH_VEHICLE = 'SWITCH_VEHICLE', // Switch from current vehicle to awaiting vehicle
   ESCAPE_TASER = 'ESCAPE_TASER',
+  EXIT_STUCK_VEHICLE = 'EXIT_STUCK_VEHICLE', // Exit when vehicle is stuck
 }
 
 /**
@@ -19,6 +20,7 @@ export interface ActionContext {
   isNearCar: boolean;
   isNearAwaitingVehicle: boolean; // Near an upgrade vehicle while in current vehicle
   isInVehicle: boolean;
+  isVehicleStuck: boolean; // Vehicle hasn't moved for a while
 }
 
 /**
@@ -26,9 +28,10 @@ export interface ActionContext {
  *
  * Priority order (highest first):
  * 1. Escape taser (when tased)
- * 2. Switch vehicle (when in vehicle and near awaiting upgrade)
- * 3. Enter car (when near car and not in vehicle)
- * 4. Attack (default)
+ * 2. Exit stuck vehicle (when in vehicle and stuck)
+ * 3. Switch vehicle (when in vehicle and near awaiting upgrade)
+ * 4. Enter car (when near car and not in vehicle)
+ * 5. Attack (default)
  */
 export class ActionController {
   private lastActionPressed: boolean = false;
@@ -51,17 +54,22 @@ export class ActionController {
       return { action: ActionType.ESCAPE_TASER, isNewPress };
     }
 
-    // Priority 2: Switch vehicle (when in vehicle and near awaiting upgrade)
+    // Priority 2: Exit stuck vehicle (when in vehicle and stuck for a while)
+    if (context.isInVehicle && context.isVehicleStuck) {
+      return { action: ActionType.EXIT_STUCK_VEHICLE, isNewPress };
+    }
+
+    // Priority 3: Switch vehicle (when in vehicle and near awaiting upgrade)
     if (context.isInVehicle && context.isNearAwaitingVehicle) {
       return { action: ActionType.SWITCH_VEHICLE, isNewPress };
     }
 
-    // Priority 3: Enter car (only on new press, when not in vehicle)
+    // Priority 4: Enter car (only on new press, when not in vehicle)
     if (context.isNearCar && !context.isInVehicle) {
       return { action: ActionType.ENTER_CAR, isNewPress };
     }
 
-    // Priority 4: Attack (works on foot AND in vehicle - Engine handles vehicle attacks)
+    // Priority 5: Attack (works on foot AND in vehicle - Engine handles vehicle attacks)
     return { action: ActionType.ATTACK, isNewPress };
   }
 

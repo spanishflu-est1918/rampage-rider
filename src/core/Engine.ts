@@ -221,7 +221,7 @@ export class Engine {
 
   // PERF: Pre-allocated objects for update loop (avoid per-frame allocations)
   private readonly _defaultTaserState = { isTased: false, escapeProgress: 0 };
-  private readonly _actionContext = { isTased: false, isNearCar: false, isNearAwaitingVehicle: false, isInVehicle: false };
+  private readonly _actionContext = { isTased: false, isNearCar: false, isNearAwaitingVehicle: false, isInVehicle: false, isVehicleStuck: false };
   private readonly _killPositions: THREE.Vector3[] = [];
 
   // Pre-allocated spawn position offsets (avoid per-call allocation)
@@ -326,6 +326,12 @@ export class Engine {
   private truckBlastKillCounter: number = 0;
   private static readonly SEDAN_BLAST_KILL_THRESHOLD = 3; // Blast available every 3 kills
   private static readonly TRUCK_BLAST_KILL_THRESHOLD = 2; // Blast available every 2 kills (truck is slower)
+
+  // Vehicle stuck detection - allows player to exit if stuck
+  private vehicleStuckTimer: number = 0;
+  private lastVehiclePosition: THREE.Vector3 = new THREE.Vector3();
+  private static readonly VEHICLE_STUCK_THRESHOLD = 2.0; // Seconds without movement to be considered stuck
+  private static readonly VEHICLE_STUCK_MOVE_THRESHOLD = 0.5; // Min distance to count as "moving"
 
   private actionController: ActionController = new ActionController();
 
@@ -1294,6 +1300,70 @@ export class Engine {
 
     this.shakeCamera(2.0);
     this.particles.emitBlood(vehiclePos, 100);
+  }
+
+  /**
+   * Exit vehicle when stuck - uses wider search for safe position
+   * Keeps player's tier so they don't lose progress
+   */
+  private exitStuckVehicle(): void {
+    if (!this.vehicle || !this.player) return;
+
+    // Stop vehicle engine audio
+    gameAudio.stopVehicleEngine('player_vehicle');
+
+    const vehiclePos = this.vehicle.getPosition();
+    // Use rampage exit position finder for wider search (more aggressive)
+    const safePos = this.findSafeRampageExitPosition(vehiclePos);
+
+    if ((this.player as THREE.Group).parent === this.vehicle) {
+      (this.vehicle as THREE.Group).remove(this.player);
+      this.scene.add(this.player);
+      this.scene.add(this.player.getBlobShadow());
+    }
+
+    this.player.setVisible(true);
+
+    // Remove the stuck vehicle
+    this.scene.remove(this.vehicle);
+    this.vehicle.dispose();
+    this.vehicle = null;
+
+    const world = this.physics.getWorld();
+    if (world) {
+      const oldShadow = this.player.getBlobShadow();
+      this.scene.remove(oldShadow);
+      this.player.dispose();
+      this.scene.remove(this.player);
+
+      this.player = new Player();
+      this.player.createPhysicsBody(world, safePos);
+      this.scene.add(this.player);
+      this.scene.add(this.player.getBlobShadow());
+
+      this.setupPlayerCallbacks();
+    }
+
+    this.isInVehicle = false;
+    this.vehicleSpawned = false;
+    this.stats.tier = Tier.FOOT;
+
+    // Vehicle cops dismount and become foot cops
+    this.despawnCopsFromTier(Tier.BIKE);
+    this.despawnCopsFromTier(Tier.MOTO);
+    this.despawnCopsFromTier(Tier.SEDAN);
+
+    // Reset stuck timer
+    this.vehicleStuckTimer = 0;
+
+    // Show notification that player escaped stuck vehicle
+    this.triggerKillNotification('VEHICLE ABANDONED', true, 0, 'prompt');
+
+    // Small camera shake
+    this.shakeCamera(1.0);
+
+    // Start vehicle respawn cooldown
+    this.vehicleRespawnCooldown = Engine.VEHICLE_RESPAWN_COOLDOWN_TIME;
   }
 
   private findSafeExitPosition(vehiclePos: THREE.Vector3): THREE.Vector3 {
@@ -2500,10 +2570,31 @@ export class Engine {
       this.triggerKillNotification(`PRESS SPACE - ${tierConfig.name.toUpperCase()}`, true, 0, 'prompt');
     }
     
+    // Vehicle stuck detection - track position and time without movement
+    if (this.isInVehicle && this.vehicle) {
+      const vehiclePos = this.vehicle.getPosition();
+      const distanceMoved = vehiclePos.distanceTo(this.lastVehiclePosition);
+
+      if (distanceMoved < Engine.VEHICLE_STUCK_MOVE_THRESHOLD) {
+        // Vehicle hasn't moved much, increment stuck timer
+        this.vehicleStuckTimer += dt;
+      } else {
+        // Vehicle is moving, reset timer
+        this.vehicleStuckTimer = 0;
+      }
+
+      // Update last position
+      this.lastVehiclePosition.copy(vehiclePos);
+    } else {
+      // Not in vehicle, reset stuck timer
+      this.vehicleStuckTimer = 0;
+    }
+
     this._actionContext.isTased = taserState.isTased;
     this._actionContext.isNearCar = this.vehicleSpawned && isNearCurrentVehicle;
     this._actionContext.isNearAwaitingVehicle = this.awaitingVehicle !== null && isNearAwaitingVehicle;
     this._actionContext.isInVehicle = this.isInVehicle;
+    this._actionContext.isVehicleStuck = this.vehicleStuckTimer >= Engine.VEHICLE_STUCK_THRESHOLD;
     const { action, isNewPress } = this.actionController.resolve(this.input, this._actionContext);
 
     if (isNewPress) {
@@ -2516,6 +2607,9 @@ export class Engine {
           break;
         case ActionType.ESCAPE_TASER:
           this.player?.handleEscapePress();
+          break;
+        case ActionType.EXIT_STUCK_VEHICLE:
+          this.exitStuckVehicle();
           break;
         case ActionType.ATTACK:
           if (this.player) {
