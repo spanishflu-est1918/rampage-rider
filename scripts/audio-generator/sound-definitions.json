@@ -707,8 +707,16 @@
     {
       "id": "table_crowd",
       "path": "ambient/table_crowd.mp3",
-      "prompt": "4 people loudly celebrating at dinner table, boisterous chatter, wine glasses clinking, beer bottles cheering, loud laughing and toasting, loopable",
+      "prompt": "Small group of people chatting and laughing at outdoor table, happy conversation, celebratory mood, loopable",
       "duration": 10,
+      "loop": true,
+      "category": "ambient"
+    },
+    {
+      "id": "table_clink",
+      "path": "ambient/table_clink.mp3",
+      "prompt": "Wine glasses clinking, beer bottles clanking together, drinking sounds, toasting cheers, loopable ambient",
+      "duration": 5,
       "loop": true,
       "category": "ambient"
     },
