@@ -382,7 +382,8 @@ export class Engine {
 
     // Initialize audio system (requires user interaction first, handled by resume())
     await gameAudio.init();
-    // Start Christmas market ambience
+    // Start menu music and Christmas market ambience
+    gameAudio.playMenuMusic();
     gameAudio.startAmbient();
     // Start positional table crowd (volume controlled by distance to biergarten tables)
     gameAudio.startTableCrowd();

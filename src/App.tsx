@@ -39,13 +39,7 @@ function App() {
       // Errors already logged by loaders
     });
 
-    // Initialize audio and start menu music when ready
-    gameAudio.init().then(() => {
-      gameAudio.playMenuMusic();
-      gameAudio.startAmbient();
-    }).catch((err) => {
-      console.warn('[Audio] Init failed, continuing without audio:', err);
-    });
+    // Audio is initialized in Engine.init() along with menu music and ambient
 
     return () => {
       unsubscribe();
