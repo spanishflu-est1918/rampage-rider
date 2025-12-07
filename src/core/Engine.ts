@@ -756,7 +756,10 @@ export class Engine {
   }
 
   debugSpawnVehicle(vehicleType: VehicleType | null): void {
-    if (this.isInVehicle) return;
+    // Exit current vehicle first if in one
+    if (this.isInVehicle) {
+      this.exitVehicle();
+    }
 
     // Clean up current vehicle if any
     if (this.vehicle) {
