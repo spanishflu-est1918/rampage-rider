@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import type { Engine } from '../core/Engine';
 import { GameStats, InputState, KillNotification } from '../types';
 import { VehicleType } from '../constants';
+import { mobileInput } from '../input/MobileInputManager';
+import { isMobileDevice } from '../utils/device';
 
 interface EngineControls {
   spawnVehicle: (type: VehicleType | null) => void;
@@ -112,9 +114,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Input Handling
+  // Input Handling (Keyboard + Mobile)
   useEffect(() => {
     if (!engineReady) return;
+
+    const isMobile = isMobileDevice();
 
     // Persistent input state - updated per key, not replaced
     const inputState: InputState = {
@@ -206,9 +210,50 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
+    // Mobile input handling
+    let mobileInputFrame: number | null = null;
+
+    if (isMobile) {
+      // Initialize mobile controls
+      mobileInput.setScheme('touch');
+
+      // Poll mobile input state each frame
+      const updateMobileInput = () => {
+        if (!engineRef.current) return;
+
+        const mobileState = mobileInput.getInputState();
+
+        // Merge mobile input with keyboard (mobile overrides if active)
+        // Analog values take priority when present
+        const mergedInput: InputState = {
+          up: inputState.up || mobileState.up,
+          down: inputState.down || mobileState.down,
+          left: inputState.left || mobileState.left,
+          right: inputState.right || mobileState.right,
+          action: inputState.action || mobileState.action,
+          mount: inputState.mount || mobileState.mount,
+          analogX: mobileState.analogX,
+          analogY: mobileState.analogY,
+        };
+
+        engineRef.current.handleInput(mergedInput);
+        mobileInputFrame = requestAnimationFrame(updateMobileInput);
+      };
+
+      mobileInputFrame = requestAnimationFrame(updateMobileInput);
+    }
+
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+
+      if (mobileInputFrame !== null) {
+        cancelAnimationFrame(mobileInputFrame);
+      }
+
+      if (isMobile) {
+        mobileInput.cleanup();
+      }
     };
   }, [engineReady, onPauseToggle]);
 

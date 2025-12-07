@@ -1,0 +1,528 @@
+/**
+ * MobileInputManager - Touch and Accelerometer controls for mobile
+ *
+ * Two control schemes:
+ * 1. Touch Surface - Bottom half of screen as directional touchpad, tap anywhere for action
+ * 2. Accelerometer - Tilt phone to move, tap for action
+ */
+
+import { InputState } from '../types';
+import { isMobileDevice } from '../utils/device';
+
+export type MobileControlScheme = 'touch' | 'accelerometer' | 'hybrid' | 'none';
+
+export interface MobileInputConfig {
+  // Touch surface settings
+  touchDeadzone: number; // Minimum distance from touch start to register movement (px)
+  touchSensitivity: number; // Movement sensitivity multiplier
+
+  // Accelerometer settings
+  accelDeadzone: number; // Tilt threshold before registering movement (degrees)
+  accelSensitivity: number; // Tilt sensitivity multiplier
+  accelMaxTilt: number; // Max tilt angle for full speed (degrees)
+
+  // Action settings
+  tapThreshold: number; // Max touch duration for tap vs drag (ms)
+  tapMoveThreshold: number; // Max movement for tap vs drag (px)
+}
+
+const DEFAULT_CONFIG: MobileInputConfig = {
+  touchDeadzone: 15,
+  touchSensitivity: 1.0,
+  accelDeadzone: 5,
+  accelSensitivity: 1.0,
+  accelMaxTilt: 30,
+  tapThreshold: 200,
+  tapMoveThreshold: 20,
+};
+
+interface TouchData {
+  identifier: number;
+  startX: number;
+  startY: number;
+  startTime: number;
+  currentX: number;
+  currentY: number;
+  isMovementTouch: boolean; // Was this touch used for movement?
+}
+
+export interface MobileInputState {
+  // Normalized movement direction (-1 to 1)
+  moveX: number;
+  moveY: number;
+
+  // Touch state for visual feedback
+  isTouching: boolean;
+  touchStartX: number;
+  touchStartY: number;
+  touchCurrentX: number;
+  touchCurrentY: number;
+
+  // Accelerometer state
+  tiltX: number; // degrees
+  tiltY: number; // degrees
+}
+
+export class MobileInputManager {
+  private config: MobileInputConfig;
+  private scheme: MobileControlScheme = 'none';
+  private inputState: InputState;
+  private mobileState: MobileInputState;
+
+  // Touch tracking
+  private activeTouches: Map<number, TouchData> = new Map();
+  private movementTouch: TouchData | null = null;
+
+  // Accelerometer
+  private accelPermissionGranted = false;
+  private accelSupported = false;
+  private baseOrientation: { beta: number; gamma: number } | null = null;
+
+  // Callbacks
+  private onActionCallback: (() => void) | null = null;
+  private onStateChangeCallback: ((state: MobileInputState) => void) | null = null;
+
+  // Bound event handlers (for cleanup)
+  private boundHandleTouchStart: (e: TouchEvent) => void;
+  private boundHandleTouchMove: (e: TouchEvent) => void;
+  private boundHandleTouchEnd: (e: TouchEvent) => void;
+  private boundHandleDeviceOrientation: (e: DeviceOrientationEvent) => void;
+
+  constructor(config: Partial<MobileInputConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+
+    this.inputState = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      action: false,
+      mount: false,
+      analogX: 0,
+      analogY: 0,
+    };
+
+    this.mobileState = {
+      moveX: 0,
+      moveY: 0,
+      isTouching: false,
+      touchStartX: 0,
+      touchStartY: 0,
+      touchCurrentX: 0,
+      touchCurrentY: 0,
+      tiltX: 0,
+      tiltY: 0,
+    };
+
+    // Bind handlers
+    this.boundHandleTouchStart = this.handleTouchStart.bind(this);
+    this.boundHandleTouchMove = this.handleTouchMove.bind(this);
+    this.boundHandleTouchEnd = this.handleTouchEnd.bind(this);
+    this.boundHandleDeviceOrientation = this.handleDeviceOrientation.bind(this);
+
+    // Check accelerometer support
+    this.accelSupported = 'DeviceOrientationEvent' in window;
+  }
+
+  /**
+   * Set the control scheme and attach appropriate listeners
+   */
+  setScheme(scheme: MobileControlScheme): void {
+    // Clean up previous scheme
+    this.cleanup();
+
+    this.scheme = scheme;
+
+    if (scheme === 'touch' || scheme === 'accelerometer' || scheme === 'hybrid') {
+      // All schemes use touch for action (tap)
+      window.addEventListener('touchstart', this.boundHandleTouchStart, { passive: false });
+      window.addEventListener('touchmove', this.boundHandleTouchMove, { passive: false });
+      window.addEventListener('touchend', this.boundHandleTouchEnd, { passive: false });
+      window.addEventListener('touchcancel', this.boundHandleTouchEnd, { passive: false });
+    }
+
+    if (scheme === 'accelerometer' || scheme === 'hybrid') {
+      this.requestAccelerometerPermission();
+    }
+  }
+
+  /**
+   * Request permission for accelerometer (required on iOS 13+)
+   */
+  async requestAccelerometerPermission(): Promise<boolean> {
+    if (!this.accelSupported) {
+      console.warn('Accelerometer not supported on this device');
+      return false;
+    }
+
+    // iOS 13+ requires permission request
+    if (typeof (DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }).requestPermission === 'function') {
+      try {
+        const permission = await (DeviceOrientationEvent as unknown as { requestPermission: () => Promise<string> }).requestPermission();
+        if (permission === 'granted') {
+          this.accelPermissionGranted = true;
+          this.attachAccelerometerListener();
+          return true;
+        }
+        console.warn('Accelerometer permission denied');
+        return false;
+      } catch (err) {
+        console.error('Error requesting accelerometer permission:', err);
+        return false;
+      }
+    } else {
+      // Non-iOS or older iOS - no permission needed
+      this.accelPermissionGranted = true;
+      this.attachAccelerometerListener();
+      return true;
+    }
+  }
+
+  private attachAccelerometerListener(): void {
+    window.addEventListener('deviceorientation', this.boundHandleDeviceOrientation);
+  }
+
+  /**
+   * Set callback for action (tap)
+   */
+  onAction(callback: () => void): void {
+    this.onActionCallback = callback;
+  }
+
+  /**
+   * Set callback for state changes (for UI updates)
+   */
+  onStateChange(callback: (state: MobileInputState) => void): void {
+    this.onStateChangeCallback = callback;
+  }
+
+  /**
+   * Get current input state (for Engine.handleInput)
+   */
+  getInputState(): InputState {
+    return this.inputState;
+  }
+
+  /**
+   * Get mobile-specific state (for visual feedback)
+   */
+  getMobileState(): MobileInputState {
+    return this.mobileState;
+  }
+
+  /**
+   * Check if accelerometer is available and permitted
+   */
+  isAccelerometerAvailable(): boolean {
+    return this.accelSupported && this.accelPermissionGranted;
+  }
+
+  /**
+   * Check if accelerometer is supported (may need permission)
+   */
+  isAccelerometerSupported(): boolean {
+    return this.accelSupported;
+  }
+
+  /**
+   * Calibrate accelerometer - set current orientation as neutral
+   */
+  calibrateAccelerometer(): void {
+    // Will be set on next device orientation event
+    this.baseOrientation = null;
+  }
+
+  // ============ Touch Handlers ============
+
+  private handleTouchStart(e: TouchEvent): void {
+    // Don't intercept touches on UI elements
+    const target = e.target as HTMLElement;
+    if (target.closest('button, [data-no-touch], .z-40, .z-50')) {
+      return;
+    }
+
+    e.preventDefault();
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      const touchData: TouchData = {
+        identifier: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startTime: Date.now(),
+        currentX: touch.clientX,
+        currentY: touch.clientY,
+        isMovementTouch: false,
+      };
+
+      this.activeTouches.set(touch.identifier, touchData);
+
+      // In touch scheme (not hybrid/accelerometer), bottom 60% of screen is movement zone
+      // In hybrid/accelerometer mode, touch is only for tapping (action)
+      if (this.scheme === 'touch' && !this.movementTouch) {
+        const screenHeight = window.innerHeight;
+        if (touch.clientY > screenHeight * 0.4) {
+          this.movementTouch = touchData;
+          touchData.isMovementTouch = true;
+
+          this.mobileState.isTouching = true;
+          this.mobileState.touchStartX = touch.clientX;
+          this.mobileState.touchStartY = touch.clientY;
+          this.mobileState.touchCurrentX = touch.clientX;
+          this.mobileState.touchCurrentY = touch.clientY;
+        }
+      }
+    }
+
+    this.notifyStateChange();
+  }
+
+  private handleTouchMove(e: TouchEvent): void {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, [data-no-touch], .z-40, .z-50')) {
+      return;
+    }
+
+    e.preventDefault();
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      const touchData = this.activeTouches.get(touch.identifier);
+
+      if (touchData) {
+        touchData.currentX = touch.clientX;
+        touchData.currentY = touch.clientY;
+
+        // Update movement if this is the movement touch
+        if (this.scheme === 'touch' && touchData === this.movementTouch) {
+          this.mobileState.touchCurrentX = touch.clientX;
+          this.mobileState.touchCurrentY = touch.clientY;
+          this.updateTouchMovement();
+        }
+      }
+    }
+
+    this.notifyStateChange();
+  }
+
+  private handleTouchEnd(e: TouchEvent): void {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, [data-no-touch], .z-40, .z-50')) {
+      return;
+    }
+
+    e.preventDefault();
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      const touchData = this.activeTouches.get(touch.identifier);
+
+      if (touchData) {
+        const duration = Date.now() - touchData.startTime;
+        const distance = Math.hypot(
+          touch.clientX - touchData.startX,
+          touch.clientY - touchData.startY
+        );
+
+        // Detect tap (short duration, minimal movement)
+        const isTap = duration < this.config.tapThreshold &&
+                      distance < this.config.tapMoveThreshold;
+
+        // In hybrid/accelerometer mode, any tap triggers action
+        // In touch mode, only non-movement taps trigger action
+        if (isTap && (this.scheme === 'hybrid' || this.scheme === 'accelerometer' || !touchData.isMovementTouch)) {
+          // Fire action
+          this.triggerAction();
+        }
+
+        // Clean up movement touch
+        if (touchData === this.movementTouch) {
+          this.movementTouch = null;
+          this.mobileState.isTouching = false;
+          this.mobileState.moveX = 0;
+          this.mobileState.moveY = 0;
+          this.updateInputFromMovement();
+        }
+
+        this.activeTouches.delete(touch.identifier);
+      }
+    }
+
+    this.notifyStateChange();
+  }
+
+  private updateTouchMovement(): void {
+    if (!this.movementTouch) return;
+
+    const dx = this.mobileState.touchCurrentX - this.mobileState.touchStartX;
+    const dy = this.mobileState.touchCurrentY - this.mobileState.touchStartY;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance < this.config.touchDeadzone) {
+      this.mobileState.moveX = 0;
+      this.mobileState.moveY = 0;
+    } else {
+      // Normalize and apply sensitivity
+      // Max movement at 100px distance
+      const maxDistance = 100;
+      const magnitude = Math.min(distance / maxDistance, 1) * this.config.touchSensitivity;
+
+      this.mobileState.moveX = (dx / distance) * magnitude;
+      this.mobileState.moveY = (dy / distance) * magnitude;
+    }
+
+    this.updateInputFromMovement();
+  }
+
+  // ============ Accelerometer Handler ============
+
+  private handleDeviceOrientation(e: DeviceOrientationEvent): void {
+    if (this.scheme !== 'accelerometer' && this.scheme !== 'hybrid') return;
+    if (e.beta === null || e.gamma === null) return;
+
+    // Set base orientation on first reading or after calibration
+    if (!this.baseOrientation) {
+      this.baseOrientation = { beta: e.beta, gamma: e.gamma };
+    }
+
+    // Calculate tilt relative to base
+    let tiltX = e.gamma - this.baseOrientation.gamma; // Left/right
+    let tiltY = e.beta - this.baseOrientation.beta;   // Forward/back
+
+    this.mobileState.tiltX = tiltX;
+    this.mobileState.tiltY = tiltY;
+
+    // Apply deadzone
+    if (Math.abs(tiltX) < this.config.accelDeadzone) tiltX = 0;
+    if (Math.abs(tiltY) < this.config.accelDeadzone) tiltY = 0;
+
+    // Normalize to -1 to 1 based on max tilt
+    const maxTilt = this.config.accelMaxTilt;
+    this.mobileState.moveX = Math.max(-1, Math.min(1,
+      (tiltX / maxTilt) * this.config.accelSensitivity
+    ));
+    this.mobileState.moveY = Math.max(-1, Math.min(1,
+      (tiltY / maxTilt) * this.config.accelSensitivity
+    ));
+
+    this.updateInputFromMovement();
+    this.notifyStateChange();
+  }
+
+  // ============ Input State Conversion ============
+
+  private updateInputFromMovement(): void {
+    // Convert analog movement to digital input
+    // Using threshold of 0.3 to avoid jitter
+    const threshold = 0.3;
+
+    // For isometric view:
+    // moveX positive = right on screen = right+down in game world
+    // moveY positive = down on screen = down+right in game world
+
+    // The game uses:
+    // up (ArrowUp) = -Z = up-right on screen
+    // down (ArrowDown) = +Z = down-left on screen
+    // left (ArrowLeft) = -X = up-left on screen
+    // right (ArrowRight) = +X = down-right on screen
+
+    // For intuitive touch/tilt controls:
+    // Swipe/tilt up = move up on screen (actually up-left + up-right = up+left)
+    // Swipe/tilt right = move right on screen (actually down-right + up-right = right+down)
+
+    // Simplified: treat touch direction as screen direction
+    // moveX = horizontal screen movement
+    // moveY = vertical screen movement (positive = down)
+
+    // Map to isometric:
+    // Screen up (-Y) = game up-left (-Z, -X)
+    // Screen down (+Y) = game down-right (+Z, +X)
+    // Screen left (-X) = game up-left (-X, -Z)
+    // Screen right (+X) = game down-right (+X, +Z)
+
+    // Combined:
+    // game X = screenX + screenY
+    // game Z = screenY - screenX
+
+    const gameX = this.mobileState.moveX;
+    const gameZ = this.mobileState.moveY;
+
+    // Set digital inputs (for compatibility)
+    this.inputState.right = gameX > threshold;
+    this.inputState.left = gameX < -threshold;
+    this.inputState.down = gameZ > threshold;
+    this.inputState.up = gameZ < -threshold;
+
+    // Set analog inputs for smooth 360° movement
+    this.inputState.analogX = gameX;
+    this.inputState.analogY = gameZ;
+  }
+
+  private triggerAction(): void {
+    // Set action flag briefly
+    this.inputState.action = true;
+
+    // Notify callback
+    if (this.onActionCallback) {
+      this.onActionCallback();
+    }
+
+    // Reset action flag next frame
+    requestAnimationFrame(() => {
+      this.inputState.action = false;
+    });
+  }
+
+  private notifyStateChange(): void {
+    if (this.onStateChangeCallback) {
+      this.onStateChangeCallback({ ...this.mobileState });
+    }
+  }
+
+  // ============ Cleanup ============
+
+  cleanup(): void {
+    window.removeEventListener('touchstart', this.boundHandleTouchStart);
+    window.removeEventListener('touchmove', this.boundHandleTouchMove);
+    window.removeEventListener('touchend', this.boundHandleTouchEnd);
+    window.removeEventListener('touchcancel', this.boundHandleTouchEnd);
+    window.removeEventListener('deviceorientation', this.boundHandleDeviceOrientation);
+
+    this.activeTouches.clear();
+    this.movementTouch = null;
+
+    // Reset state
+    this.inputState = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      action: false,
+      mount: false,
+      analogX: 0,
+      analogY: 0,
+    };
+
+    this.mobileState = {
+      moveX: 0,
+      moveY: 0,
+      isTouching: false,
+      touchStartX: 0,
+      touchStartY: 0,
+      touchCurrentX: 0,
+      touchCurrentY: 0,
+      tiltX: 0,
+      tiltY: 0,
+    };
+  }
+
+  /**
+   * Check if device is mobile/touch capable
+   */
+  static isMobileDevice(): boolean {
+    return isMobileDevice();
+  }
+}
+
+// Singleton for easy access
+export const mobileInput = new MobileInputManager();

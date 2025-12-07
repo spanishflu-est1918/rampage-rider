@@ -229,7 +229,7 @@ export class MotorbikeCop extends THREE.Group {
     return { body, collider, controller };
   }
 
-  private async loadModel(): Promise<void> {
+  private loadModel(): void {
     try {
       const assetLoader = AssetLoader.getInstance();
 

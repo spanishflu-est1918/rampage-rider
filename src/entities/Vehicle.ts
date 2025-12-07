@@ -38,6 +38,9 @@ export class Vehicle extends THREE.Group {
     down: false,
     left: false,
     right: false,
+    // Analog movement for smooth 360° control
+    analogX: 0,
+    analogY: 0,
   };
 
   private onDestroyedCallback: (() => void) | null = null;
@@ -112,7 +115,7 @@ export class Vehicle extends THREE.Group {
     };
   }
 
-  private async loadModel(): Promise<void> {
+  private loadModel(): void {
     try {
       const assetLoader = AssetLoader.getInstance();
       const precloned = assetLoader.getPreClonedVehicle(this.config.modelPath);
@@ -278,28 +281,48 @@ export class Vehicle extends THREE.Group {
     sprint?: boolean;
     jump?: boolean;
     attack?: boolean;
+    analogX?: number;
+    analogY?: number;
   }): void {
     this.input.up = inputState.up;
     this.input.down = inputState.down;
     this.input.left = inputState.left;
     this.input.right = inputState.right;
+    this.input.analogX = inputState.analogX ?? 0;
+    this.input.analogY = inputState.analogY ?? 0;
   }
 
   /**
    * Get movement direction (camera-relative)
+   * Supports both digital (keyboard) and analog (accelerometer/joystick) input
    */
   private getMovementDirection(): THREE.Vector3 {
     let x = 0;
     let z = 0;
 
-    if (this.input.up) z -= 1;
-    if (this.input.down) z += 1;
-    if (this.input.left) x -= 1;
-    if (this.input.right) x += 1;
+    // Check for analog input first (smooth 360° movement)
+    const hasAnalog = this.input.analogX !== 0 || this.input.analogY !== 0;
+
+    if (hasAnalog) {
+      x = this.input.analogX;
+      z = this.input.analogY;
+    } else {
+      if (this.input.up) z -= 1;
+      if (this.input.down) z += 1;
+      if (this.input.left) x -= 1;
+      if (this.input.right) x += 1;
+    }
 
     // Reuse pre-allocated vector
     this._tempDirection.set(x, 0, z);
-    return this._tempDirection.length() > 0 ? this._tempDirection.normalize() : this._tempDirection;
+
+    // For digital input, normalize. For analog, clamp magnitude to 1
+    const length = this._tempDirection.length();
+    if (length > 1) {
+      this._tempDirection.normalize();
+    }
+
+    return this._tempDirection;
   }
 
   /**

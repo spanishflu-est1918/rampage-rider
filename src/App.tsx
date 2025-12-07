@@ -4,6 +4,7 @@ import Overlay from './components/ui/Overlay';
 import NotificationSystem, { NotificationController } from './components/ui/NotificationSystem';
 import SnowOverlay from './components/ui/SnowOverlay';
 import VehicleSelector from './components/ui/VehicleSelector';
+import MobileControls from './components/ui/MobileControls';
 import { GameOver } from './components/ui/Menus';
 import LoadingScreen from './components/ui/LoadingScreen';
 import { GameState, GameStats, Tier, KillNotification } from './types';
@@ -19,9 +20,12 @@ interface EngineControls {
 function App() {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [loadingState, setLoadingState] = useState<LoadingState>(() => preloader.getState());
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
-  // Preload heavy assets (Rapier WASM + models) on mount
+  // Start loading AFTER user interaction (required for audio)
   useEffect(() => {
+    if (!hasUserInteracted) return;
+
     const unsubscribe = preloader.addProgressListener((state) => {
       setLoadingState(state);
     });
@@ -30,7 +34,7 @@ function App() {
       // Errors already logged by loaders
     });
 
-    // Initialize audio and start menu music
+    // Initialize audio and start menu music when ready
     gameAudio.init().then(() => {
       gameAudio.playMenuMusic();
       gameAudio.startAmbient();
@@ -39,7 +43,7 @@ function App() {
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [hasUserInteracted]);
   const [stats, setStats] = useState<GameStats>({
     kills: 0,
     copKills: 0,
@@ -86,9 +90,9 @@ function App() {
     notificationControllerRef.current = controller;
   }, []);
 
-  const startGame = () => {
+  const startGame = async () => {
     // Resume audio context (requires user interaction)
-    gameAudio.resume();
+    await gameAudio.resume();
     gameAudio.playGameStart();
     setGameState(GameState.PLAYING);
   };
@@ -131,8 +135,70 @@ function App() {
         />
       </ErrorBoundary>
 
+      {/* Tap to Start - required for audio permissions */}
+      {!hasUserInteracted && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black cursor-pointer group"
+          onClick={() => setHasUserInteracted(true)}
+        >
+          {/* CRT scanline overlay */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-[0.03]"
+            style={{
+              backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)'
+            }}
+          />
+
+          {/* Vignette */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(0,0,0,0.8) 100%)'
+            }}
+          />
+
+          {/* Pulsing ring */}
+          <div className="relative">
+            <div
+              className="absolute inset-0 -m-8 rounded-full animate-ping opacity-20"
+              style={{
+                background: 'radial-gradient(circle, #ff3333 0%, transparent 70%)',
+                animationDuration: '2s'
+              }}
+            />
+            <div
+              className="absolute inset-0 -m-4 rounded-full animate-pulse opacity-30"
+              style={{
+                background: 'radial-gradient(circle, #ff3333 0%, transparent 60%)',
+                animationDuration: '1.5s'
+              }}
+            />
+
+            {/* Simple tap indicator */}
+            <div
+              className="w-20 h-20 md:w-24 md:h-24 rounded-full border-2 flex items-center justify-center
+                         transition-all duration-300 group-hover:scale-110 group-active:scale-95"
+              style={{
+                borderColor: '#ff3333',
+                boxShadow: '0 0 30px rgba(255,51,51,0.4), inset 0 0 20px rgba(255,51,51,0.1)'
+              }}
+            >
+              <div
+                className="w-0 h-0 ml-2"
+                style={{
+                  borderLeft: '20px solid #ff3333',
+                  borderTop: '12px solid transparent',
+                  borderBottom: '12px solid transparent',
+                  filter: 'drop-shadow(0 0 8px rgba(255,51,51,0.8))'
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Loading Screen / Main Menu (combined) */}
-      {gameState === GameState.MENU && (
+      {hasUserInteracted && gameState === GameState.MENU && (
         <LoadingScreen state={loadingState} onStart={startGame} />
       )}
 
@@ -168,12 +234,8 @@ function App() {
         <GameOver stats={stats} onRestart={startGame} />
       )}
 
-      {/* Mobile Controls Hint */}
-      {gameState === GameState.PLAYING && (
-         <div className="absolute bottom-4 left-0 w-full text-center text-white/20 text-xs pointer-events-none md:hidden">
-             SWIPE TO MOVE • TAP TO ATTACK
-         </div>
-      )}
+      {/* Mobile Controls - visual feedback + control scheme toggle */}
+      <MobileControls enabled={gameState === GameState.PLAYING} />
     </div>
   );
 }

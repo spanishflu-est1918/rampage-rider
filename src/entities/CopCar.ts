@@ -117,7 +117,7 @@ export class CopCar extends THREE.Group {
     return body;
   }
 
-  private async loadModel(): Promise<void> {
+  private loadModel(): void {
     try {
       const assetLoader = AssetLoader.getInstance();
 

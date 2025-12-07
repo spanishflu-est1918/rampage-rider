@@ -40,6 +40,9 @@ export interface InputState {
   action: boolean; // Space - Jump
   mount: boolean; // Shift - Walk (slows down from default sprint)
   attack?: boolean; // F - Attack
+  // Analog movement (-1 to 1) for smooth 360° control (mobile accelerometer/joystick)
+  analogX?: number;
+  analogY?: number;
 }
 
 export interface KillNotification {

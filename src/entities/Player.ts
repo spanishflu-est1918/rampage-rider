@@ -65,6 +65,9 @@ export class Player extends THREE.Group {
     sprint: false,
     jump: false,
     attack: false,
+    // Analog movement for smooth 360° control
+    analogX: 0,
+    analogY: 0,
   };
 
   // Previous input state for change detection
@@ -143,9 +146,9 @@ export class Player extends THREE.Group {
   }
 
   /**
-   * Load the boxman GLTF model from cache
+   * Load the boxman GLTF model from cache (synchronous - model is preloaded)
    */
-  private async loadModel(): Promise<void> {
+  private loadModel(): void {
     const modelPath = '/assets/boxman.glb';
 
     try {
@@ -294,6 +297,8 @@ export class Player extends THREE.Group {
     sprint?: boolean;
     jump?: boolean;
     attack?: boolean;
+    analogX?: number;
+    analogY?: number;
   }): void {
     this.input.up = inputState.up;
     this.input.down = inputState.down;
@@ -302,6 +307,8 @@ export class Player extends THREE.Group {
     this.input.sprint = inputState.sprint || false;
     this.input.jump = inputState.jump || false;
     this.input.attack = inputState.attack || false;
+    this.input.analogX = inputState.analogX ?? 0;
+    this.input.analogY = inputState.analogY ?? 0;
   }
 
   /**
@@ -348,31 +355,49 @@ export class Player extends THREE.Group {
   /**
    * Get movement direction for isometric controls
    * Camera at (2.5, 6.25, 2.5) looking at origin
+   * Supports both digital (keyboard) and analog (accelerometer/joystick) input
    */
   private getLocalMovementDirection(): THREE.Vector3 {
     let x = 0;
     let z = 0;
 
-    // W: move up-right on screen
-    if (this.input.up) {
-      z -= 1;
-    }
-    // S: move down-left on screen
-    if (this.input.down) {
-      z += 1;
-    }
-    // A: move up-left on screen
-    if (this.input.left) {
-      x -= 1;
-    }
-    // D: move down-right on screen
-    if (this.input.right) {
-      x += 1;
+    // Check for analog input first (smooth 360° movement)
+    const hasAnalog = this.input.analogX !== 0 || this.input.analogY !== 0;
+
+    if (hasAnalog) {
+      // Use analog values directly for smooth movement
+      x = this.input.analogX;
+      z = this.input.analogY;
+    } else {
+      // Fall back to digital input (keyboard)
+      // W: move up-right on screen
+      if (this.input.up) {
+        z -= 1;
+      }
+      // S: move down-left on screen
+      if (this.input.down) {
+        z += 1;
+      }
+      // A: move up-left on screen
+      if (this.input.left) {
+        x -= 1;
+      }
+      // D: move down-right on screen
+      if (this.input.right) {
+        x += 1;
+      }
     }
 
     // Reuse pre-allocated vector
     this._tempDirection.set(x, 0, z);
-    return this._tempDirection.length() > 0 ? this._tempDirection.normalize() : this._tempDirection;
+
+    // For digital input, normalize. For analog, clamp magnitude to 1
+    const length = this._tempDirection.length();
+    if (length > 1) {
+      this._tempDirection.normalize();
+    }
+
+    return this._tempDirection;
   }
 
   /**

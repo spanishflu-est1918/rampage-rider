@@ -138,7 +138,7 @@ export class BikeCop extends THREE.Group {
     return body;
   }
 
-  private async loadModel(): Promise<void> {
+  private loadModel(): void {
     try {
       const assetLoader = AssetLoader.getInstance();
       const bikeConfig = VEHICLE_CONFIGS[VehicleType.BICYCLE];

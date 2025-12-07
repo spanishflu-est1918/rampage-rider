@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { isMobileDevice } from '../../utils/device';
 
 /**
  * Notification types with different visual styles
@@ -63,6 +64,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
 }) => {
   const [notifications, setNotifications] = useState<TransientNotification[]>([]);
   const nextIdRef = useRef(0);
+  const isMobile = isMobileDevice();
 
   const addNotification = useCallback((type: NotificationType, message: string, subtext?: string, combo: number = 0) => {
     const id = nextIdRef.current++;
@@ -138,7 +140,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
             className={`font-black retro ${NOTIFICATION_STYLES.prompt.textClass}`}
             style={{ textShadow: NOTIFICATION_STYLES.prompt.textShadow }}
           >
-            PRESS SPACE TO ENTER
+            {isMobile ? 'TAP TO ENTER' : 'PRESS SPACE TO ENTER'}
           </div>
         </div>
       )}
@@ -177,7 +179,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
                   animation: 'taser-text-shake 0.1s infinite',
                 }}
               >
-                MASH SPACE TO ESCAPE!
+                {isMobile ? 'TAP RAPIDLY TO ESCAPE!' : 'MASH SPACE TO ESCAPE!'}
               </div>
             </div>
           </div>
@@ -250,7 +252,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
               </div>
             </div>
 
-            {/* SPACE key indicator below bar */}
+            {/* SPACE/TAP key indicator below bar */}
             <div className="flex justify-center mt-4">
               <div
                 className="px-8 py-3 bg-neutral-800 border-4 border-white rounded-xl font-black retro text-xl md:text-2xl text-white"
@@ -259,7 +261,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
                   animation: 'taser-key-bounce 0.15s infinite',
                 }}
               >
-                ␣ SPACE ␣
+                {isMobile ? '👆 TAP 👆' : '␣ SPACE ␣'}
               </div>
             </div>
           </div>

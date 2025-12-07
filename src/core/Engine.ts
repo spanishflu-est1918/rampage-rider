@@ -475,6 +475,8 @@ export class Engine {
         down: input.down,
         left: input.left,
         right: input.right,
+        analogX: input.analogX,
+        analogY: input.analogY,
       });
     } else if (this.player) {
       this.player.handleInput({
@@ -485,6 +487,8 @@ export class Engine {
         sprint: input.mount,
         jump: false,
         attack: false,
+        analogX: input.analogX,
+        analogY: input.analogY,
       });
     }
   }
