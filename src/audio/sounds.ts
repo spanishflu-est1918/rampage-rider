@@ -92,7 +92,9 @@ export enum SoundId {
 
   // ========== COP ENEMIES ==========
   COP_SPAWN = 'cop_spawn',
-  COP_FREEZE = 'cop_freeze', // "Freeze!" voice line on spawn
+  COP_FREEZE = 'cop_freeze', // "Freeze!" voice line on spawn (legacy)
+  COP_FREEZE_MALE = 'cop_freeze_male',
+  COP_FREEZE_FEMALE = 'cop_freeze_female',
   COP_ALERT = 'cop_alert',
   COP_PUNCH = 'cop_punch',
   COP_PUNCH_1 = 'cop_punch_1',
@@ -532,6 +534,18 @@ export const SOUND_CONFIG: Record<SoundId, SoundConfig> = {
     category: 'sfx',
   },
   [SoundId.COP_FREEZE]: {
+    volume: 0.8,
+    pitch: 1.0,
+    pitchVariation: 0.1,
+    category: 'sfx',
+  },
+  [SoundId.COP_FREEZE_MALE]: {
+    volume: 0.8,
+    pitch: 1.0,
+    pitchVariation: 0.1,
+    category: 'sfx',
+  },
+  [SoundId.COP_FREEZE_FEMALE]: {
     volume: 0.8,
     pitch: 1.0,
     pitchVariation: 0.1,
@@ -1202,6 +1216,8 @@ export const SOUND_PATHS: Partial<Record<SoundId, string>> = {
   // ========== COP ENEMIES ==========
   [SoundId.COP_SPAWN]: '/audio/sfx/cops/cop_spawn.mp3',
   [SoundId.COP_FREEZE]: '/audio/sfx/cops/cop_freeze.mp3',
+  [SoundId.COP_FREEZE_MALE]: '/audio/sfx/cops/cop_freeze_male.mp3',
+  [SoundId.COP_FREEZE_FEMALE]: '/audio/sfx/cops/cop_freeze_female.mp3',
   [SoundId.COP_ALERT]: '/audio/sfx/cops/cop_alert.mp3',
   [SoundId.COP_PUNCH]: '/audio/sfx/cops/cop_punch.mp3',
   [SoundId.COP_PUNCH_1]: '/audio/sfx/cops/cop_punch_1.mp3',

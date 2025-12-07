@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 interface IrisWipeProps {
-  /** When true, shows black screen then opens. When false, hides. */
+  /** When true, shows black screen then opens */
   isActive: boolean;
   /** When true, starts the reveal animation */
   isReady: boolean;
@@ -11,79 +11,92 @@ interface IrisWipeProps {
 
 /**
  * Iris wipe transition - black screen that opens from center
- * 1. isActive=true: Shows full black screen
- * 2. isReady=true: Animates circle expanding to reveal content
- * 3. Animation complete: Calls onComplete and hides
  */
 export const IrisWipeReveal: React.FC<IrisWipeProps> = ({
   isActive,
   isReady,
-  duration = 600,
+  duration = 5000,
   onComplete
 }) => {
-  const [clipRadius, setClipRadius] = useState(0);
-  const [phase, setPhase] = useState<'hidden' | 'waiting' | 'animating' | 'done'>('hidden');
+  const [radius, setRadius] = useState(0);
+  const [opacity, setOpacity] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const animatingRef = useRef(false);
+  const fadeInRef = useRef(false);
 
-  // Handle activation
+  // Show when active - fade in the black screen
   useEffect(() => {
-    if (isActive && phase === 'hidden') {
-      setPhase('waiting');
-      setClipRadius(0);
-    } else if (!isActive && phase === 'done') {
-      setPhase('hidden');
+    if (isActive && !fadeInRef.current) {
+      setVisible(true);
+      setRadius(0);
+      setOpacity(0);
+      animatingRef.current = false;
+      fadeInRef.current = true;
+
+      // Fade in animation
+      const start = performance.now();
+      const fadeInDuration = 800;
+
+      const tick = (now: number) => {
+        const t = Math.min((now - start) / fadeInDuration, 1);
+        setOpacity(t);
+        if (t < 1) {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
     }
-  }, [isActive, phase]);
+  }, [isActive]);
 
-  // Handle ready -> animate
+  // Animate when ready
   useEffect(() => {
-    if (isReady && phase === 'waiting') {
-      setPhase('animating');
-      const startTime = performance.now();
-      const maxRadius = 150; // percentage - needs to cover corners
+    if (isReady && visible && !animatingRef.current) {
+      animatingRef.current = true;
+      const start = performance.now();
+      const maxR = 150;
 
-      const animate = (currentTime: number) => {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
+      const tick = (now: number) => {
+        const t = Math.min((now - start) / duration, 1);
+        // Linear easing - constant speed throughout
+        setRadius(t * maxR);
 
-        // Ease out cubic for smooth deceleration
-        const eased = 1 - Math.pow(1 - progress, 3);
-        setClipRadius(eased * maxRadius);
-
-        if (progress < 1) {
-          requestAnimationFrame(animate);
+        if (t < 1) {
+          requestAnimationFrame(tick);
         } else {
-          setPhase('done');
+          setVisible(false);
+          animatingRef.current = false;
           onComplete?.();
         }
       };
 
-      requestAnimationFrame(animate);
+      requestAnimationFrame(tick);
     }
-  }, [isReady, phase, duration, onComplete]);
+  }, [isReady, visible, duration, onComplete]);
 
-  // Don't render when hidden or done
-  if (phase === 'hidden' || phase === 'done') return null;
+  if (!visible) return null;
 
-  // SVG mask approach for the "reveal" effect
-  // The black area is everything OUTSIDE the circle
+  // radius goes from 0 to 150 (needs to cover diagonal of screen)
+  // Convert to vmax for the circle diameter
+  const size = radius; // percentage of vmax
+
   return (
-    <div className="fixed inset-0 z-[200] pointer-events-none">
-      <svg width="100%" height="100%" className="absolute inset-0">
-        <defs>
-          <mask id="iris-mask">
-            {/* White = visible (black overlay), Black = hidden (transparent) */}
-            <rect width="100%" height="100%" fill="white" />
-            <circle cx="50%" cy="50%" r={`${clipRadius}%`} fill="black" />
-          </mask>
-        </defs>
-        {/* Black rectangle with circle cut out */}
-        <rect
-          width="100%"
-          height="100%"
-          fill="black"
-          mask="url(#iris-mask)"
-        />
-      </svg>
+    <div
+      className="fixed inset-0 z-[9999] overflow-hidden"
+      style={{ pointerEvents: 'none', opacity }}
+    >
+      {/* Centered circle with massive box-shadow for the black area */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: `${size}vmax`,
+          height: `${size}vmax`,
+          borderRadius: '50%',
+          boxShadow: '0 0 0 200vmax black',
+        }}
+      />
     </div>
   );
 };

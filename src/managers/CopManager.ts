@@ -146,8 +146,8 @@ export class CopManager {
     this.scene.add(cop);
     this.scene.add(cop.getBlobShadow()); // Add blob shadow to scene
 
-    // Play spawn sound with "Freeze!" voice
-    gameAudio.playCopSpawn();
+    // Play spawn sound with "Freeze!" voice (gendered)
+    gameAudio.playCopSpawn(cop.isFemale());
   }
 
   /**

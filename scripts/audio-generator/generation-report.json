@@ -1,16 +1,16 @@
 {
-  "timestamp": "2025-12-07T09:27:40.689Z",
+  "timestamp": "2025-12-07T13:44:52.493Z",
   "config": {
     "outputFormat": "mp3_44100_128",
     "promptInfluence": 0.3,
     "parallelRequests": 1
   },
-  "elapsed": "4.5s",
+  "elapsed": "4.6s",
   "results": {
     "success": [
       {
-        "id": "cop_punch_5",
-        "path": "/Users/gorkolas/Documents/www/rampage/public/audio/sfx/cops/cop_punch_5.mp3",
+        "id": "cop_freeze_female",
+        "path": "/Users/gorkolas/Documents/www/rampage/public/audio/sfx/cops/cop_freeze_female.mp3",
         "size": 17180
       }
     ],

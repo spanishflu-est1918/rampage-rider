@@ -363,10 +363,11 @@ export const gameAudio = {
   // COPS
   // ============================================
 
-  playCopSpawn(): void {
+  playCopSpawn(isFemale: boolean = false): void {
     if (this._inRampage) return; // Mute during rampage
     audioManager.play(SoundId.COP_SPAWN);
-    audioManager.play(SoundId.COP_FREEZE, { pitch: variedPitch(1.0, 0.1) });
+    const freezeSound = isFemale ? SoundId.COP_FREEZE_FEMALE : SoundId.COP_FREEZE_MALE;
+    audioManager.play(freezeSound, { pitch: variedPitch(1.0, 0.1) });
   },
 
   playCopAlert(): void {

@@ -23,7 +23,8 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = React.memo(({ onSelect, 
       {VEHICLES.map((v) => (
         <button
           key={v.label}
-          onClick={() => onSelect(v.type)}
+          onClick={(e) => { onSelect(v.type); (e.target as HTMLButtonElement).blur(); }}
+          tabIndex={-1}
           className={`w-12 h-12 flex items-center justify-center text-2xl rounded transition-all ${
             currentVehicle === v.type
               ? 'bg-yellow-500 scale-110 shadow-lg shadow-yellow-500/50'
@@ -37,7 +38,8 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = React.memo(({ onSelect, 
       {/* Rampage trigger button */}
       {onTriggerRampage && (
         <button
-          onClick={onTriggerRampage}
+          onClick={(e) => { onTriggerRampage(); (e.target as HTMLButtonElement).blur(); }}
+          tabIndex={-1}
           className="w-12 h-12 flex items-center justify-center text-2xl rounded transition-all bg-red-600 hover:bg-red-500 hover:scale-110"
           title="Trigger Rampage"
         >

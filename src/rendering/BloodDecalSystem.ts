@@ -377,4 +377,11 @@ export class BloodDecalSystem {
     // PERF: Return active count accounting for ring buffer head
     return this.decals.length - this.decalHeadIndex;
   }
+
+  /**
+   * Get all instanced meshes (for visibility control)
+   */
+  getMeshes(): THREE.InstancedMesh[] {
+    return this.instancedMeshes;
+  }
 }

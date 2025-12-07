@@ -58,6 +58,9 @@ export class Cop extends THREE.Group {
   // Attack state
   private currentWantedStars: number = 0; // 0=punch, 1=taser, 2+=shoot
   private playerCanBeTased: boolean = true;
+
+  // Gender (for voice lines)
+  private _isFemale: boolean = false;
   private attackCooldown: number = 0;
   private isCurrentlyAttacking: boolean = false;
   private onDealDamage?: (damage: number) => void;
@@ -147,11 +150,11 @@ export class Cop extends THREE.Group {
    */
   private async loadModel(): Promise<void> {
     // 80% male, 20% female distribution
-    const isFemale = Math.random() < 0.2;
+    this._isFemale = Math.random() < 0.2;
     const maleTypes = ['BlueSoldier_Male', 'Soldier_Male'];
     const femaleTypes = ['BlueSoldier_Female', 'Soldier_Female'];
 
-    const copTypes = isFemale ? femaleTypes : maleTypes;
+    const copTypes = this._isFemale ? femaleTypes : maleTypes;
     const randomCop = AnimationHelper.randomElement(copTypes);
 
     try {
@@ -657,6 +660,13 @@ export class Cop extends THREE.Group {
    */
   isDeadState(): boolean {
     return this.isDead;
+  }
+
+  /**
+   * Check if cop is female (for voice lines)
+   */
+  isFemale(): boolean {
+    return this._isFemale;
   }
 
   /**

@@ -67,80 +67,80 @@
     {
       "id": "knife_stab_1",
       "path": "sfx/attacks/knife_stab_1.mp3",
-      "prompt": "Quick knife stab into flesh, sharp tchack sound, violent puncture, video game",
-      "duration": 0.25,
+      "prompt": "Knife stabbing into flesh, wet squelch, brutal puncture impact, video game violence",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "knife_stab_2",
       "path": "sfx/attacks/knife_stab_2.mp3",
-      "prompt": "Blade piercing flesh, wet thud, quick violent stab, subtle",
-      "duration": 0.25,
+      "prompt": "Knife stabbing into flesh, wet squelch, brutal puncture impact, video game violence",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "knife_stab_3",
       "path": "sfx/attacks/knife_stab_3.mp3",
-      "prompt": "Sharp stab into body, meaty impact, quick tchack, game sound",
-      "duration": 0.25,
+      "prompt": "Knife stabbing into flesh, wet squelch, brutal puncture impact, video game violence",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "knife_stab_4",
       "path": "sfx/attacks/knife_stab_4.mp3",
-      "prompt": "Knife entering flesh, soft tissue puncture, violent quick stab",
-      "duration": 0.25,
+      "prompt": "Knife stabbing into flesh, wet squelch, brutal puncture impact, video game violence",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "knife_stab_5",
       "path": "sfx/attacks/knife_stab_5.mp3",
-      "prompt": "Fast blade stab, flesh impact, subtle wet tchack sound",
-      "duration": 0.25,
+      "prompt": "Knife stabbing into flesh, wet squelch, brutal puncture impact, video game violence",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "knife_stab_6",
       "path": "sfx/attacks/knife_stab_6.mp3",
-      "prompt": "Deep knife thrust into body, meaty puncture, violent quick",
-      "duration": 0.25,
+      "prompt": "Knife stabbing into flesh, wet squelch, brutal puncture impact, video game violence",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "knife_stab_7",
       "path": "sfx/attacks/knife_stab_7.mp3",
-      "prompt": "Violent stab sound, blade into flesh, sharp tchack impact",
-      "duration": 0.25,
+      "prompt": "Knife stabbing into flesh, wet squelch, brutal puncture impact, video game violence",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "knife_stab_8",
       "path": "sfx/attacks/knife_stab_8.mp3",
-      "prompt": "Quick violent knife stab, wet flesh puncture, subtle game sfx",
-      "duration": 0.25,
+      "prompt": "Knife stabbing into flesh, wet squelch, brutal puncture impact, video game violence",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "punch_whoosh",
       "path": "sfx/attacks/punch_whoosh.mp3",
-      "prompt": "Fist swing whoosh, air punch, quick",
-      "duration": 0.2,
+      "prompt": "Fast fist swing through air, powerful punch whoosh, aggressive arm movement, arcade fighting game style",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "punch_hit",
       "path": "sfx/attacks/punch_hit.mp3",
-      "prompt": "Punch connecting with face, fleshy impact, boxing style",
-      "duration": 0.2,
+      "prompt": "Heavy punch connecting with face, brutal fleshy impact, bone-crunching hit, street fight style, satisfying thwack",
+      "duration": 1,
       "loop": false,
       "category": "attacks"
     },
@@ -203,15 +203,15 @@
     {
       "id": "motorbike_blast",
       "path": "sfx/attacks/motorbike_blast.mp3",
-      "prompt": "Explosive blast attack, fiery detonation, action game style",
-      "duration": 1,
+      "prompt": "Massive energy blast explosion, DBZ ki attack impact, powerful blue aura wave destroying everything, anime power explosion",
+      "duration": 0.8,
       "loop": false,
       "category": "attacks"
     },
     {
       "id": "sedan_engine",
       "path": "sfx/vehicles/sedan_engine.mp3",
-      "prompt": "Car engine rumble, V6 muscle car, steady aggressive idle",
+      "prompt": "Car engine revving and driving at speed, V6 muscle car acceleration, aggressive powerful engine roar, loopable",
       "duration": 5,
       "loop": true,
       "category": "vehicles"
@@ -243,7 +243,7 @@
     {
       "id": "truck_engine",
       "path": "sfx/vehicles/truck_engine.mp3",
-      "prompt": "Heavy diesel truck engine, deep rumble, powerful idle",
+      "prompt": "Heavy diesel truck engine driving at speed, semi truck acceleration, deep powerful rumble, loopable",
       "duration": 5,
       "loop": true,
       "category": "vehicles"
@@ -381,6 +381,22 @@
       "path": "sfx/cops/cop_spawn.mp3",
       "prompt": "Police radio crackle with alert tone, cop appearing",
       "duration": 0.8,
+      "loop": false,
+      "category": "cops"
+    },
+    {
+      "id": "cop_freeze_male",
+      "path": "sfx/cops/cop_freeze_male.mp3",
+      "prompt": "Male police officer shouting FREEZE, aggressive authoritative cop voice, american accent",
+      "duration": 1,
+      "loop": false,
+      "category": "cops"
+    },
+    {
+      "id": "cop_freeze_female",
+      "path": "sfx/cops/cop_freeze_female.mp3",
+      "prompt": "Female police officer shouting FREEZE, aggressive authoritative cop voice, american accent",
+      "duration": 1,
       "loop": false,
       "category": "cops"
     },
@@ -687,6 +703,14 @@
       "duration": 8,
       "loop": true,
       "category": "pedestrians"
+    },
+    {
+      "id": "table_crowd",
+      "path": "ambient/table_crowd.mp3",
+      "prompt": "4 people loudly celebrating at dinner table, boisterous chatter, wine glasses clinking, beer bottles cheering, loud laughing and toasting, loopable",
+      "duration": 10,
+      "loop": true,
+      "category": "ambient"
     },
     {
       "id": "combo_increment",
