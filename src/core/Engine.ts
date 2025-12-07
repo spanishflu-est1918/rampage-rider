@@ -759,6 +759,8 @@ export class Engine {
     // Exit current vehicle first if in one
     if (this.isInVehicle) {
       this.exitVehicle();
+      // Reset cooldown immediately for debug spawning
+      this.vehicleRespawnCooldown = 0;
     }
 
     // Clean up current vehicle if any
