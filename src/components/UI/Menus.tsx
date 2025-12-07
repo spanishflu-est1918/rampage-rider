@@ -38,12 +38,19 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const [taglineIndex, setTaglineIndex] = useState(() =>
     Math.floor(Math.random() * TAGLINES.length)
   );
+  const [buttonEnabled, setButtonEnabled] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setTaglineIndex((prev) => (prev + 1) % TAGLINES.length);
     }, 4000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Delay button pressability by 1.5s
+  useEffect(() => {
+    const timeout = setTimeout(() => setButtonEnabled(true), 1500);
+    return () => clearTimeout(timeout);
   }, []);
 
   return (
@@ -60,7 +67,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         <div className="space-y-3">
           <Button
             onClick={onStart}
-            disabled={isLoading}
+            disabled={isLoading || !buttonEnabled}
             size="lg"
             className="px-16 py-8 text-2xl bg-destructive text-white hover:bg-destructive/90 retro disabled:opacity-50"
           >

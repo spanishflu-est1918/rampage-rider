@@ -41,6 +41,7 @@ const TAGLINES = [
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ state, onStart }) => {
   const [displayProgress, setDisplayProgress] = useState(0);
   const [showStart, setShowStart] = useState(false);
+  const [buttonEnabled, setButtonEnabled] = useState(false);
   const [taglineIndex, setTaglineIndex] = useState(() =>
     Math.floor(Math.random() * TAGLINES.length)
   );
@@ -68,6 +69,14 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ state, onStart }) 
       return () => clearTimeout(timer);
     }
   }, [state.phase]);
+
+  // Delay button pressability by 1.5s after showing
+  useEffect(() => {
+    if (showStart) {
+      const timer = setTimeout(() => setButtonEnabled(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [showStart]);
 
   // Rotate taglines
   useEffect(() => {
@@ -300,10 +309,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ state, onStart }) 
           <div className="text-center">
             <button
               onClick={() => {
+                if (!buttonEnabled) return;
                 gameAudio.playGameStart();
                 onStart();
               }}
-              className="group relative px-12 py-4 retro text-xl transition-all hover:scale-105 active:scale-95"
+              disabled={!buttonEnabled}
+              className="group relative px-12 py-4 retro text-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 background: NEON.red,
                 color: '#fff',
