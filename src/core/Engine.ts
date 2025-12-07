@@ -329,9 +329,8 @@ export class Engine {
 
   // Vehicle stuck detection - allows player to exit if stuck
   private vehicleStuckTimer: number = 0;
-  private lastVehiclePosition: THREE.Vector3 = new THREE.Vector3();
   private static readonly VEHICLE_STUCK_THRESHOLD = 2.0; // Seconds without movement to be considered stuck
-  private static readonly VEHICLE_STUCK_MOVE_THRESHOLD = 0.5; // Min distance to count as "moving"
+  private static readonly VEHICLE_STUCK_SPEED_THRESHOLD = 0.5; // Speed below this is considered "stuck"
 
   private actionController: ActionController = new ActionController();
 
@@ -2570,21 +2569,18 @@ export class Engine {
       this.triggerKillNotification(`PRESS SPACE - ${tierConfig.name.toUpperCase()}`, true, 0, 'prompt');
     }
     
-    // Vehicle stuck detection - track position and time without movement
+    // Vehicle stuck detection - use velocity to detect if truly stuck
     if (this.isInVehicle && this.vehicle) {
-      const vehiclePos = this.vehicle.getPosition();
-      const distanceMoved = vehiclePos.distanceTo(this.lastVehiclePosition);
+      const speed = this.vehicle.getVelocity().length();
+      const isAccelerating = this.input.up || this.input.down;
 
-      if (distanceMoved < Engine.VEHICLE_STUCK_MOVE_THRESHOLD) {
-        // Vehicle hasn't moved much, increment stuck timer
+      // Only count as stuck if player is trying to move but vehicle isn't responding
+      if (isAccelerating && speed < Engine.VEHICLE_STUCK_SPEED_THRESHOLD) {
         this.vehicleStuckTimer += dt;
       } else {
-        // Vehicle is moving, reset timer
+        // Vehicle is moving OR player isn't trying to move, reset timer
         this.vehicleStuckTimer = 0;
       }
-
-      // Update last position
-      this.lastVehiclePosition.copy(vehiclePos);
     } else {
       // Not in vehicle, reset stuck timer
       this.vehicleStuckTimer = 0;

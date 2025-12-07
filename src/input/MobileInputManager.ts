@@ -78,6 +78,12 @@ export class MobileInputManager {
   private accelSupported = false;
   private baseOrientation: { beta: number; gamma: number } | null = null;
 
+  // Stop timeout - keeps moving briefly after touch release for quick direction changes
+  private stopTimeoutId: number | null = null;
+  private lastMoveX: number = 0;
+  private lastMoveY: number = 0;
+  private static readonly STOP_DELAY_MS = 150; // Continue moving for 150ms after release
+
   // Callbacks
   private onActionCallback: (() => void) | null = null;
   private onStateChangeCallback: ((state: MobileInputState) => void) | null = null;
@@ -257,11 +263,17 @@ export class MobileInputManager {
 
       this.activeTouches.set(touch.identifier, touchData);
 
-      // In touch scheme (not hybrid/accelerometer), bottom 60% of screen is movement zone
-      // In hybrid/accelerometer mode, touch is only for tapping (action)
-      if (this.scheme === 'touch' && !this.movementTouch) {
+      // In touch or hybrid scheme, bottom 60% of screen is movement zone
+      // In accelerometer-only mode, touch is only for tapping (action)
+      if ((this.scheme === 'touch' || this.scheme === 'hybrid') && !this.movementTouch) {
         const screenHeight = window.innerHeight;
         if (touch.clientY > screenHeight * 0.4) {
+          // Cancel any pending stop timeout - player is touching again
+          if (this.stopTimeoutId !== null) {
+            clearTimeout(this.stopTimeoutId);
+            this.stopTimeoutId = null;
+          }
+
           this.movementTouch = touchData;
           touchData.isMovementTouch = true;
 
@@ -335,13 +347,29 @@ export class MobileInputManager {
           this.triggerAction();
         }
 
-        // Clean up movement touch
+        // Clean up movement touch with delay
         if (touchData === this.movementTouch) {
           this.movementTouch = null;
           this.mobileState.isTouching = false;
-          this.mobileState.moveX = 0;
-          this.mobileState.moveY = 0;
-          this.updateInputFromMovement();
+
+          // Store last direction and use timeout before stopping
+          // This allows quick touch-release-touch direction changes
+          this.lastMoveX = this.mobileState.moveX;
+          this.lastMoveY = this.mobileState.moveY;
+
+          // Clear any existing timeout
+          if (this.stopTimeoutId !== null) {
+            clearTimeout(this.stopTimeoutId);
+          }
+
+          // Keep moving for a brief moment, then stop
+          this.stopTimeoutId = window.setTimeout(() => {
+            this.mobileState.moveX = 0;
+            this.mobileState.moveY = 0;
+            this.updateInputFromMovement();
+            this.notifyStateChange();
+            this.stopTimeoutId = null;
+          }, MobileInputManager.STOP_DELAY_MS);
         }
 
         this.activeTouches.delete(touch.identifier);
@@ -362,13 +390,10 @@ export class MobileInputManager {
       this.mobileState.moveX = 0;
       this.mobileState.moveY = 0;
     } else {
-      // Normalize and apply sensitivity
-      // Max movement at 100px distance
-      const maxDistance = 100;
-      const magnitude = Math.min(distance / maxDistance, 1) * this.config.touchSensitivity;
-
-      this.mobileState.moveX = (dx / distance) * magnitude;
-      this.mobileState.moveY = (dy / distance) * magnitude;
+      // Always full speed on mobile - just use direction, normalized to magnitude 1
+      // No variable speed based on joystick distance
+      this.mobileState.moveX = dx / distance;
+      this.mobileState.moveY = dy / distance;
     }
 
     this.updateInputFromMovement();
@@ -396,14 +421,28 @@ export class MobileInputManager {
     if (Math.abs(tiltX) < this.config.accelDeadzone) tiltX = 0;
     if (Math.abs(tiltY) < this.config.accelDeadzone) tiltY = 0;
 
-    // Normalize to -1 to 1 based on max tilt
+    // In hybrid mode, touch takes priority - only use accelerometer when not touching
+    // In accelerometer-only mode, always use accelerometer
+    if (this.scheme === 'hybrid' && this.movementTouch) {
+      // Touch is active, don't override movement
+      return;
+    }
+
+    // Normalize to -1 to 1 based on max tilt, then snap to full magnitude
     const maxTilt = this.config.accelMaxTilt;
-    this.mobileState.moveX = Math.max(-1, Math.min(1,
-      (tiltX / maxTilt) * this.config.accelSensitivity
-    ));
-    this.mobileState.moveY = Math.max(-1, Math.min(1,
-      (tiltY / maxTilt) * this.config.accelSensitivity
-    ));
+    const accelX = (tiltX / maxTilt) * this.config.accelSensitivity;
+    const accelY = (tiltY / maxTilt) * this.config.accelSensitivity;
+
+    // Always full speed - normalize if past deadzone
+    const accelMagnitude = Math.hypot(accelX, accelY);
+    if (accelMagnitude > 0.1) {
+      // Normalize to magnitude 1 for full speed
+      this.mobileState.moveX = accelX / accelMagnitude;
+      this.mobileState.moveY = accelY / accelMagnitude;
+    } else {
+      this.mobileState.moveX = 0;
+      this.mobileState.moveY = 0;
+    }
 
     this.updateInputFromMovement();
     this.notifyStateChange();
@@ -487,6 +526,12 @@ export class MobileInputManager {
     window.removeEventListener('touchend', this.boundHandleTouchEnd);
     window.removeEventListener('touchcancel', this.boundHandleTouchEnd);
     window.removeEventListener('deviceorientation', this.boundHandleDeviceOrientation);
+
+    // Clear stop timeout
+    if (this.stopTimeoutId !== null) {
+      clearTimeout(this.stopTimeoutId);
+      this.stopTimeoutId = null;
+    }
 
     this.activeTouches.clear();
     this.movementTouch = null;
