@@ -726,9 +726,7 @@ export class Engine {
   }
 
   private spawnVehicle(tier: Tier): void {
-    console.log('[Engine] spawnVehicle called, tier:', tier, 'vehicleSpawned:', this.vehicleSpawned);
     if (!this.player || this.vehicleSpawned) {
-      console.log('[Engine] spawnVehicle BLOCKED - player:', !!this.player, 'vehicleSpawned:', this.vehicleSpawned);
       return;
     }
 
@@ -741,7 +739,6 @@ export class Engine {
 
     const playerPos = this.player.getPosition();
     const spawnPos = this.findSafeVehicleSpawnPosition(playerPos);
-    console.log('[Engine] spawnVehicle at', spawnPos.x.toFixed(2), spawnPos.z.toFixed(2), 'player at', playerPos.x.toFixed(2), playerPos.z.toFixed(2));
 
     this.vehicle = new Vehicle(vehicleConfig);
     this.vehicle.createPhysicsBody(world, spawnPos);
@@ -963,9 +960,7 @@ export class Engine {
   }
 
   private enterVehicle(): void {
-    console.log('[Engine] enterVehicle called', { player: !!this.player, vehicle: !!this.vehicle, isInVehicle: this.isInVehicle });
     if (!this.player || !this.vehicle || this.isInVehicle) return;
-    console.log('[Engine] enterVehicle proceeding');
 
     const riderConfig = this.vehicle.getRiderConfig();
 
@@ -980,7 +975,6 @@ export class Engine {
     }
 
     this.isInVehicle = true;
-    console.log('[Engine] isInVehicle set to true, currentVehicleTier:', this.currentVehicleTier);
 
     if (this.currentVehicleTier) {
       this.stats.tier = this.currentVehicleTier;
@@ -990,7 +984,6 @@ export class Engine {
     }
 
     this.shakeCamera(1.0);
-    console.log('[Engine] enterVehicle complete');
   }
 
   // Pre-calculated squared enter distance (avoid sqrt in comparison)
@@ -2331,11 +2324,6 @@ export class Engine {
     this._actionContext.isNearAwaitingVehicle = this.awaitingVehicle !== null && isNearAwaitingVehicle;
     this._actionContext.isInVehicle = this.isInVehicle;
     const { action, isNewPress } = this.actionController.resolve(this.input, this._actionContext);
-
-    // Debug vehicle entry
-    if (isNewPress && this.vehicle) {
-      console.log('[Engine] Action:', action, 'vehicleSpawned:', this.vehicleSpawned, 'isNearCar:', isNearCurrentVehicle, 'isInVehicle:', this.isInVehicle);
-    }
 
     if (isNewPress) {
       switch (action) {
