@@ -415,26 +415,30 @@ export class Pedestrian extends THREE.Group {
    */
   // Pre-calculated squared distance threshold for animation LOD (25^2 = 625)
   private static readonly ANIMATION_LOD_DISTANCE_SQ = 625;
+  // Physics LOD threshold (15^2 = 225) - simplified movement beyond this
+  private static readonly PHYSICS_LOD_DISTANCE_SQ = 225;
 
   update(deltaTime: number, distanceToPlayerSq?: number): void {
     if (!this.modelLoaded) return;
 
     // Skip expensive animation updates for distant pedestrians (LOD optimization)
     // Uses squared distance to avoid sqrt in caller's hot loop
-    const skipAnimation = distanceToPlayerSq !== undefined && distanceToPlayerSq > Pedestrian.ANIMATION_LOD_DISTANCE_SQ;
+    const isDistant = distanceToPlayerSq !== undefined && distanceToPlayerSq > Pedestrian.ANIMATION_LOD_DISTANCE_SQ;
+    const isPhysicsSimplified = distanceToPlayerSq !== undefined && distanceToPlayerSq > Pedestrian.PHYSICS_LOD_DISTANCE_SQ;
 
     // Update animation mixer (skip for distant entities)
-    if (this.mixer && !skipAnimation) {
+    if (this.mixer && !isDistant) {
       this.mixer.update(deltaTime);
     }
 
     // Update festive sway animation (table pedestrians)
-    if (this.isFestive && !skipAnimation) {
+    if (this.isFestive && !isDistant) {
       this.updateFestiveSway(deltaTime);
     }
 
     // Dead body ragdoll physics (bounce off car, buildings, and floor)
     if (this.isDead) {
+      // ... (dead body logic remains the same)
       this.timeSinceDeath += deltaTime;
       const speed = this.deadVelocity.length();
       if (speed > 0.5) {
@@ -532,28 +536,39 @@ export class Pedestrian extends THREE.Group {
     desiredMovement.y = 0;
     desiredMovement.z = yukaPos.z - currentPos.z;
 
-    // Use character controller for collision-aware movement
-    // This prevents pedestrians from walking through vehicles
-    const collisionFilter = KinematicCharacterHelper.getPedestrianCollisionFilter();
-    this.characterController.computeColliderMovement(
-      this.collider,
-      desiredMovement,
-      undefined, // filterFlags
-      collisionFilter
-    );
+    if (isPhysicsSimplified) {
+      // FAST PATH: Simple translation for distant pedestrians
+      // Skip expensive collider movement and collision detection
+      this._tempPosition.set(
+        yukaPos.x,
+        currentPos.y, // Keep current Y (assume flat ground for simplicity)
+        yukaPos.z
+      );
+      this.rigidBody.setNextKinematicTranslation(this._tempPosition);
+    } else {
+      // ACCURATE PATH: Use character controller for collision-aware movement
+      const collisionFilter = KinematicCharacterHelper.getPedestrianCollisionFilter();
+      this.characterController.computeColliderMovement(
+        this.collider,
+        desiredMovement,
+        undefined, // filterFlags
+        collisionFilter
+      );
 
-    // Get collision-corrected movement
-    const correctedMovement = this.characterController.computedMovement();
+      // Get collision-corrected movement
+      const correctedMovement = this.characterController.computedMovement();
 
-    // Apply corrected position to physics body
-    this._tempPosition.set(
-      currentPos.x + correctedMovement.x,
-      currentPos.y + correctedMovement.y,
-      currentPos.z + correctedMovement.z
-    );
-    this.rigidBody.setNextKinematicTranslation(this._tempPosition);
+      // Apply corrected position to physics body
+      this._tempPosition.set(
+        currentPos.x + correctedMovement.x,
+        currentPos.y + correctedMovement.y,
+        currentPos.z + correctedMovement.z
+      );
+      this.rigidBody.setNextKinematicTranslation(this._tempPosition);
+    }
 
     // Sync Yuka position back to match physics (so AI knows where it actually is)
+    // For simplified path, this is redundant but safe
     this.yukaVehicle.position.x = this._tempPosition.x;
     this.yukaVehicle.position.z = this._tempPosition.z;
 

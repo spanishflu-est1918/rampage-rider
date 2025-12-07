@@ -49,6 +49,15 @@ export class ParticleEmitter {
   private readonly debrisVelocityPool: THREE.Vector3[] = [];
   private readonly MAX_DEBRIS_VELOCITIES = 100; // Match MAX_DEBRIS
 
+  // PERF: Object pool for debris particles
+  private readonly debrisObjectPool: Array<{
+    index: number;
+    velocity: THREE.Vector3;
+    life: number;
+    maxLife: number;
+    rotationSpeed: number;
+  }> = [];
+
   // Buffer attributes
   private positions: Float32Array;
   private sizes: Float32Array;
@@ -56,6 +65,16 @@ export class ParticleEmitter {
   private readonly MAX_PARTICLES = 200;
   private activeParticles: number = 0;
   private freeIndices: number[] = [];
+
+  // PERF: Object pool for blood particles
+  private readonly particleObjectPool: Array<{
+    index: number;
+    velocity: THREE.Vector3;
+    life: number;
+    maxLife: number;
+    hasCollided: boolean;
+    size: number;
+  }> = [];
 
   private onGroundHitCallback: ((position: THREE.Vector3, size: number) => void) | null = null;
 
@@ -79,6 +98,16 @@ export class ParticleEmitter {
       this.freeIndices.push(i);
       this.alphas[i] = 0; // Start invisible
       this.bloodVelocityPool.push(new THREE.Vector3()); // Pre-allocate velocity vectors
+      
+      // Pre-fill object pool
+      this.particleObjectPool.push({
+        index: -1,
+        velocity: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0,
+        hasCollided: false,
+        size: 0
+      });
     }
 
     // Create geometry with buffer attributes
@@ -146,6 +175,15 @@ export class ParticleEmitter {
       this.debrisFreeIndices.push(i);
       this.debrisAlphas[i] = 0;
       this.debrisVelocityPool.push(new THREE.Vector3()); // Pre-allocate velocity vectors
+      
+      // Pre-fill debris object pool
+      this.debrisObjectPool.push({
+        index: -1,
+        velocity: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0,
+        rotationSpeed: 0
+      });
     }
 
     // Create debris geometry
@@ -301,14 +339,16 @@ export class ParticleEmitter {
 
       const maxLife = 2.0;
 
-      this.particles.push({
-        index,
-        velocity,
-        life: maxLife,
-        maxLife,
-        hasCollided: false,
-        size: size / 10, // For decal size
-      });
+      // Reuse particle object from pool
+      const particle = this.particleObjectPool[index];
+      particle.index = index;
+      particle.velocity = velocity; // Reuse vector reference
+      particle.life = maxLife;
+      particle.maxLife = maxLife;
+      particle.hasCollided = false;
+      particle.size = size / 10;
+
+      this.particles.push(particle);
     }
 
     // Mark buffers for GPU update
@@ -355,14 +395,16 @@ export class ParticleEmitter {
 
       const maxLife = 2.0;
 
-      this.particles.push({
-        index,
-        velocity,
-        life: maxLife,
-        maxLife,
-        hasCollided: false,
-        size: size / 10,
-      });
+      // Reuse particle object from pool
+      const particle = this.particleObjectPool[index];
+      particle.index = index;
+      particle.velocity = velocity;
+      particle.life = maxLife;
+      particle.maxLife = maxLife;
+      particle.hasCollided = false;
+      particle.size = size / 10;
+
+      this.particles.push(particle);
     }
 
     // Mark buffers for GPU update
@@ -506,13 +548,15 @@ export class ParticleEmitter {
         Math.sin(angle) * speed
       );
 
-      this.debrisParticles.push({
-        index,
-        velocity,
-        life: 1.5 + Math.random() * 1.0,
-        maxLife: 2.5,
-        rotationSpeed: (Math.random() - 0.5) * 10,
-      });
+      // Reuse debris object from pool
+      const particle = this.debrisObjectPool[index];
+      particle.index = index;
+      particle.velocity = velocity;
+      particle.life = 1.5 + Math.random() * 1.0;
+      particle.maxLife = 2.5;
+      particle.rotationSpeed = (Math.random() - 0.5) * 10;
+
+      this.debrisParticles.push(particle);
     }
 
     // Mark buffers for update
@@ -634,13 +678,15 @@ export class ParticleEmitter {
         Math.sin(angle) * speed
       );
 
-      this.debrisParticles.push({
-        index,
-        velocity,
-        life: 0.3 + Math.random() * 0.3, // Short-lived sparks
-        maxLife: 0.6,
-        rotationSpeed: 0,
-      });
+      // Reuse debris object from pool
+      const particle = this.debrisObjectPool[index];
+      particle.index = index;
+      particle.velocity = velocity;
+      particle.life = 0.3 + Math.random() * 0.3; // Short-lived sparks
+      particle.maxLife = 0.6;
+      particle.rotationSpeed = 0;
+
+      this.debrisParticles.push(particle);
     }
 
     // Mark buffers for update
