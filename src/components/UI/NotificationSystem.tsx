@@ -86,7 +86,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
   }, [onRegister, addNotification]);
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-40 flex flex-col items-center justify-center">
+    <div className="absolute inset-0 pointer-events-none z-40">
       {/* Transient notifications (kills, etc) */}
       {notifications.map((notification, index) => {
         const style = NOTIFICATION_STYLES[notification.type];
@@ -97,7 +97,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
         return (
           <div
             key={notification.id}
-            className="absolute"
+            className="absolute inset-x-0 flex justify-center"
             style={{
               top: `calc(40% - ${index * 50}px)`,
               animation: `notif-fadeSlideUp ${notification.combo >= 10 ? '1.5s' : '1.2s'} ease-out forwards`,
@@ -133,7 +133,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
       {/* Persistent: Enter Vehicle Prompt */}
       {showEnterPrompt && (
         <div
-          className="absolute top-[45%] left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+          className="absolute inset-x-0 top-1/2 flex justify-center -translate-y-1/2"
           style={{ animation: 'notif-pulse 1s ease-in-out infinite' }}
         >
           <div
@@ -159,7 +159,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
 
           {/* Center text */}
           <div
-            className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+            className="absolute inset-x-0 top-1/3 flex justify-center -translate-y-1/2"
             style={{ animation: 'notif-shake 0.08s infinite' }}
           >
             <div className="text-center">
@@ -276,20 +276,20 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
           100% { opacity: 0; transform: translateY(-60px); }
         }
         @keyframes notif-pulse {
-          0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-          50% { opacity: 0.8; transform: translate(-50%, -50%) scale(1.02); }
+          0%, 100% { opacity: 1; transform: translateY(-50%) scale(1); }
+          50% { opacity: 0.8; transform: translateY(-50%) scale(1.02); }
         }
         @keyframes notif-shake {
-          0%, 100% { transform: translate(-50%, -50%); }
-          10% { transform: translate(calc(-50% - 4px), calc(-50% + 4px)); }
-          20% { transform: translate(calc(-50% + 4px), calc(-50% - 4px)); }
-          30% { transform: translate(calc(-50% - 4px), calc(-50% - 4px)); }
-          40% { transform: translate(calc(-50% + 4px), calc(-50% + 4px)); }
-          50% { transform: translate(calc(-50% - 4px), -50%); }
-          60% { transform: translate(calc(-50% + 4px), -50%); }
-          70% { transform: translate(-50%, calc(-50% - 4px)); }
-          80% { transform: translate(-50%, calc(-50% + 4px)); }
-          90% { transform: translate(calc(-50% - 4px), calc(-50% + 4px)); }
+          0%, 100% { transform: translateY(-50%); }
+          10% { transform: translate(-4px, calc(-50% + 4px)); }
+          20% { transform: translate(4px, calc(-50% - 4px)); }
+          30% { transform: translate(-4px, calc(-50% - 4px)); }
+          40% { transform: translate(4px, calc(-50% + 4px)); }
+          50% { transform: translate(-4px, -50%); }
+          60% { transform: translate(4px, -50%); }
+          70% { transform: translateY(calc(-50% - 4px)); }
+          80% { transform: translateY(calc(-50% + 4px)); }
+          90% { transform: translate(-4px, calc(-50% + 4px)); }
         }
         @keyframes notif-flash {
           0%, 50% { opacity: 1; }
