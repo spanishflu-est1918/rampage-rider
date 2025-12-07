@@ -347,6 +347,7 @@ export const gameAudio = {
   // ============================================
 
   playTierUnlock(): void {
+    if (this._inRampage) return; // Silent during rampage
     audioManager.play(SoundId.TIER_UNLOCK);
     audioManager.play(SoundId.TIER_UNLOCK_FANFARE);
     audioManager.duck(0.3, 1.0); // Duck for fanfare
@@ -496,12 +497,14 @@ export const gameAudio = {
   // ============================================
 
   playComboIncrement(combo: number): void {
+    if (this._inRampage) return; // Silent during rampage
     // Pitch rises with combo
     const pitch = 1.0 + Math.min(combo / 50, 1) * 0.5;
     audioManager.play(SoundId.COMBO_INCREMENT, { pitch, volume: 0.4 });
   },
 
   playComboMilestone(combo: number): void {
+    if (this._inRampage) return; // Silent during rampage
     let soundId: SoundId;
     switch (combo) {
       case 5:
@@ -530,14 +533,17 @@ export const gameAudio = {
   },
 
   playComboLost(): void {
+    if (this._inRampage) return; // Silent during rampage
     audioManager.play(SoundId.COMBO_LOST);
   },
 
   playScoreTick(): void {
+    if (this._inRampage) return; // Silent during rampage
     audioManager.play(SoundId.SCORE_TICK, { pitch: variedPitch(1.0, 0.1) });
   },
 
   playPointsPopup(): void {
+    if (this._inRampage) return; // Silent during rampage
     audioManager.play(SoundId.POINTS_POPUP, { pitch: variedPitch(1.0, 0.1) });
   },
 
@@ -659,10 +665,12 @@ export const gameAudio = {
   },
 
   playUINotification(): void {
+    if (this._inRampage) return; // Silent during rampage
     audioManager.play(SoundId.UI_NOTIFICATION);
   },
 
   playUIAlert(): void {
+    if (this._inRampage) return; // Silent during rampage
     audioManager.play(SoundId.UI_ALERT);
   },
 
@@ -672,6 +680,7 @@ export const gameAudio = {
 
   // Play voice announcer for a notification message (with heavy reverb)
   playVoiceForMessage(message: string): void {
+    if (this._inRampage) return; // Silent during rampage
     const voiceId = MESSAGE_TO_VOICE[message];
     if (voiceId) {
       audioManager.play(voiceId, { maxDuration: 1.2, useReverb: true });
