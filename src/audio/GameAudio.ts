@@ -79,9 +79,15 @@ function comboVolume(base: number, combo: number, maxCombo = 50): number {
 export const gameAudio = {
   // Rampage mode mutes cop voice lines
   _inRampage: false,
+  // Track if game has started (prevents menu music from playing during gameplay)
+  _gameStarted: false,
 
   setRampageMode(active: boolean): void {
     this._inRampage = active;
+  },
+
+  setGameStarted(started: boolean): void {
+    this._gameStarted = started;
   },
 
   // ============================================
@@ -724,8 +730,13 @@ export const gameAudio = {
 
   /**
    * Play menu/loading screen music (random from 2 tracks)
+   * Only plays if game hasn't started yet
    */
   playMenuMusic(): void {
+    if (this._gameStarted) {
+      console.warn('[GameAudio] Blocked menu music - game already started');
+      return;
+    }
     const track = randomFrom([...this._menuTracks]);
     audioManager.playMusic(track);
   },

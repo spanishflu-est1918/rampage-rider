@@ -98,6 +98,8 @@ function App() {
   }, []);
 
   const startGame = () => {
+    // Mark game as started to prevent menu music from playing
+    gameAudio.setGameStarted(true);
     // Stop menu music immediately before starting game
     gameAudio.stopMenuMusic();
     // Start loading screen fade out
