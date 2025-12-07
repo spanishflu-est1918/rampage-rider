@@ -126,10 +126,8 @@ export class AudioManager {
       this.ambientGain = this.context.createGain();
       this.ambientGain.connect(this.masterGain);
 
-      // Create reverb effect for voice announcer (heavy Arabic echo)
-      console.log('[AudioManager] About to create reverb...');
+      // Create reverb effect for rampage mode
       await this.createVoiceReverb();
-      console.log('[AudioManager] Reverb node after creation:', this.reverbNode);
 
       // Set initial volumes
       this.updateVolumes();
@@ -194,7 +192,6 @@ export class AudioManager {
 
       // Connect reverb output to SFX gain (not UI gain, for proper volume control)
       this.reverbNode.connect(this.sfxGain);
-      console.log('[AudioManager] Reverb created and connected to sfxGain');
     } catch (error) {
       console.warn('[AudioManager] Voice reverb not available:', error);
       this.reverbNode = null;
@@ -367,10 +364,8 @@ export class AudioManager {
       source.connect(gainNode);
     }
 
-    // Route through reverb for voice announcer and rampage screams
+    // Route through reverb for rampage screams
     if (options.useReverb && this.reverbNode) {
-      // Send to reverb node (handles wet/dry mix internally)
-      console.log('[AudioManager] Playing with reverb:', id);
       gainNode.connect(this.reverbNode);
     } else {
       // Get the appropriate output gain based on sound category

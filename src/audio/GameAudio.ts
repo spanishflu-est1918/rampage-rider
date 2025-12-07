@@ -281,10 +281,6 @@ export const gameAudio = {
   playPedestrianScream(): void {
     // Use the 20-variation scream pool
     // During rampage: quiet + heavy reverb for distant/ethereal effect
-    console.log(
-      "[GameAudio] playPedestrianScream, _inRampage:",
-      this._inRampage,
-    );
     audioManager.play(randomFrom(SCREAM_SOUNDS), {
       volume: this._inRampage ? 0.15 : 0.55,
       pitch: variedPitch(1.0, 0.15),
