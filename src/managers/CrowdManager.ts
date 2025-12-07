@@ -666,6 +666,8 @@ export class CrowdManager {
    * Remove pedestrian from world and add to pool
    */
   private removePedestrian(pedestrian: Pedestrian): void {
+    if (!pedestrian.isValid) return;
+
     // Remove from active list
     const index = this.pedestrians.indexOf(pedestrian);
     if (index > -1) {
@@ -683,6 +685,13 @@ export class CrowdManager {
     if (pedestrian.isDeadState()) {
       pedestrian.destroy();
     } else {
+      // Mark as invalid while in pool to prevent accidental use
+      pedestrian.isValid = false;
+      // Move out of way
+      if (pedestrian['rigidBody']) {
+        pedestrian['rigidBody'].setTranslation({ x: 0, y: -500, z: 0 }, true);
+        pedestrian['rigidBody'].setLinvel({ x: 0, y: 0, z: 0 }, true);
+      }
       this.pedestrianPool.push(pedestrian);
     }
   }

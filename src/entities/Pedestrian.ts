@@ -74,6 +74,9 @@ export class Pedestrian extends THREE.Group {
   private shadowIndex: number = -1;
   private readonly shadowRadius = 0.8;
 
+  // Validity flag to prevent double-destruction or updates on dead entities
+  public isValid: boolean = true;
+
   constructor(
     position: THREE.Vector3,
     world: RAPIER.World,
@@ -420,7 +423,7 @@ export class Pedestrian extends THREE.Group {
   private static readonly PHYSICS_LOD_DISTANCE_SQ = 225;
 
   update(deltaTime: number, distanceToPlayerSq?: number): void {
-    if (!this.modelLoaded) return;
+    if (!this.modelLoaded || !this.isValid) return;
 
     // Skip expensive animation updates for distant pedestrians (LOD optimization)
     // Uses squared distance to avoid sqrt in caller's hot loop
@@ -702,6 +705,7 @@ export class Pedestrian extends THREE.Group {
    */
   reset(position: THREE.Vector3, _characterType: string): void {
     // Revive
+    this.isValid = true;
     this.isDead = false;
     this.isDestroyed = false; // Allow destroy() to work again if reused
     this.health = PEDESTRIAN_CONFIG.HEALTH;
@@ -745,18 +749,11 @@ export class Pedestrian extends THREE.Group {
    * Cleanup
    */
   destroy(): void {
-    // Guard against double-destruction (can happen during repositionTable)
-    if (this.isDestroyed) return;
-    this.isDestroyed = true;
+    if (!this.isValid) return;
+    this.isValid = false;
 
     const world = this.world;
     if (!world) return;
-
-    // Release shadow index back to pool
-    if (this.shadowIndex >= 0) {
-      this.shadowManager.releaseIndex(this.shadowIndex);
-      this.shadowIndex = -1;
-    }
 
     // Remove from Yuka AI
     this.yukaEntityManager.remove(this.yukaVehicle);
@@ -771,6 +768,8 @@ export class Pedestrian extends THREE.Group {
     if (this.rigidBody && world.bodies.contains(this.rigidBody.handle)) {
       world.removeRigidBody(this.rigidBody);
     }
+    // Clear reference to prevent accidental use
+    this.rigidBody = null as unknown as RAPIER.RigidBody;
 
     // Dispose cloned materials (SkeletonUtils.clone DOES clone materials)
     // But DON'T dispose geometries - those ARE shared by reference
