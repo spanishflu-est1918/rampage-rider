@@ -44,6 +44,7 @@ interface TouchData {
   currentX: number;
   currentY: number;
   isMovementTouch: boolean; // Was this touch used for movement?
+  isActionTouch: boolean; // Is this touch triggering action?
 }
 
 export interface MobileInputState {
@@ -259,30 +260,38 @@ export class MobileInputManager {
         currentX: touch.clientX,
         currentY: touch.clientY,
         isMovementTouch: false,
+        isActionTouch: false,
       };
 
       this.activeTouches.set(touch.identifier, touchData);
 
       // In touch or hybrid scheme, bottom 60% of screen is movement zone
       // In accelerometer-only mode, touch is only for tapping (action)
-      if ((this.scheme === 'touch' || this.scheme === 'hybrid') && !this.movementTouch) {
-        const screenHeight = window.innerHeight;
-        if (touch.clientY > screenHeight * 0.4) {
-          // Cancel any pending stop timeout - player is touching again
-          if (this.stopTimeoutId !== null) {
-            clearTimeout(this.stopTimeoutId);
-            this.stopTimeoutId = null;
-          }
+      const screenHeight = window.innerHeight;
+      const isInMovementZone = touch.clientY > screenHeight * 0.4;
 
-          this.movementTouch = touchData;
-          touchData.isMovementTouch = true;
-
-          this.mobileState.isTouching = true;
-          this.mobileState.touchStartX = touch.clientX;
-          this.mobileState.touchStartY = touch.clientY;
-          this.mobileState.touchCurrentX = touch.clientX;
-          this.mobileState.touchCurrentY = touch.clientY;
+      if ((this.scheme === 'touch' || this.scheme === 'hybrid') && !this.movementTouch && isInMovementZone) {
+        // Cancel any pending stop timeout - player is touching again
+        if (this.stopTimeoutId !== null) {
+          clearTimeout(this.stopTimeoutId);
+          this.stopTimeoutId = null;
         }
+
+        this.movementTouch = touchData;
+        touchData.isMovementTouch = true;
+
+        this.mobileState.isTouching = true;
+        this.mobileState.touchStartX = touch.clientX;
+        this.mobileState.touchStartY = touch.clientY;
+        this.mobileState.touchCurrentX = touch.clientX;
+        this.mobileState.touchCurrentY = touch.clientY;
+      }
+
+      // Any touch in non-movement zone (top 40%) triggers action immediately
+      // This enables taser escape mashing - action stays true while finger is down
+      if (!isInMovementZone || this.scheme === 'accelerometer') {
+        touchData.isActionTouch = true;
+        this.inputState.action = true;
       }
     }
 
@@ -340,11 +349,25 @@ export class MobileInputManager {
         const isTap = duration < this.config.tapThreshold &&
                       distance < this.config.tapMoveThreshold;
 
-        // In hybrid/accelerometer mode, any tap triggers action
-        // In touch mode, only non-movement taps trigger action
-        if (isTap && (this.scheme === 'hybrid' || this.scheme === 'accelerometer' || !touchData.isMovementTouch)) {
-          // Fire action
+        // In touch mode with movement touch that was a tap, trigger action
+        if (isTap && touchData.isMovementTouch) {
           this.triggerAction();
+        }
+
+        // If this was an action touch, check if any action touches remain
+        if (touchData.isActionTouch) {
+          // Check if any other action touches are still active
+          let hasOtherActionTouch = false;
+          for (const [id, data] of this.activeTouches) {
+            if (id !== touch.identifier && data.isActionTouch) {
+              hasOtherActionTouch = true;
+              break;
+            }
+          }
+          // Only reset action if no other action touches remain
+          if (!hasOtherActionTouch) {
+            this.inputState.action = false;
+          }
         }
 
         // Clean up movement touch with delay
@@ -498,7 +521,7 @@ export class MobileInputManager {
   }
 
   private triggerAction(): void {
-    // Set action flag briefly
+    // Set action flag briefly for tap-based attacks
     this.inputState.action = true;
 
     // Notify callback
@@ -506,9 +529,19 @@ export class MobileInputManager {
       this.onActionCallback();
     }
 
-    // Reset action flag next frame
+    // Reset action flag next frame, but only if no action touches are held
     requestAnimationFrame(() => {
-      this.inputState.action = false;
+      // Check if any action touch is still active
+      let hasActionTouch = false;
+      for (const [, data] of this.activeTouches) {
+        if (data.isActionTouch) {
+          hasActionTouch = true;
+          break;
+        }
+      }
+      if (!hasActionTouch) {
+        this.inputState.action = false;
+      }
     });
   }
 

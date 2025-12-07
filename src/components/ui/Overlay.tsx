@@ -108,7 +108,10 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
     <>
       <RampageVignette active={stats.inRampageDimension || false} />
 
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-2 md:p-3 flex flex-col justify-between z-10">
+      <div
+        className="absolute top-0 left-0 w-full h-full pointer-events-none p-2 md:p-3 flex flex-col justify-between z-10"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}
+      >
 
 
         {/* Always visible: Show UI button when hidden - same position as SNAP */}

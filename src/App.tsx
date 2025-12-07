@@ -13,6 +13,8 @@ import { VehicleType } from './constants';
 import ErrorBoundary from './components/ErrorBoundary';
 import { preloader, LoadingState } from './core/Preloader';
 import { gameAudio } from './audio';
+import { mobileInput } from './input/MobileInputManager';
+import { isMobileDevice } from './utils/device';
 
 interface EngineControls {
   spawnVehicle: (type: VehicleType | null) => void;
@@ -146,7 +148,7 @@ function App() {
   }, []);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-neutral-900 select-none">
+    <div className="relative w-full h-[100dvh] min-h-[100dvh] overflow-hidden bg-neutral-900 select-none">
 
       {/* 3D Game Layer */}
       <ErrorBoundary>
@@ -164,7 +166,13 @@ function App() {
       {!hasUserInteracted && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black cursor-pointer group"
-          onClick={() => setHasUserInteracted(true)}
+          onClick={async () => {
+            // Request accelerometer permission on first tap (iOS requires user gesture)
+            if (isMobileDevice() && mobileInput.isAccelerometerSupported()) {
+              await mobileInput.requestAccelerometerPermission();
+            }
+            setHasUserInteracted(true);
+          }}
         >
           {/* CRT scanline overlay */}
           <div
