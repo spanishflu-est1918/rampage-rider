@@ -625,6 +625,7 @@ export function makeCollisionGroups(membership: number, filter: number): number 
 export const RAMPAGE_DIMENSION = {
   // Trigger
   COMBO_THRESHOLD: 10, // Combo level to enter dimension
+  KILL_LIMIT: 15, // Kills to complete rampage and exit
 
   // Transition timing
   ENTER_DURATION: 0.3, // 300ms snap-in (punchy)

@@ -70,6 +70,7 @@ export class Engine {
   private speedLinesEffect: SpeedLinesEffect | null = null;
   private ancestorCouncil: AncestorCouncil | null = null;
   private inRampageDimension = false;
+  private rampageKillsAtStart = 0; // Total kills when rampage started (to track rampage kills)
   private readonly normalBackground = new THREE.Color(0x1a1a1a);
 
   // Phase 2: Rampage slow motion - enemies move at 30% speed
@@ -280,6 +281,8 @@ export class Engine {
     wantedStars: 0,
     inPursuit: false,
     inRampageMode: false,
+    rampageKills: 0,
+    rampageKillLimit: RAMPAGE_DIMENSION.KILL_LIMIT,
     killHistory: [],
     copHealthBars: [],
     isTased: false,
@@ -662,6 +665,8 @@ export class Engine {
       wantedStars: 0,
       inPursuit: false,
       inRampageMode: DEBUG_START_IN_RAMPAGE,
+      rampageKills: 0,
+      rampageKillLimit: RAMPAGE_DIMENSION.KILL_LIMIT,
       killHistory: [],
       copHealthBars: [],
       isTased: false,
@@ -2448,12 +2453,31 @@ export class Engine {
       const targetPos = currentPos;
 
       // Camera offset depends on vehicle - truck needs higher/further view
+      // Rampage mode also pulls camera up (half of truck's zoom)
       const isTruck = this.isInVehicle && this.currentVehicleTier === Tier.TRUCK;
-      const targetOffsetX = isTruck ? 5 : 2.5;
-      const targetOffsetY = isTruck ? 14 : 6.25;
-      const targetOffsetZ = isTruck ? 5 : 2.5;
-      // Truck needs 2x zoom out (larger frustum = more visible area)
-      const targetZoom = isTruck ? CAMERA_CONFIG.FRUSTUM_SIZE * 2 : CAMERA_CONFIG.FRUSTUM_SIZE;
+      const isRampage = this.inRampageDimension;
+
+      let targetOffsetX: number, targetOffsetY: number, targetOffsetZ: number, targetZoom: number;
+
+      if (isTruck) {
+        // Truck: full zoom out
+        targetOffsetX = 5;
+        targetOffsetY = 14;
+        targetOffsetZ = 5;
+        targetZoom = CAMERA_CONFIG.FRUSTUM_SIZE * 2;
+      } else if (isRampage) {
+        // Rampage: half of truck's zoom (midpoint between normal and truck)
+        targetOffsetX = 3.75;  // (2.5 + 5) / 2
+        targetOffsetY = 10.125; // (6.25 + 14) / 2
+        targetOffsetZ = 3.75;  // (2.5 + 5) / 2
+        targetZoom = CAMERA_CONFIG.FRUSTUM_SIZE * 1.5;
+      } else {
+        // Normal
+        targetOffsetX = 2.5;
+        targetOffsetY = 6.25;
+        targetOffsetZ = 2.5;
+        targetZoom = CAMERA_CONFIG.FRUSTUM_SIZE;
+      }
 
       // Smoothly lerp camera offset (for truck zoom in/out transitions)
       this._currentCameraOffset.x += (targetOffsetX - this._currentCameraOffset.x) * 0.05;
@@ -2565,7 +2589,9 @@ export class Engine {
    * Trigger camera shake
    */
   private shakeCamera(intensity: number = 0.3): void {
-    this.cameraShakeIntensity = Math.max(this.cameraShakeIntensity, intensity);
+    // Dampen all shakes to 1/3 of their original intensity
+    const dampened = intensity / 3;
+    this.cameraShakeIntensity = Math.max(this.cameraShakeIntensity, dampened);
   }
 
   /**
@@ -2934,6 +2960,23 @@ export class Engine {
       this.enterRampageDimension();
     }
 
+    // Track rampage kills and check for exit condition
+    if (this.inRampageDimension) {
+      this.stats.rampageKills = this.stats.kills - this.rampageKillsAtStart;
+
+      // Exit rampage when kill limit reached
+      if (this.stats.rampageKills >= RAMPAGE_DIMENSION.KILL_LIMIT) {
+        this.triggerKillNotification('RAMPAGE COMPLETE!', true, 0, 'alert');
+        this.shakeCamera(3.0);
+        this.exitRampageDimension();
+        // Reset combo to prevent immediate re-entry
+        this.stats.combo = 0;
+        this.stats.comboTimer = 0;
+        this.lastAnnouncedComboMilestone = 0;
+        return;
+      }
+    }
+
     // Reset milestone tracker and exit dimension when combo resets
     if (this.stats.combo === 0) {
       // Play combo lost sound if we had a combo
@@ -2954,6 +2997,10 @@ export class Engine {
     if (!this.rampageDimension || this.inRampageDimension) return;
 
     this.inRampageDimension = true;
+
+    // Track kills at rampage start for exit condition
+    this.rampageKillsAtStart = this.stats.kills;
+    this.stats.rampageKills = 0;
 
     // Rampage audio - dramatic entry sound and ambient loop
     gameAudio.playRampageEnter();
