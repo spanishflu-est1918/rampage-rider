@@ -15,6 +15,7 @@ import { gameAudio } from './audio';
 
 interface EngineControls {
   spawnVehicle: (type: VehicleType | null) => void;
+  triggerRampage: () => void;
 }
 
 function App() {
@@ -122,6 +123,12 @@ function App() {
     }
   }, []);
 
+  const handleTriggerRampage = useCallback(() => {
+    if (engineControlsRef.current) {
+      engineControlsRef.current.triggerRampage();
+    }
+  }, []);
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-neutral-900 select-none">
 
@@ -217,7 +224,7 @@ function App() {
           {/* Dev-only vehicle selector - below top bar on mobile, centered on desktop */}
           {import.meta.env.DEV && (
             <div className="absolute top-14 md:top-4 left-1/2 -translate-x-1/2 z-40 flex gap-2 bg-black/60 p-1 md:p-2 rounded-lg border border-white/20">
-              <VehicleSelector onSelect={handleVehicleSelect} currentVehicle={currentVehicle} />
+              <VehicleSelector onSelect={handleVehicleSelect} currentVehicle={currentVehicle} onTriggerRampage={handleTriggerRampage} />
             </div>
           )}
         </>

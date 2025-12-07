@@ -10,6 +10,7 @@ interface EngineControls {
   getAnimations: () => string[];
   playAnimation: (name: string) => void;
   playAnimationOnce: (name: string) => void;
+  triggerRampage: () => void;
 }
 
 interface GameCanvasProps {
@@ -73,6 +74,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onStatsUpdate, onGameOver, onKi
           getAnimations: () => engine.getAnimationNames(),
           playAnimation: (name) => engine.debugPlayAnimation(name),
           playAnimationOnce: (name) => engine.debugPlayAnimationOnce(name),
+          triggerRampage: () => engine.debugTriggerRampage(),
         });
       }
     };

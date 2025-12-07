@@ -813,6 +813,18 @@ export class Engine {
   }
 
   /**
+   * Debug: Trigger rampage mode immediately
+   */
+  debugTriggerRampage(): void {
+    if (!this.inRampageDimension) {
+      // Set combo to threshold so it doesn't immediately exit
+      this.stats.combo = RAMPAGE_DIMENSION.COMBO_THRESHOLD;
+      this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+      this.enterRampageDimension();
+    }
+  }
+
+  /**
    * Debug: Boost heat to trigger motorbike cops immediately
    * Press H key to use
    */
