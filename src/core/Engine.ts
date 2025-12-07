@@ -321,6 +321,12 @@ export class Engine {
   private motorbikeBlastKillCounter: number = 0;
   private static readonly MOTORBIKE_BLAST_KILL_THRESHOLD = 5; // Blast available every 5 kills
 
+  // Sedan/Truck blast: available every X kills (cars need this to kill cops)
+  private sedanBlastKillCounter: number = 0;
+  private truckBlastKillCounter: number = 0;
+  private static readonly SEDAN_BLAST_KILL_THRESHOLD = 3; // Blast available every 3 kills
+  private static readonly TRUCK_BLAST_KILL_THRESHOLD = 2; // Blast available every 2 kills (truck is slower)
+
   private actionController: ActionController = new ActionController();
 
   constructor(canvas: HTMLCanvasElement, width: number, height: number) {
@@ -976,6 +982,11 @@ export class Engine {
 
     this.isInVehicle = true;
 
+    // Clear foot cops when entering vehicle (they don't chase vehicles)
+    if (this.cops) {
+      this.cops.clear();
+    }
+
     if (this.currentVehicleTier) {
       this.stats.tier = this.currentVehicleTier;
       // Start vehicle engine sound
@@ -1190,6 +1201,11 @@ export class Engine {
     this.vehicle = this.awaitingVehicle;
     this.currentVehicleTier = this.awaitingVehicleTier;
     this.vehicleSpawned = true;
+
+    // Set destroy callback on new vehicle (was missing - caused stuck state at 0 armor)
+    this.vehicle.setOnDestroyed(() => {
+      this.exitVehicle();
+    });
 
     // Despawn cops from the tier we just left
     this.despawnCopsFromTier(previousTier);
@@ -1881,6 +1897,164 @@ export class Engine {
   }
 
   /**
+   * Sedan blast attack - 360° shockwave that damages cops and pedestrians
+   */
+  private handleSedanBlast(): void {
+    if (!this.vehicle) return;
+
+    const attackPosition = this.vehicle.getPosition();
+    const blastRadius = 12; // Larger than motorbike
+    const blastDamage = 50;
+    const blastForce = 20;
+
+    gameAudio.playMotorbikeBlast(); // Reuse blast sound
+
+    let totalKills = 0;
+    const allKillPositions: THREE.Vector3[] = [];
+
+    // Damage pedestrians
+    if (this.crowd) {
+      const blastResult = this.crowd.blastInRadius(attackPosition, blastRadius, blastForce, blastDamage, 10);
+      if (blastResult.kills > 0) {
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(SCORING_CONFIG.PEDESTRIAN_BASE * blastResult.kills * comboMultiplier);
+        this.stats.kills += blastResult.kills;
+        this.stats.combo += blastResult.kills;
+        this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.lastCombatTime = this.stats.gameTime;
+        totalKills += blastResult.kills;
+        allKillPositions.push(...blastResult.positions);
+        this.triggerKillNotification('CAR BLAST!', true, Math.floor(SCORING_CONFIG.PEDESTRIAN_BASE * comboMultiplier));
+        this.crowd.panicCrowd(attackPosition, 25);
+      }
+    }
+
+    // Damage cop cars
+    if (this.copCars) {
+      const copResult = this.copCars.damageInRadius(attackPosition, blastRadius, blastDamage);
+      if (copResult.kills > 0) {
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(copResult.points * comboMultiplier);
+        this.stats.copKills += copResult.kills;
+        this.stats.combo += copResult.kills;
+        this.stats.comboTimer = Math.min(
+          SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+          this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+        );
+        totalKills += copResult.kills;
+        allKillPositions.push(...copResult.positions);
+        this.refillRampageFuel(copResult.kills, 'car');
+        this.triggerKillNotification('COP CAR BLASTED!', true, Math.floor(500 * comboMultiplier));
+      }
+    }
+
+    // Knockback motorbike cops
+    if (this.motorbikeCops) {
+      const motoResult = this.motorbikeCops.damageInRadius(attackPosition, blastRadius, blastDamage);
+      if (motoResult.kills > 0) {
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(300 * motoResult.kills * comboMultiplier);
+        this.stats.copKills += motoResult.kills;
+        this.stats.combo += motoResult.kills;
+        totalKills += motoResult.kills;
+        allKillPositions.push(...motoResult.positions);
+        this.refillRampageFuel(motoResult.kills, 'moto');
+        this.triggerKillNotification('MOTO COP BLASTED!', true, Math.floor(300 * comboMultiplier));
+      }
+      this.motorbikeCops.applyKnockbackInRadius(attackPosition, blastRadius, blastForce);
+    }
+
+    // Visual effects
+    if (totalKills > 0) {
+      this.showMotorbikeBlast(attackPosition); // Reuse blast visual
+      this.shakeCamera(2.0);
+      this.emitBloodEffects(allKillPositions, attackPosition, 30, 3);
+      this.updateWantedStars(true);
+    } else {
+      this.shakeCamera(0.5);
+    }
+  }
+
+  /**
+   * Truck blast attack - massive 360° shockwave, even more powerful
+   */
+  private handleTruckBlast(): void {
+    if (!this.vehicle) return;
+
+    const attackPosition = this.vehicle.getPosition();
+    const blastRadius = 15; // Largest blast
+    const blastDamage = 100; // Instant kill most things
+    const blastForce = 30;
+
+    gameAudio.playMotorbikeBlast(); // Reuse blast sound
+
+    let totalKills = 0;
+    const allKillPositions: THREE.Vector3[] = [];
+
+    // Damage pedestrians
+    if (this.crowd) {
+      const blastResult = this.crowd.blastInRadius(attackPosition, blastRadius, blastForce, blastDamage, 15);
+      if (blastResult.kills > 0) {
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(SCORING_CONFIG.PEDESTRIAN_BASE * blastResult.kills * comboMultiplier);
+        this.stats.kills += blastResult.kills;
+        this.stats.combo += blastResult.kills;
+        this.stats.comboTimer = SCORING_CONFIG.COMBO_DURATION;
+        this.lastCombatTime = this.stats.gameTime;
+        totalKills += blastResult.kills;
+        allKillPositions.push(...blastResult.positions);
+        this.triggerKillNotification('TRUCK BLAST!', true, Math.floor(SCORING_CONFIG.PEDESTRIAN_BASE * comboMultiplier));
+        this.crowd.panicCrowd(attackPosition, 30);
+      }
+    }
+
+    // Damage cop cars
+    if (this.copCars) {
+      const copResult = this.copCars.damageInRadius(attackPosition, blastRadius, blastDamage);
+      if (copResult.kills > 0) {
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(copResult.points * comboMultiplier);
+        this.stats.copKills += copResult.kills;
+        this.stats.combo += copResult.kills;
+        this.stats.comboTimer = Math.min(
+          SCORING_CONFIG.COMBO_DURATION + SCORING_CONFIG.COP_KILL_COMBO_BONUS,
+          this.stats.comboTimer + SCORING_CONFIG.COP_KILL_COMBO_BONUS
+        );
+        totalKills += copResult.kills;
+        allKillPositions.push(...copResult.positions);
+        this.refillRampageFuel(copResult.kills, 'car');
+        this.triggerKillNotification('COP CAR CRUSHED!', true, Math.floor(500 * comboMultiplier));
+      }
+    }
+
+    // Damage motorbike cops
+    if (this.motorbikeCops) {
+      const motoResult = this.motorbikeCops.damageInRadius(attackPosition, blastRadius, blastDamage);
+      if (motoResult.kills > 0) {
+        const comboMultiplier = this.getComboMultiplier();
+        this.stats.score += Math.floor(300 * motoResult.kills * comboMultiplier);
+        this.stats.copKills += motoResult.kills;
+        this.stats.combo += motoResult.kills;
+        totalKills += motoResult.kills;
+        allKillPositions.push(...motoResult.positions);
+        this.refillRampageFuel(motoResult.kills, 'moto');
+        this.triggerKillNotification('MOTO COP CRUSHED!', true, Math.floor(300 * comboMultiplier));
+      }
+      this.motorbikeCops.applyKnockbackInRadius(attackPosition, blastRadius, blastForce);
+    }
+
+    // Visual effects
+    if (totalKills > 0) {
+      this.showMotorbikeBlast(attackPosition); // Reuse blast visual
+      this.shakeCamera(3.0); // Bigger shake for truck
+      this.emitBloodEffects(allKillPositions, attackPosition, 40, 5);
+      this.updateWantedStars(true);
+    } else {
+      this.shakeCamera(0.8);
+    }
+  }
+
+  /**
    * Original forward-cone motorbike shooting (kept for reference, could be secondary attack)
    */
   private handleMotorbikeShootCone(): void {
@@ -2029,6 +2203,13 @@ export class Engine {
     this.lastCombatTime = this.stats.gameTime;
     this.stats.heat = Math.min(SCORING_CONFIG.HEAT_MAX, this.stats.heat + SCORING_CONFIG.HEAT_PER_PED_KILL);
     this.refillRampageFuel(1, 'none');
+
+    // Increment blast counters based on current vehicle tier
+    if (this.currentVehicleTier === Tier.SEDAN) {
+      this.sedanBlastKillCounter++;
+    } else if (this.currentVehicleTier === Tier.TRUCK) {
+      this.truckBlastKillCounter++;
+    }
 
     this.particles.emitBlood(position, cfg.particleCount);
     if (this.crowd) {
@@ -2358,6 +2539,18 @@ export class Engine {
                   this.handleMotorbikeStab();
                   this.player.playBicycleAttack(); // Same stab animation
                 }
+              } else if (vehicleType === VehicleType.SEDAN) {
+                // Sedan blast - available every X kills
+                if (this.sedanBlastKillCounter >= Engine.SEDAN_BLAST_KILL_THRESHOLD) {
+                  this.handleSedanBlast();
+                  this.sedanBlastKillCounter = 0;
+                }
+              } else if (vehicleType === VehicleType.TRUCK) {
+                // Truck blast - available every X kills
+                if (this.truckBlastKillCounter >= Engine.TRUCK_BLAST_KILL_THRESHOLD) {
+                  this.handleTruckBlast();
+                  this.truckBlastKillCounter = 0;
+                }
               }
             }
           }
@@ -2559,7 +2752,7 @@ export class Engine {
           // Get truck's forward direction from its rotation
           const truckRotation = this.vehicle.getRotationY();
           this._tempVehicleDir.set(Math.sin(truckRotation), 0, Math.cos(truckRotation));
-          
+
           const trampleResult = this.copCars.trampleInRadius(currentPos, 6.0, this._tempVehicleDir);
           if (trampleResult.kills > 0) {
             const comboMultiplier = this.getComboMultiplier();
@@ -2576,6 +2769,8 @@ export class Engine {
             this.updateWantedStars(true);
             this.refillRampageFuel(trampleResult.kills, 'car');
             this.shakeCamera(2.0);
+            // Increment truck blast counter
+            this.truckBlastKillCounter += trampleResult.kills;
             for (const pos of trampleResult.positions) {
               this.particles.emitBlood(pos, 80);
               this.triggerKillNotification('COP CAR CRUSHED!', true, Math.floor(500 * comboMultiplier));
@@ -2612,6 +2807,8 @@ export class Engine {
                 this.updateWantedStars(true);
                 this.refillRampageFuel(chipResult.kills, 'car');
                 this.shakeCamera(1.5);
+                // Increment sedan blast counter
+                this.sedanBlastKillCounter += chipResult.kills;
                 for (const pos of chipResult.positions) {
                   this.particles.emitBlood(pos, 60);
                   this.triggerKillNotification('COP CAR WRECKED!', true, Math.floor(300 * comboMultiplier));
@@ -3161,15 +3358,7 @@ export class Engine {
    */
   private checkComboMilestones(): void {
     // Update rampage mode state (activates at 10+ combo)
-    const wasInRampageMode = this.stats.inRampageMode;
     this.stats.inRampageMode = this.stats.combo >= 10;
-
-    // Announce rampage mode activation
-    if (!wasInRampageMode && this.stats.inRampageMode) {
-      this.triggerKillNotification('RAMPAGE MODE!', true, 0, 'alert');
-      this.shakeCamera(3.0);
-      gameAudio.playRampageEnter();
-    }
 
     // Find the highest milestone we've crossed
     let highestMilestone = 0;
@@ -3193,12 +3382,12 @@ export class Engine {
     }
 
     // Rampage Dimension Entry - Two paths:
-    // DOMINATION: 10+ combo, 2+ cop kills in combo, 40%+ heat
+    // DOMINATION: 10+ combo, 2+ total cop kills, 40%+ heat
     // DESPERATION: Below 25% health, 3+ cop kills while desperate
     if (!this.inRampageDimension) {
       const dominationPath =
         this.stats.combo >= RAMPAGE_DIMENSION.COMBO_THRESHOLD &&
-        this.stats.comboCopKills >= RAMPAGE_DIMENSION.COP_KILLS_REQUIRED &&
+        this.stats.copKills >= RAMPAGE_DIMENSION.COP_KILLS_REQUIRED &&
         this.stats.heat >= RAMPAGE_DIMENSION.HEAT_THRESHOLD;
 
       const maxHealth = this.isInVehicle && this.vehicle
@@ -3307,6 +3496,113 @@ export class Engine {
     // Re-enable building collision when exiting Rampage
     this.player?.setBuildingCollision(true);
     this.vehicle?.setBuildingCollision(true);
+
+    // Teleport player/vehicle out of any building they might be inside
+    const currentPos = this.isInVehicle && this.vehicle
+      ? this.vehicle.getPosition()
+      : this.player?.getPosition();
+
+    if (currentPos) {
+      const safePos = this.findSafeRampageExitPosition(currentPos);
+      if (this.isInVehicle && this.vehicle) {
+        this.vehicle.setPosition(safePos);
+      } else if (this.player) {
+        this.player.setPosition(safePos);
+      }
+      // Also reposition awaiting vehicle if it exists
+      if (this.awaitingVehicle) {
+        this.awaitingVehicle.setPosition(safePos.clone().add(new THREE.Vector3(5, 0, 0)));
+      }
+    }
+
+    // Reset cop spawn timers so they start spawning immediately after rampage
+    this.bikeCops?.resetSpawnTimer();
+    this.motorbikeCops?.resetSpawnTimer();
+    this.copCars?.resetSpawnTimer();
+  }
+
+  /**
+   * Find a safe position outside buildings after rampage ends.
+   * Searches outward in a spiral pattern until finding open ground.
+   */
+  private findSafeRampageExitPosition(currentPos: THREE.Vector3): THREE.Vector3 {
+    const world = this.physics.getWorld();
+    if (!world) return currentPos;
+
+    // Lazily initialize rays
+    if (!this._downRay) {
+      this._downRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+    }
+
+    // Check increasingly larger distances from current position
+    const distances = [0, 5, 10, 15, 20, 25, 30];
+    const angles = [0, Math.PI/2, Math.PI, Math.PI*3/2, Math.PI/4, Math.PI*3/4, Math.PI*5/4, Math.PI*7/4];
+
+    for (const dist of distances) {
+      for (const angle of angles) {
+        const testX = currentPos.x + Math.cos(angle) * dist;
+        const testZ = currentPos.z + Math.sin(angle) * dist;
+
+        // Cast ray down from above to find ground
+        this._downRay.origin.x = testX;
+        this._downRay.origin.y = 20; // Start high above
+        this._downRay.origin.z = testZ;
+
+        const hit = world.castRay(this._downRay, 25, true);
+        if (hit) {
+          const hitCollider = hit.collider;
+          const groups = hitCollider.collisionGroups();
+          const membership = groups & 0xFFFF;
+
+          // Only accept if we hit actual ground (not building floor)
+          if (membership === COLLISION_GROUPS.GROUND) {
+            // Double-check: cast horizontal rays to ensure we're not inside walls
+            const hitY = 20 - hit.timeOfImpact;
+            if (this.isPositionClear(testX, hitY + 1, testZ, world)) {
+              return new THREE.Vector3(testX, hitY, testZ);
+            }
+          }
+        }
+      }
+    }
+
+    // Fallback: return current position
+    return currentPos;
+  }
+
+  /**
+   * Check if a position is clear of obstacles by casting horizontal rays
+   */
+  private isPositionClear(x: number, y: number, z: number, world: RAPIER.World): boolean {
+    if (!this._horizontalRay) {
+      this._horizontalRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
+    }
+
+    const directions = [
+      { x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }
+    ];
+
+    for (const dir of directions) {
+      this._horizontalRay.origin.x = x;
+      this._horizontalRay.origin.y = y;
+      this._horizontalRay.origin.z = z;
+      this._horizontalRay.dir.x = dir.x;
+      this._horizontalRay.dir.z = dir.z;
+
+      const hit = world.castRay(this._horizontalRay, 2, true);
+      if (hit) {
+        const hitCollider = hit.collider;
+        const groups = hitCollider.collisionGroups();
+        const membership = groups & 0xFFFF;
+
+        // If we hit a building within 2 units, position is not clear
+        if (membership === COLLISION_GROUPS.BUILDING) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   /**

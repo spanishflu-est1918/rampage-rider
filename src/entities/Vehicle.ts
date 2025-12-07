@@ -3,6 +3,7 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import { AssetLoader } from '../core/AssetLoader';
 import { AnimationHelper } from '../utils/AnimationHelper';
 import { VehicleConfig, COLLISION_GROUPS, makeCollisionGroups } from '../constants';
+import { gameAudio } from '../audio/GameAudio';
 
 export class Vehicle extends THREE.Group {
   private config: VehicleConfig;
@@ -429,6 +430,7 @@ export class Vehicle extends THREE.Group {
 
     this.health = Math.max(0, this.health - amount);
     this.flashDamage();
+    gameAudio.playVehicleDamage();
 
     if (this.health <= 0) {
       this.explode();
@@ -529,6 +531,16 @@ export class Vehicle extends THREE.Group {
    */
   getPosition(): THREE.Vector3 {
     return (this as THREE.Group).position;
+  }
+
+  /**
+   * Set vehicle position (teleport)
+   */
+  setPosition(pos: THREE.Vector3): void {
+    (this as THREE.Group).position.copy(pos);
+    if (this.rigidBody) {
+      this.rigidBody.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true);
+    }
   }
 
   /**

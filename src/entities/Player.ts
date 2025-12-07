@@ -689,6 +689,18 @@ export class Player extends THREE.Group {
   }
 
   /**
+   * Set player position (teleport)
+   */
+  setPosition(pos: THREE.Vector3): void {
+    (this as THREE.Group).position.copy(pos);
+    if (this.rigidBody) {
+      this.rigidBody.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true);
+    }
+    // Update blob shadow
+    this.blobShadow.position.set(pos.x, 0.01, pos.z);
+  }
+
+  /**
    * Get the blob shadow mesh (for adding to scene)
    */
   getBlobShadow(): BlobShadow {

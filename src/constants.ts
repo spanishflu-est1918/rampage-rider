@@ -63,7 +63,7 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   },
   [Tier.TRUCK]: {
     name: "Road Destroyer",
-    minScore: 10000, // ~250 kills with insane multipliers
+    minScore: 20000, // ~400 kills - much harder to reach
     speedMultiplier: 2.5, // Slower than sedan but unstoppable
     maxHealth: 300, // Tank-level health
     color: 0x880000, // Blood red
@@ -184,6 +184,12 @@ export const COP_CONFIG = {
   MAX_FORCE: 20.0, // Yuka steering force for instant direction changes
   UNIFORM_COLOR: 0x0066ff, // Bright police blue
   GEAR_COLOR: 0x001a4d, // Dark navy for helmets/gear
+  // Spawn parameters (shared by foot cops and bike cops)
+  SPAWN_RADIUS: 12, // Min spawn distance from player
+  SPAWN_RADIUS_VARIANCE: 5, // Random extra distance (total: 12-17 units)
+  SPAWN_COOLDOWN: 1.0, // Seconds between spawns
+  MAX_FOOT_COPS: 3,
+  MAX_BIKE_COPS: 2,
 } as const;
 
 /**
@@ -428,9 +434,9 @@ export const MOTORBIKE_COP_CONFIG = {
   MAX_TOTAL: 8,
 
   // Spawn parameters
-  SPAWN_BEHIND_DISTANCE: 40,
-  SPAWN_FLANK_OFFSET: 20,
-  SPAWN_AHEAD_DISTANCE: 25,
+  SPAWN_BEHIND_DISTANCE: 18,
+  SPAWN_FLANK_OFFSET: 12,
+  SPAWN_AHEAD_DISTANCE: 15,
 } as const;
 
 /**

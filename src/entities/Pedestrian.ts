@@ -326,31 +326,25 @@ export class Pedestrian extends THREE.Group {
 
   panic(dangerPosition: THREE.Vector3): void {
     if (this.isDead) return;
-    // Already panicking and past freeze? Don't restart
-    if (this.isPanicking && this.panicFreezeTimer <= 0) return;
+    // Already panicking and fleeing? Don't restart
+    if (this.isPanicking) return;
 
     // Only scream if not already panicking (first panic trigger)
-    const wasNotPanicking = !this.isPanicking;
     this.isPanicking = true;
 
-    // Deer-in-headlights: freeze briefly before fleeing (gives player time to catch)
-    this.panicFreezeTimer = 0.6;
+    // Store danger position for flee behavior
     if (!this.pendingDangerPosition) {
       this.pendingDangerPosition = new THREE.Vector3();
     }
     this.pendingDangerPosition.copy(dangerPosition);
 
-    // Stop moving during freeze
-    this.yukaVehicle.steering.clear();
-    this.yukaVehicle.maxSpeed = 0;
-
-    // Play startled/idle animation during freeze
-    this.playAnimation('Idle', 0.1);
-
-    // Scream when first panicking (30% chance to avoid audio spam)
-    if (wasNotPanicking && Math.random() < 0.3) {
+    // Scream when panicking (30% chance to avoid audio spam)
+    if (Math.random() < 0.3) {
       gameAudio.playPedestrianScream();
     }
+
+    // Start fleeing immediately (no freeze)
+    this.startFleeing();
   }
 
   /**

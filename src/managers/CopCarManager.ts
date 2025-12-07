@@ -266,4 +266,11 @@ export class CopCarManager {
     this.cars = [];
     this.spawnCooldown = 0;
   }
+
+  /**
+   * Reset spawn cooldown to allow immediate spawning (called after rampage exits)
+   */
+  resetSpawnTimer(): void {
+    this.spawnCooldown = 0;
+  }
 }

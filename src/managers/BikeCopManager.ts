@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { BikeCop } from '../entities/BikeCop';
 import { AIManager } from '../core/AIManager';
+import { COP_CONFIG } from '../constants';
 
 /**
  * BikeCopManager
@@ -17,9 +18,7 @@ export class BikeCopManager {
   private world: RAPIER.World;
   private aiManager: AIManager;
 
-  private maxCops: number = 2;
-  private spawnRadius: number = 20;
-  private spawnCooldown: number = 3.0;
+  private maxCops: number = COP_CONFIG.MAX_BIKE_COPS;
   private lastSpawnTime: number = 0;
 
   private damageCallback: ((damage: number) => void) | null = null;
@@ -68,7 +67,7 @@ export class BikeCopManager {
 
     // Update spawn cooldown
     this.lastSpawnTime += deltaTime;
-    if (this.lastSpawnTime < this.spawnCooldown) {
+    if (this.lastSpawnTime < COP_CONFIG.SPAWN_COOLDOWN) {
       return;
     }
 
@@ -90,7 +89,7 @@ export class BikeCopManager {
   private spawnCop(playerPosition: THREE.Vector3): void {
     // Spawn at random angle around player
     const angle = Math.random() * Math.PI * 2;
-    const distance = this.spawnRadius + Math.random() * 10;
+    const distance = COP_CONFIG.SPAWN_RADIUS + Math.random() * COP_CONFIG.SPAWN_RADIUS_VARIANCE;
 
     this._tempSpawnPos.set(
       playerPosition.x + Math.cos(angle) * distance,
@@ -237,5 +236,12 @@ export class BikeCopManager {
     }
     this.cops = [];
     this.lastSpawnTime = 0;
+  }
+
+  /**
+   * Reset spawn timer to allow immediate spawning (called after rampage exits)
+   */
+  resetSpawnTimer(): void {
+    this.lastSpawnTime = COP_CONFIG.SPAWN_COOLDOWN;
   }
 }

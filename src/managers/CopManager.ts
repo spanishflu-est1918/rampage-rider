@@ -3,12 +3,12 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import { Cop } from '../entities/Cop';
 import { AIManager } from '../core/AIManager';
 import { gameAudio } from '../audio/GameAudio';
-import { IS_MOBILE, MOBILE_CONFIG } from '../constants';
+import { IS_MOBILE, MOBILE_CONFIG, COP_CONFIG } from '../constants';
 
 /**
  * CopManager
  *
- * Manages cop spawning and behavior based on heat level:
+ * Manages foot cop spawning and behavior based on heat level:
  * - 25% heat → 1 cop
  * - 50% heat → 2 cops
  * - 75% heat → 3 cops
@@ -20,8 +20,7 @@ export class CopManager {
   private world: RAPIER.World;
   private aiManager: AIManager;
 
-  private maxCops: number = IS_MOBILE ? MOBILE_CONFIG.MAX_COPS : 3; // Reduced for performance
-  private spawnRadius: number = 15;
+  private maxCops: number = IS_MOBILE ? MOBILE_CONFIG.MAX_COPS : COP_CONFIG.MAX_FOOT_COPS;
   private damageCallback: ((damage: number) => void) | null = null;
 
   // Pre-allocated vectors to avoid GC pressure in hot paths
@@ -127,7 +126,7 @@ export class CopManager {
   private spawnCop(playerPosition: THREE.Vector3): void {
     // Spawn at random angle around player, outside spawn radius
     const angle = Math.random() * Math.PI * 2;
-    const distance = this.spawnRadius + Math.random() * 5;
+    const distance = COP_CONFIG.SPAWN_RADIUS + Math.random() * COP_CONFIG.SPAWN_RADIUS_VARIANCE;
 
     this._tempSpawnPos.set(
       playerPosition.x + Math.cos(angle) * distance,

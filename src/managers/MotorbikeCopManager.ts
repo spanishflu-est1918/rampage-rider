@@ -33,7 +33,7 @@ export class MotorbikeCopManager {
   // Wave state
   private currentWaveCleared: boolean = false;
   private waveRespiteTimer: number = 0;
-  private readonly WAVE_RESPITE_DURATION: number = 20; // Seconds of respite after clearing
+  private readonly WAVE_RESPITE_DURATION: number = 5; // Seconds of respite after clearing (reduced for better pacing)
 
   // Heat tracking
   private previousHeat: number = 0;
@@ -507,5 +507,12 @@ export class MotorbikeCopManager {
     this.currentWaveCleared = false;
     this.waveRespiteTimer = 0;
     this.previousHeat = 0;
+  }
+
+  /**
+   * Reset spawn timer to allow immediate spawning (called after rampage exits)
+   */
+  resetSpawnTimer(): void {
+    this.lastSpawnTime = this.spawnCooldown;
   }
 }
