@@ -11,6 +11,7 @@ interface EngineControls {
   playAnimation: (name: string) => void;
   playAnimationOnce: (name: string) => void;
   triggerRampage: () => void;
+  setBloodlessMode: (value: boolean) => void;
 }
 
 interface GameCanvasProps {
@@ -82,6 +83,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           playAnimation: (name) => engine.debugPlayAnimation(name),
           playAnimationOnce: (name) => engine.debugPlayAnimationOnce(name),
           triggerRampage: () => engine.debugTriggerRampage(),
+          setBloodlessMode: (value) => engine.setBloodlessMode(value),
         });
       }
     };

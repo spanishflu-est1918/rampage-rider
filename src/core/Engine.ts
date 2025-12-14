@@ -204,6 +204,14 @@ export class Engine {
   private healthBarUpdateCounter: number = 0; // Throttle health bar projection
   private statsUpdateCounter: number = 0; // PERF: Throttle React stats updates to every 3 frames
 
+  // Cached settings (avoid localStorage reads per frame)
+  private _bloodlessMode: boolean = false;
+
+  /** Update bloodless mode setting (call when settings change) */
+  setBloodlessMode(value: boolean): void {
+    this._bloodlessMode = value;
+  }
+
   // Pre-allocated vectors for update loop (avoid GC pressure)
   private readonly _tempCameraPos: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempLookAt: THREE.Vector3 = new THREE.Vector3();
@@ -389,6 +397,9 @@ export class Engine {
   }
 
   async init(): Promise<void> {
+    // Cache settings to avoid localStorage reads per frame
+    this._bloodlessMode = loadSettings().bloodlessMode;
+
     const { preloader } = await import('./Preloader');
     await preloader.preloadAll();
 
@@ -1299,7 +1310,7 @@ export class Engine {
     this.vehicleRespawnCooldown = Engine.VEHICLE_RESPAWN_COOLDOWN_TIME;
 
     this.shakeCamera(2.0);
-    if (!loadSettings().bloodlessMode) {
+    if (!this._bloodlessMode) {
       this.particles.emitBlood(vehiclePos, 100);
     }
   }
@@ -1424,7 +1435,7 @@ export class Engine {
         this.bikeCops.applyKnockbackInRadius(position, radius, force);
         this.bikeCops.clearTaserBeams();
       }
-      if (this.particles && !loadSettings().bloodlessMode) {
+      if (this.particles && !this._bloodlessMode) {
         this.particles.emitBlood(position, 50);
       }
     });
@@ -1471,7 +1482,7 @@ export class Engine {
     sprayCount: number = 20
   ): void {
     // Skip blood effects in bloodless mode
-    if (loadSettings().bloodlessMode) return;
+    if (this._bloodlessMode) return;
 
     for (const killPos of killPositions) {
       this._tempAttackDir.subVectors(killPos, sourcePosition).normalize();
@@ -1500,7 +1511,7 @@ export class Engine {
     // --- Pedestrian damage ---
     const pedDamageStart = performance.now();
     let _pedKills = 0;
-    const bloodlessKnockback = loadSettings().bloodlessMode ? 25 : 0;
+    const bloodlessKnockback = this._bloodlessMode ? 25 : 0;
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -1680,7 +1691,7 @@ export class Engine {
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
 
-    const bloodlessKnockback = loadSettings().bloodlessMode ? 30 : 0;
+    const bloodlessKnockback = this._bloodlessMode ? 30 : 0;
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -1830,7 +1841,7 @@ export class Engine {
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
-    const bloodlessKnockback = loadSettings().bloodlessMode ? 32 : 0;
+    const bloodlessKnockback = this._bloodlessMode ? 32 : 0;
 
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
@@ -2153,7 +2164,7 @@ export class Engine {
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
-    const bloodlessKnockback = loadSettings().bloodlessMode ? 35 : 0;
+    const bloodlessKnockback = this._bloodlessMode ? 35 : 0;
 
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
@@ -2295,7 +2306,7 @@ export class Engine {
       this.truckBlastKillCounter++;
     }
 
-    if (!loadSettings().bloodlessMode) {
+    if (!this._bloodlessMode) {
       this.particles.emitBlood(position, cfg.particleCount);
     }
     if (this.crowd) {
@@ -2879,7 +2890,7 @@ export class Engine {
             // Increment truck blast counter
             this.truckBlastKillCounter += trampleResult.kills;
             for (const pos of trampleResult.positions) {
-              if (!loadSettings().bloodlessMode) {
+              if (!this._bloodlessMode) {
                 this.particles.emitBlood(pos, 80);
               }
               this.triggerKillNotification('COP CAR CRUSHED!', true, Math.floor(500 * comboMultiplier));
@@ -2919,7 +2930,7 @@ export class Engine {
                 // Increment sedan blast counter
                 this.sedanBlastKillCounter += chipResult.kills;
                 for (const pos of chipResult.positions) {
-                  if (!loadSettings().bloodlessMode) {
+                  if (!this._bloodlessMode) {
                     this.particles.emitBlood(pos, 60);
                   }
                   this.triggerKillNotification('COP CAR WRECKED!', true, Math.floor(300 * comboMultiplier));

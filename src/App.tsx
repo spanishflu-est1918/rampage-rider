@@ -20,6 +20,7 @@ import { loadSettings, saveSetting } from './utils/settings';
 interface EngineControls {
   spawnVehicle: (type: VehicleType | null) => void;
   triggerRampage: () => void;
+  setBloodlessMode: (value: boolean) => void;
 }
 
 function App() {
@@ -51,10 +52,14 @@ function App() {
     saveSetting('mobileScheme', scheme);
   }, []);
 
-  // Handler for bloodless mode changes - saves to localStorage
+  // Handler for bloodless mode changes - saves to localStorage and updates Engine cache
   const handleBloodlessModeChange = useCallback((enabled: boolean) => {
     setBloodlessMode(enabled);
     saveSetting('bloodlessMode', enabled);
+    // Update Engine cache to avoid repeated localStorage reads
+    if (engineControlsRef.current) {
+      engineControlsRef.current.setBloodlessMode(enabled);
+    }
   }, []);
 
   // Start loading AFTER user interaction (required for audio)
