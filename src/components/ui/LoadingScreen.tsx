@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { LoadingState, LoadingPhase } from '../../core/Preloader';
 import { gameAudio } from '../../audio/GameAudio';
+import { MobileControlScheme } from '../../input/MobileInputManager';
+import { LeaderboardPanel } from './LeaderboardPanel';
 
 interface LoadingScreenProps {
   state: LoadingState;
   onStart: () => void;
+  mobileScheme: MobileControlScheme;
+  onSchemeChange: (scheme: MobileControlScheme) => void;
+  isMobile: boolean;
+  accelerometerSupported: boolean;
 }
 
 // Neon colors matching Overlay.tsx
@@ -38,7 +44,20 @@ const TAGLINES = [
   "NETWORKING, BUT VIOLENTLY.",
 ];
 
-export const LoadingScreen: React.FC<LoadingScreenProps> = ({ state, onStart }) => {
+const CONTROL_OPTIONS: Array<{ label: string; value: MobileControlScheme; hint: string }> = [
+  { label: 'TOUCH', value: 'touch', hint: 'Drag to move, tap to strike' },
+  { label: 'TILT', value: 'accelerometer', hint: 'Tilt to steer, tap to strike' },
+  { label: 'HYBRID', value: 'hybrid', hint: 'Tilt to steer, touch overrides' },
+];
+
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({
+  state,
+  onStart,
+  mobileScheme,
+  onSchemeChange,
+  isMobile,
+  accelerometerSupported,
+}) => {
   const [displayProgress, setDisplayProgress] = useState(0);
   const [showStart, setShowStart] = useState(false);
   const [buttonEnabled, setButtonEnabled] = useState(false);
@@ -227,7 +246,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ state, onStart }) 
         </div>
 
         {/* Tagline */}
-        <div className="text-center mb-8 h-6">
+        <div className="text-center mb-4 h-6">
           <p
             className="text-xs retro transition-opacity duration-300"
             style={{ color: NEON.cyan, textShadow: `0 0 10px ${NEON.cyan}60` }}
@@ -235,6 +254,30 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ state, onStart }) 
             {showStart ? TAGLINES[taglineIndex] : ''}
           </p>
         </div>
+
+        {/* Leaderboard Panel - shown when ready to start */}
+        {showStart && (
+          <div
+            className="mb-6 rounded-lg overflow-hidden"
+            style={{
+              background: 'rgba(0,0,0,0.6)',
+              border: `1px solid ${NEON.yellow}40`,
+              boxShadow: `0 0 20px ${NEON.yellow}10`,
+            }}
+          >
+            <div className="px-3 py-2" style={{ borderBottom: `1px solid ${NEON.yellow}30` }}>
+              <p
+                className="text-[10px] retro tracking-[0.2em] text-center"
+                style={{ color: NEON.yellow }}
+              >
+                HIGH SCORES
+              </p>
+            </div>
+            <div className="px-2 py-2">
+              <LeaderboardPanel limit={5} compact />
+            </div>
+          </div>
+        )}
 
         {/* Loading Bar Section */}
         {!showStart && (
@@ -335,6 +378,86 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ state, onStart }) 
                 }}
               />
             </button>
+
+            {/* Control scheme toggle */}
+            {isMobile && (
+              <div className="mt-6 flex flex-col items-center gap-3">
+                <p
+                  className="text-[10px] retro tracking-[0.25em]"
+                  style={{ color: NEON.cyan, textShadow: `0 0 8px ${NEON.cyan}60` }}
+                >
+                  CONTROL MODE
+                </p>
+                <div
+                  className="flex gap-2 rounded-full px-2 py-2 backdrop-blur-sm border"
+                  style={{
+                    borderColor: `${NEON.cyan}30`,
+                    background: 'linear-gradient(135deg, rgba(10,10,16,0.9), rgba(6,6,10,0.85))',
+                    boxShadow: `0 0 20px ${NEON.cyan}20`,
+                  }}
+                >
+                  {CONTROL_OPTIONS.map((option) => {
+                    const active = mobileScheme === option.value;
+                    const disabled = option.value !== 'touch' && !accelerometerSupported;
+                    return (
+                      <button
+                        key={option.value}
+                        onClick={() => !disabled && onSchemeChange(option.value)}
+                        disabled={disabled}
+                        className="relative flex items-center gap-2 rounded-full px-3 py-2 retro text-[11px] transition-all"
+                        style={{
+                          color: active ? '#0df' : '#7f8ea3',
+                          background: active
+                            ? `linear-gradient(135deg, ${NEON.cyan}20, ${NEON.magenta}15)`
+                            : 'rgba(255,255,255,0.03)',
+                          boxShadow: active
+                            ? `0 0 18px ${NEON.cyan}40, inset 0 0 0 1px ${NEON.cyan}40`
+                            : 'inset 0 0 0 1px rgba(255,255,255,0.05)',
+                          opacity: disabled ? 0.5 : 1,
+                        }}
+                      >
+                        <span
+                          className="relative inline-flex items-center justify-center w-7 h-7 rounded-full"
+                          style={{
+                            background: active
+                              ? `linear-gradient(135deg, ${NEON.cyan}50, ${NEON.magenta}30)`
+                              : '#0c0c14',
+                            boxShadow: active ? `0 0 10px ${NEON.cyan}60` : 'none',
+                          }}
+                        >
+                          <span
+                            className="absolute inset-[6px] rounded-full"
+                            style={{
+                              background:
+                                option.value === 'touch'
+                                  ? `radial-gradient(circle, ${NEON.red}80 0%, ${NEON.red}30 70%, transparent 100%)`
+                                  : option.value === 'accelerometer'
+                                    ? `linear-gradient(135deg, ${NEON.cyan}70 0%, ${NEON.yellow}40 100%)`
+                                    : `linear-gradient(135deg, ${NEON.cyan}70 0%, ${NEON.magenta}60 50%, ${NEON.yellow}50 100%)`,
+                              boxShadow: '0 0 12px rgba(0,0,0,0.4)',
+                            }}
+                          />
+                          <span
+                            className="absolute w-2 h-6 rounded-full opacity-70"
+                            style={{
+                              background: '#ffffff20',
+                              transform: 'rotate(-20deg)',
+                            }}
+                          />
+                        </span>
+                        <span className="tracking-[0.1em]">{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p
+                  className="text-[9px] retro tracking-widest text-center leading-tight"
+                  style={{ color: '#7f8ea3' }}
+                >
+                  Touch in the lower 60% overrides tilt when active.
+                </p>
+              </div>
+            )}
 
             {/* Blinking prompt */}
             <p

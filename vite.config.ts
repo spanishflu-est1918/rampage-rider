@@ -6,6 +6,9 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const fluApiUrl = env.VITE_FLU_API_URL || 'https://flu-services.vercel.app';
+    const fluApiKey = env.VITE_FLU_API_KEY || '';
+
     return {
       server: {
         port: 8080,
@@ -13,6 +16,18 @@ export default defineConfig(({ mode }) => {
         https: {
           key: fs.readFileSync('./localhost+3-key.pem'),
           cert: fs.readFileSync('./localhost+3.pem'),
+        },
+        proxy: {
+          '/api/flu': {
+            target: fluApiUrl,
+            changeOrigin: true,
+            rewrite: (p) => p.replace(/^\/api\/flu/, '/api'),
+            configure: (proxy) => {
+              proxy.on('proxyReq', (proxyReq) => {
+                proxyReq.setHeader('Authorization', `Bearer ${fluApiKey}`);
+              });
+            },
+          },
         },
       },
       plugins: [react(), tailwindcss()],
