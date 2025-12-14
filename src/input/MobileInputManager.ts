@@ -287,9 +287,13 @@ export class MobileInputManager {
         this.mobileState.touchCurrentY = touch.clientY;
       }
 
-      // Any touch in non-movement zone (top 40%) triggers action immediately
+      // Trigger action for:
+      // 1. Any touch in non-movement zone (top 40%)
+      // 2. Any second touch while already moving (multi-touch attack)
+      // 3. Any touch in accelerometer mode
       // This enables taser escape mashing - action stays true while finger is down
-      if (!isInMovementZone || this.scheme === 'accelerometer') {
+      const isSecondTouchWhileMoving = this.movementTouch && !touchData.isMovementTouch;
+      if (!isInMovementZone || this.scheme === 'accelerometer' || isSecondTouchWhileMoving) {
         touchData.isActionTouch = true;
         this.inputState.action = true;
       }
