@@ -1,6 +1,6 @@
-# Rampage Rider
+# Christmas Market Mayhem
 
-Isometric top-down endless runner. Three.js + React + Rapier physics. Players start on foot, unlock vehicles (bike → moto → sedan) via kill milestones.
+Isometric top-down endless runner set in a German Christmas market. Three.js + React + Rapier physics. Players start on foot, unlock vehicles (bike → moto → sedan) via kill milestones.
 
 ## Critical Rules
 

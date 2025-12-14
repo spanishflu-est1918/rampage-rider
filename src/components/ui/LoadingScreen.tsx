@@ -207,7 +207,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
             }}
           >
             <h1
-              className="text-4xl md:text-5xl font-bold retro leading-tight"
+              className="text-3xl md:text-4xl font-bold retro leading-tight"
               style={{
                 color: NEON.red,
                 textShadow: `
@@ -218,7 +218,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
                 `,
               }}
             >
-              HOLIDAY
+              CHRISTMAS
             </h1>
           </div>
           <div
@@ -229,7 +229,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
             }}
           >
             <h1
-              className="text-4xl md:text-5xl font-bold retro leading-tight -mt-1"
+              className="text-3xl md:text-4xl font-bold retro leading-tight -mt-1"
               style={{
                 color: NEON.yellow,
                 textShadow: `
@@ -240,7 +240,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
                 `,
               }}
             >
-              MAYHEM
+              MARKET MAYHEM
             </h1>
           </div>
         </div>

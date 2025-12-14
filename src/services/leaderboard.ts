@@ -5,7 +5,7 @@
  */
 
 const API_BASE = '/api/flu';
-const GAME_SLUG = 'rampage-rider';
+const GAME_SLUG = 'christmas-market-mayhem';
 
 export interface LeaderboardEntry {
   rank: number;

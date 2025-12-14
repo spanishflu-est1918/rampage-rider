@@ -53,7 +53,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50">
       <div className="text-center p-10 scale-75 origin-center">
         <h1 className="text-7xl font-bold mb-5 text-destructive retro">
-          HOLIDAY MAYHEM
+          CHRISTMAS MARKET MAYHEM
         </h1>
 
         <p className="text-lg mb-10 text-muted-foreground retro transition-opacity duration-500">
