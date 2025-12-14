@@ -25,7 +25,7 @@ interface EngineControls {
 function App() {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [loadingState, setLoadingState] = useState<LoadingState>(() => preloader.getState());
-  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(() => !isMobileDevice());
   const [irisActive, setIrisActive] = useState(false);
   const [irisReady, setIrisReady] = useState(false);
   const [loadingFadeOut, setLoadingFadeOut] = useState(false);
