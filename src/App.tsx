@@ -13,7 +13,7 @@ import { VehicleType } from './constants';
 import ErrorBoundary from './components/ErrorBoundary';
 import { preloader, LoadingState } from './core/Preloader';
 import { gameAudio } from './audio';
-import { mobileInput } from './input/MobileInputManager';
+import { mobileInput, MobileControlScheme } from './input/MobileInputManager';
 import { isMobileDevice } from './utils/device';
 
 interface EngineControls {
@@ -28,6 +28,9 @@ function App() {
   const [irisActive, setIrisActive] = useState(false);
   const [irisReady, setIrisReady] = useState(false);
   const [loadingFadeOut, setLoadingFadeOut] = useState(false);
+  const [mobileScheme, setMobileScheme] = useState<MobileControlScheme>('hybrid');
+  const [isMobile] = useState(() => isMobileDevice());
+  const [accelerometerSupported] = useState(() => mobileInput.isAccelerometerSupported());
 
   // Start loading AFTER user interaction (required for audio)
   useEffect(() => {
@@ -118,6 +121,33 @@ function App() {
     gameAudio.resume().catch(() => {});
   };
 
+  // Apply selected mobile control scheme (default hybrid with touch priority)
+  useEffect(() => {
+    if (!hasUserInteracted) return;
+    if (!isMobile) return;
+
+    const applyScheme = async () => {
+      if ((mobileScheme === 'accelerometer' || mobileScheme === 'hybrid') && !accelerometerSupported) {
+        setMobileScheme('touch');
+        mobileInput.setScheme('touch');
+        return;
+      }
+
+      if (mobileScheme === 'accelerometer' || mobileScheme === 'hybrid') {
+        const granted = await mobileInput.requestAccelerometerPermission();
+        if (!granted) {
+          setMobileScheme('touch');
+          mobileInput.setScheme('touch');
+          return;
+        }
+      }
+
+      mobileInput.setScheme(mobileScheme);
+    };
+
+    applyScheme();
+  }, [accelerometerSupported, hasUserInteracted, isMobile, mobileScheme]);
+
   const togglePause = useCallback(() => {
     if (gameState === GameState.PLAYING) {
       setGameState(GameState.PAUSED);
@@ -168,7 +198,11 @@ function App() {
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black cursor-pointer group"
           onClick={async () => {
             // Request accelerometer permission on first tap (iOS requires user gesture)
-            if (isMobileDevice() && mobileInput.isAccelerometerSupported()) {
+            if (
+              isMobile &&
+              accelerometerSupported &&
+              (mobileScheme === 'accelerometer' || mobileScheme === 'hybrid')
+            ) {
               await mobileInput.requestAccelerometerPermission();
             }
             setHasUserInteracted(true);
@@ -235,7 +269,14 @@ function App() {
         <div
           className={`transition-opacity duration-1000 ${loadingFadeOut ? 'opacity-0' : 'opacity-100'}`}
         >
-          <LoadingScreen state={loadingState} onStart={startGame} />
+          <LoadingScreen
+            state={loadingState}
+            onStart={startGame}
+            mobileScheme={mobileScheme}
+            onSchemeChange={setMobileScheme}
+            isMobile={isMobile}
+            accelerometerSupported={accelerometerSupported}
+          />
         </div>
       )}
 
@@ -272,7 +313,7 @@ function App() {
       )}
 
       {/* Mobile Controls - visual feedback + control scheme toggle */}
-      <MobileControls enabled={gameState === GameState.PLAYING} />
+      <MobileControls enabled={gameState === GameState.PLAYING} scheme={mobileScheme} />
 
       {/* Iris wipe reveal transition */}
       <IrisWipeReveal

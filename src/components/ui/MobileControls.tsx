@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { MobileInputState, mobileInput } from '../../input/MobileInputManager';
+import { MobileControlScheme, MobileInputState, mobileInput } from '../../input/MobileInputManager';
 import { isMobileDevice } from '../../utils/device';
 
 interface MobileControlsProps {
   enabled: boolean;
+  scheme: MobileControlScheme;
 }
 
 // Neon colors matching the game
@@ -29,54 +30,36 @@ interface TapRipple {
  * - Touch joystick indicator when swiping (touch-only mode)
  * - Tilt indicator when using accelerometer
  */
-export const MobileControls: React.FC<MobileControlsProps> = ({ enabled }) => {
+export const MobileControls: React.FC<MobileControlsProps> = ({ enabled, scheme }) => {
   const [mobileState, setMobileState] = useState<MobileInputState | null>(null);
   const [tapRipples, setTapRipples] = useState<TapRipple[]>([]);
   const [useAccelerometer, setUseAccelerometer] = useState(false);
   const rippleIdRef = React.useRef(0);
 
-  // Initialize mobile controls
+  // Track accelerometer usage from selected scheme
   useEffect(() => {
-    if (!enabled) {
-      mobileInput.setScheme('none');
+    setUseAccelerometer(scheme === 'accelerometer' || scheme === 'hybrid');
+  }, [scheme]);
+
+  // Subscribe to mobile state updates
+  useEffect(() => {
+    if (!enabled || !isMobileDevice()) {
+      setMobileState(null);
+      mobileInput.onStateChange(() => {});
+      mobileInput.onAction(() => {});
       return;
     }
 
-    if (!isMobileDevice()) {
-      return;
-    }
-
-    // Try hybrid mode (accelerometer + tap) first, fall back to touch
-    const initControls = async () => {
-      if (mobileInput.isAccelerometerSupported()) {
-        const granted = await mobileInput.requestAccelerometerPermission();
-        if (granted) {
-          mobileInput.setScheme('hybrid');
-          setUseAccelerometer(true);
-        } else {
-          mobileInput.setScheme('touch');
-          setUseAccelerometer(false);
-        }
-      } else {
-        mobileInput.setScheme('touch');
-        setUseAccelerometer(false);
-      }
-    };
-
-    initControls();
-
-    // Listen for state changes
     mobileInput.onStateChange((state) => {
       setMobileState(state);
     });
 
-    // Listen for taps to show ripple
-    mobileInput.onAction(() => {
-      // We'll handle ripples via touch events directly
-    });
+    // Listen for taps to show ripple (handled via touch events)
+    mobileInput.onAction(() => {});
 
     return () => {
-      mobileInput.cleanup();
+      mobileInput.onStateChange(() => {});
+      setMobileState(null);
     };
   }, [enabled]);
 

@@ -315,7 +315,7 @@ export class MobileInputManager {
         touchData.currentY = touch.clientY;
 
         // Update movement if this is the movement touch
-        if (this.scheme === 'touch' && touchData === this.movementTouch) {
+        if ((this.scheme === 'touch' || this.scheme === 'hybrid') && touchData === this.movementTouch) {
           this.mobileState.touchCurrentX = touch.clientX;
           this.mobileState.touchCurrentY = touch.clientY;
           this.updateTouchMovement();
