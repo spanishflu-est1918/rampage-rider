@@ -136,7 +136,7 @@ export const GameOver: React.FC<GameOverProps> = ({ stats, onRestart }) => {
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/90 z-50">
-      <Card className="w-[90vw] max-w-[520px] bg-neutral-900 border-4 border-white scale-[0.85] md:scale-100 origin-center">
+      <Card className="w-[92vw] max-w-[520px] bg-neutral-900 border-4 border-white">
         <CardHeader className="text-center pb-2">
           <CardTitle className="text-5xl md:text-6xl text-destructive retro">
             BUSTED!
@@ -170,20 +170,20 @@ export const GameOver: React.FC<GameOverProps> = ({ stats, onRestart }) => {
               <Button
                 onClick={handleShowInput}
                 size="lg"
-                className="w-full text-lg"
+                className="w-full text-sm md:text-lg py-4"
                 style={{
                   background: NEON.cyan,
                   color: '#000',
                   boxShadow: `0 0 20px ${NEON.cyan}60`,
                 }}
               >
-                SUBMIT TO LEADERBOARD
+                SUBMIT SCORE
               </Button>
               <Button
                 onClick={handleSkipToLeaderboard}
                 variant="outline"
                 size="lg"
-                className="w-full"
+                className="w-full text-sm md:text-base"
               >
                 VIEW LEADERBOARD
               </Button>
@@ -245,7 +245,7 @@ export const GameOver: React.FC<GameOverProps> = ({ stats, onRestart }) => {
                 <Button
                   onClick={onRestart}
                   size="lg"
-                  className="w-full"
+                  className="w-full text-sm md:text-lg py-4"
                   style={{
                     background: NEON.red,
                     color: '#fff',

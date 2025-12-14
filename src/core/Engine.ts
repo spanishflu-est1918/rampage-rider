@@ -36,6 +36,7 @@ import { GameState, Tier, InputState, GameStats, KillNotification } from '../typ
 import { ActionController, ActionType } from './ActionController';
 import { CircularBuffer } from '../utils/CircularBuffer';
 import { loadSettings } from '../utils/settings';
+import { isMobileDevice } from '../utils/device';
 import { RAMPAGE_DIMENSION } from '../constants';
 import { gameAudio } from '../audio';
 import {
@@ -206,6 +207,7 @@ export class Engine {
 
   // Cached settings (avoid localStorage reads per frame)
   private _bloodlessMode: boolean = false;
+  private readonly _isMobile: boolean = isMobileDevice();
 
   /** Update bloodless mode setting (call when settings change) */
   setBloodlessMode(value: boolean): void {
@@ -1310,7 +1312,7 @@ export class Engine {
     this.vehicleRespawnCooldown = Engine.VEHICLE_RESPAWN_COOLDOWN_TIME;
 
     this.shakeCamera(2.0);
-    if (!this._bloodlessMode) {
+    if (!this._bloodlessMode && !this._isMobile) {
       this.particles.emitBlood(vehiclePos, 100);
     }
   }
@@ -1435,7 +1437,7 @@ export class Engine {
         this.bikeCops.applyKnockbackInRadius(position, radius, force);
         this.bikeCops.clearTaserBeams();
       }
-      if (this.particles && !this._bloodlessMode) {
+      if (this.particles && !this._bloodlessMode && !this._isMobile) {
         this.particles.emitBlood(position, 50);
       }
     });
@@ -1481,8 +1483,8 @@ export class Engine {
     particleCount: number = 30,
     sprayCount: number = 20
   ): void {
-    // Skip blood effects in bloodless mode
-    if (this._bloodlessMode) return;
+    // Skip blood effects in bloodless mode or on mobile (performance)
+    if (this._bloodlessMode || this._isMobile) return;
 
     for (const killPos of killPositions) {
       this._tempAttackDir.subVectors(killPos, sourcePosition).normalize();
@@ -2306,7 +2308,7 @@ export class Engine {
       this.truckBlastKillCounter++;
     }
 
-    if (!this._bloodlessMode) {
+    if (!this._bloodlessMode && !this._isMobile) {
       this.particles.emitBlood(position, cfg.particleCount);
     }
     if (this.crowd) {
@@ -2890,7 +2892,7 @@ export class Engine {
             // Increment truck blast counter
             this.truckBlastKillCounter += trampleResult.kills;
             for (const pos of trampleResult.positions) {
-              if (!this._bloodlessMode) {
+              if (!this._bloodlessMode && !this._isMobile) {
                 this.particles.emitBlood(pos, 80);
               }
               this.triggerKillNotification('COP CAR CRUSHED!', true, Math.floor(500 * comboMultiplier));
@@ -2930,7 +2932,7 @@ export class Engine {
                 // Increment sedan blast counter
                 this.sedanBlastKillCounter += chipResult.kills;
                 for (const pos of chipResult.positions) {
-                  if (!this._bloodlessMode) {
+                  if (!this._bloodlessMode && !this._isMobile) {
                     this.particles.emitBlood(pos, 60);
                   }
                   this.triggerKillNotification('COP CAR WRECKED!', true, Math.floor(300 * comboMultiplier));

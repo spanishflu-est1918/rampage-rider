@@ -5,8 +5,8 @@ export const IS_MOBILE = typeof navigator !== 'undefined' && /Android|webOS|iPho
 
 // Mobile performance configuration
 export const MOBILE_CONFIG = {
-  MAX_PEDESTRIANS: 30, // Reduced from 60
-  SURGE_MAX_PEDESTRIANS: 50, // Reduced from 100
+  MAX_PEDESTRIANS: 20, // Reduced from 60 (was 30)
+  SURGE_MAX_PEDESTRIANS: 30, // Reduced from 100 (was 50)
   MAX_COPS: 2, // Reduced from 3
   ANCESTOR_COUNT: 24, // Reduced from 120
   PARTICLE_MULTIPLIER: 0.5, // Half particles
