@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Christmas Market Mayhem</title>
     <!-- Preload Google Font to avoid FOUT -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,6 +16,16 @@
       }
       html.fonts-loaded body {
         visibility: visible;
+      }
+      /* Prevent iOS rubber-band scrolling and touch zoom */
+      html, body {
+        position: fixed;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        overscroll-behavior: none;
+        -webkit-overflow-scrolling: auto;
       }
     </style>
     <script>

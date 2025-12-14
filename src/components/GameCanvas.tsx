@@ -257,9 +257,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         cancelAnimationFrame(mobileInputFrame);
       }
 
-      if (isMobile) {
-        mobileInput.cleanup();
-      }
+      // Note: Do NOT cleanup mobileInput here - it's managed by App.tsx's scheme effect
+      // Cleaning up here would remove touch event listeners when the effect re-runs
     };
   }, [engineReady, onPauseToggle]);
 

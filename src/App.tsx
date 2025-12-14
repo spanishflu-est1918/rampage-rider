@@ -178,7 +178,7 @@ function App() {
   }, []);
 
   return (
-    <div className="relative w-full h-[100dvh] min-h-[100dvh] overflow-hidden bg-neutral-900 select-none">
+    <div className="relative w-full h-[100dvh] min-h-[100dvh] overflow-hidden bg-neutral-900 select-none touch-none">
 
       {/* 3D Game Layer */}
       <ErrorBoundary>
