@@ -1,17 +1,17 @@
 {
-  "timestamp": "2025-12-07T15:39:35.857Z",
+  "timestamp": "2025-12-14T09:32:13.465Z",
   "config": {
     "outputFormat": "mp3_44100_128",
     "promptInfluence": 0.3,
     "parallelRequests": 1
   },
-  "elapsed": "4.5s",
+  "elapsed": "4.3s",
   "results": {
     "success": [
       {
-        "id": "allahu_akbar",
-        "path": "/Users/gorkolas/Documents/www/rampage/public/audio/sfx/player/allahu_akbar.mp3",
-        "size": 33062
+        "id": "club_hit_3",
+        "path": "/Users/gorkolas/Documents/www/rampage/public/audio/sfx/attacks/club_hit_3.mp3",
+        "size": 8821
       }
     ],
     "failed": []

@@ -15,6 +15,7 @@
 import { audioManager } from "./AudioManager";
 import { SoundId, SOUND_PATHS, MESSAGE_TO_VOICE } from "./sounds";
 import { Tier } from "../types";
+import { loadSettings } from "../utils/settings";
 
 // Random sound pools for variety
 const KILL_SOUNDS = [
@@ -34,6 +35,13 @@ const KNIFE_STAB_SOUNDS = [
   SoundId.KNIFE_STAB_6,
   SoundId.KNIFE_STAB_7,
   SoundId.KNIFE_STAB_8,
+];
+
+// Club hit pool (3 variations for bloodless mode)
+const CLUB_HIT_SOUNDS = [
+  SoundId.CLUB_HIT_1,
+  SoundId.CLUB_HIT_2,
+  SoundId.CLUB_HIT_3,
 ];
 
 // Scream pool (20 variations for pedestrians and cops)
@@ -187,14 +195,19 @@ export const gameAudio = {
   // ============================================
 
   playKnifeAttack(): void {
+    // Swing sound - skip in bloodless mode (club impact plays on hit instead)
+    if (loadSettings().bloodlessMode) return;
     audioManager.play(SoundId.KNIFE_WHOOSH, { pitch: variedPitch(1.0, 0.15) });
   },
 
   // Universal stab sound - used for all melee attacks (walking, bike, motorbike)
   // During rampage: 50% volume + heavy reverb for distant/ethereal effect
+  // In bloodless mode: plays club hit sound instead of stab
   playStab(combo = 0): void {
     const baseVolume = comboVolume(0.7, combo);
-    audioManager.play(randomFrom(KNIFE_STAB_SOUNDS), {
+    const isBloodless = loadSettings().bloodlessMode;
+    const soundPool = isBloodless ? CLUB_HIT_SOUNDS : KNIFE_STAB_SOUNDS;
+    audioManager.play(randomFrom(soundPool), {
       volume: this._inRampage ? baseVolume * 0.5 : baseVolume,
       pitch: variedPitch(1.0, 0.1),
       useReverb: this._inRampage,
@@ -231,7 +244,16 @@ export const gameAudio = {
     type: "pedestrian" | "cop" | "copCar" | "bikeCop" | "motorbikeCop",
     combo = 0,
   ): void {
+    const isBloodless = loadSettings().bloodlessMode;
     const isCop = type !== "pedestrian";
+
+    // In bloodless mode for pedestrians: play club hit instead of gore sounds
+    // (scream is already triggered by Pedestrian.ts)
+    if (isBloodless && !isCop) {
+      this.playStab(combo); // playStab already switches to club sounds in bloodless mode
+      return;
+    }
+
     const sounds = isCop ? COP_KILL_SOUNDS : KILL_SOUNDS;
     const id = randomFrom(sounds);
 
@@ -248,11 +270,13 @@ export const gameAudio = {
       useReverb: this._inRampage,
     });
 
-    // Blood splatter
-    audioManager.play(SoundId.BLOOD_SPLATTER, {
-      volume: 0.4,
-      pitch: variedPitch(1.0, 0.2),
-    });
+    // Blood splatter (skip in bloodless mode)
+    if (!isBloodless) {
+      audioManager.play(SoundId.BLOOD_SPLATTER, {
+        volume: 0.4,
+        pitch: variedPitch(1.0, 0.2),
+      });
+    }
   },
 
   playRoadkill(combo = 0): void {

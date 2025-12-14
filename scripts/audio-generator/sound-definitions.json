@@ -129,6 +129,30 @@
       "category": "attacks"
     },
     {
+      "id": "club_hit_1",
+      "path": "sfx/attacks/club_hit_1.mp3",
+      "prompt": "Heavy wooden bat hitting body, brutal blunt force impact, meaty thwack, no blood just impact, video game violence",
+      "duration": 0.5,
+      "loop": false,
+      "category": "attacks"
+    },
+    {
+      "id": "club_hit_2",
+      "path": "sfx/attacks/club_hit_2.mp3",
+      "prompt": "Baseball bat swing connecting with torso, solid blunt impact, dull thud with crack, cartoon violence style",
+      "duration": 0.5,
+      "loop": false,
+      "category": "attacks"
+    },
+    {
+      "id": "club_hit_3",
+      "path": "sfx/attacks/club_hit_3.mp3",
+      "prompt": "Heavy club bonking someone on head, comedic but impactful thwack, cartoon bop sound, satisfying blunt hit",
+      "duration": 0.5,
+      "loop": false,
+      "category": "attacks"
+    },
+    {
       "id": "punch_whoosh",
       "path": "sfx/attacks/punch_whoosh.mp3",
       "prompt": "Fast fist swing through air, powerful punch whoosh, aggressive arm movement, arcade fighting game style",

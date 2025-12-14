@@ -18,6 +18,8 @@ interface OverlayProps {
   mobileScheme: MobileControlScheme;
   onSchemeChange: (scheme: MobileControlScheme) => void;
   accelerometerSupported: boolean;
+  bloodlessMode: boolean;
+  onBloodlessModeChange: (enabled: boolean) => void;
 }
 
 // Pixel block bar component
@@ -60,7 +62,7 @@ const MiniPixelBar = ({ value, max, color, blocks = 6 }: { value: number; max: n
   );
 };
 
-const Overlay: React.FC<OverlayProps> = ({ stats, mobileScheme, onSchemeChange, accelerometerSupported }) => {
+const Overlay: React.FC<OverlayProps> = ({ stats, mobileScheme, onSchemeChange, accelerometerSupported, bloodlessMode, onBloodlessModeChange }) => {
   const [uiHidden, setUiHidden] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -170,6 +172,8 @@ const Overlay: React.FC<OverlayProps> = ({ stats, mobileScheme, onSchemeChange, 
                       mobileScheme={mobileScheme}
                       onSchemeChange={onSchemeChange}
                       accelerometerSupported={accelerometerSupported}
+                      bloodlessMode={bloodlessMode}
+                      onBloodlessModeChange={onBloodlessModeChange}
                     />
                     {/* Screenshot */}
                     <button
@@ -267,6 +271,8 @@ const Overlay: React.FC<OverlayProps> = ({ stats, mobileScheme, onSchemeChange, 
                       mobileScheme={mobileScheme}
                       onSchemeChange={onSchemeChange}
                       accelerometerSupported={accelerometerSupported}
+                      bloodlessMode={bloodlessMode}
+                      onBloodlessModeChange={onBloodlessModeChange}
                     />
 
                     {/* SNAP */}

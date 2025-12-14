@@ -35,6 +35,7 @@ import { AncestorCouncil } from '../rendering/AncestorCouncil';
 import { GameState, Tier, InputState, GameStats, KillNotification } from '../types';
 import { ActionController, ActionType } from './ActionController';
 import { CircularBuffer } from '../utils/CircularBuffer';
+import { loadSettings } from '../utils/settings';
 import { RAMPAGE_DIMENSION } from '../constants';
 import { gameAudio } from '../audio';
 import {
@@ -1298,7 +1299,9 @@ export class Engine {
     this.vehicleRespawnCooldown = Engine.VEHICLE_RESPAWN_COOLDOWN_TIME;
 
     this.shakeCamera(2.0);
-    this.particles.emitBlood(vehiclePos, 100);
+    if (!loadSettings().bloodlessMode) {
+      this.particles.emitBlood(vehiclePos, 100);
+    }
   }
 
   /**
@@ -1421,7 +1424,7 @@ export class Engine {
         this.bikeCops.applyKnockbackInRadius(position, radius, force);
         this.bikeCops.clearTaserBeams();
       }
-      if (this.particles) {
+      if (this.particles && !loadSettings().bloodlessMode) {
         this.particles.emitBlood(position, 50);
       }
     });
@@ -1459,6 +1462,7 @@ export class Engine {
 
   /**
    * Emit blood effects at kill positions - consolidated from multiple attack handlers
+   * In bloodless mode, no blood effects are shown
    */
   private emitBloodEffects(
     killPositions: THREE.Vector3[],
@@ -1466,6 +1470,9 @@ export class Engine {
     particleCount: number = 30,
     sprayCount: number = 20
   ): void {
+    // Skip blood effects in bloodless mode
+    if (loadSettings().bloodlessMode) return;
+
     for (const killPos of killPositions) {
       this._tempAttackDir.subVectors(killPos, sourcePosition).normalize();
       this.particles.emitBlood(killPos, particleCount);
@@ -1493,6 +1500,7 @@ export class Engine {
     // --- Pedestrian damage ---
     const pedDamageStart = performance.now();
     let _pedKills = 0;
+    const bloodlessKnockback = loadSettings().bloodlessMode ? 25 : 0;
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -1500,7 +1508,8 @@ export class Engine {
         damage,
         maxKills,
         attackDirection,
-        coneAngle
+        coneAngle,
+        bloodlessKnockback
       );
       _pedKills = pedResult.kills;
 
@@ -1671,6 +1680,7 @@ export class Engine {
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
 
+    const bloodlessKnockback = loadSettings().bloodlessMode ? 30 : 0;
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
         attackPosition,
@@ -1678,7 +1688,8 @@ export class Engine {
         damage,
         maxKills,
         this._tempVehicleDir,
-        coneAngle
+        coneAngle,
+        bloodlessKnockback
       );
 
       if (pedResult.kills > 0) {
@@ -1819,6 +1830,7 @@ export class Engine {
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
+    const bloodlessKnockback = loadSettings().bloodlessMode ? 32 : 0;
 
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
@@ -1827,7 +1839,8 @@ export class Engine {
         damage,
         maxKills,
         this._tempVehicleDir,
-        coneAngle
+        coneAngle,
+        bloodlessKnockback
       );
 
       if (pedResult.kills > 0) {
@@ -2140,6 +2153,7 @@ export class Engine {
 
     let totalKills = 0;
     const allKillPositions: THREE.Vector3[] = [];
+    const bloodlessKnockback = loadSettings().bloodlessMode ? 35 : 0;
 
     if (this.crowd) {
       const pedResult = this.crowd.damageInRadius(
@@ -2148,7 +2162,8 @@ export class Engine {
         damage,
         maxKills,
         this._tempVehicleDir,
-        coneAngle
+        coneAngle,
+        bloodlessKnockback
       );
 
       if (pedResult.kills > 0) {
@@ -2280,7 +2295,9 @@ export class Engine {
       this.truckBlastKillCounter++;
     }
 
-    this.particles.emitBlood(position, cfg.particleCount);
+    if (!loadSettings().bloodlessMode) {
+      this.particles.emitBlood(position, cfg.particleCount);
+    }
     if (this.crowd) {
       this.crowd.panicCrowd(position, cfg.panicRadius);
       this.crowd.panicTablePedestrians(position);
@@ -2862,7 +2879,9 @@ export class Engine {
             // Increment truck blast counter
             this.truckBlastKillCounter += trampleResult.kills;
             for (const pos of trampleResult.positions) {
-              this.particles.emitBlood(pos, 80);
+              if (!loadSettings().bloodlessMode) {
+                this.particles.emitBlood(pos, 80);
+              }
               this.triggerKillNotification('COP CAR CRUSHED!', true, Math.floor(500 * comboMultiplier));
             }
           }
@@ -2900,7 +2919,9 @@ export class Engine {
                 // Increment sedan blast counter
                 this.sedanBlastKillCounter += chipResult.kills;
                 for (const pos of chipResult.positions) {
-                  this.particles.emitBlood(pos, 60);
+                  if (!loadSettings().bloodlessMode) {
+                    this.particles.emitBlood(pos, 60);
+                  }
                   this.triggerKillNotification('COP CAR WRECKED!', true, Math.floor(300 * comboMultiplier));
                 }
               } else {

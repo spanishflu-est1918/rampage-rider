@@ -271,7 +271,8 @@ export class CrowdManager {
     damage: number,
     maxKills: number = Infinity,
     direction?: THREE.Vector3,
-    coneAngle: number = Math.PI / 3
+    coneAngle: number = Math.PI / 3,
+    knockbackForce: number = 0 // If > 0, apply knockback before damage (for bloodless mode)
   ): {
     kills: number;
     panicKills: number;
@@ -316,6 +317,7 @@ export class CrowdManager {
           // Check if panicking BEFORE damage (they might die)
           const wasPanicking = pedestrian.isPanickingState();
 
+          // Kill them
           pedestrian.takeDamage(damage);
 
           if (pedestrian.isDeadState()) {
@@ -328,6 +330,11 @@ export class CrowdManager {
             }
             if (wasPanicking) {
               panicKillCount++;
+            }
+
+            // Apply death knockback (for bloodless mode - launches dead body)
+            if (knockbackForce > 0 && normalizedDirection) {
+              pedestrian.applyDeathKnockback(normalizedDirection, knockbackForce);
             }
           }
         }

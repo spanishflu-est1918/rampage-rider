@@ -380,6 +380,12 @@ export class AudioManager {
 
     const instanceId = options.instanceId ?? `${id}_${Date.now()}_${Math.random()}`;
 
+    // If a sound with this instanceId is already playing, stop it first
+    // This prevents orphaned audio sources when the same instanceId is reused
+    if (options.instanceId && this.playingSounds.has(instanceId)) {
+      this.stop(instanceId, 0);
+    }
+
     const playing: PlayingSound = {
       id: instanceId,
       source,

@@ -47,6 +47,10 @@ export enum SoundId {
   KNIFE_STAB_6 = 'knife_stab_6',
   KNIFE_STAB_7 = 'knife_stab_7',
   KNIFE_STAB_8 = 'knife_stab_8',
+  // Club hit sounds (for bloodless mode)
+  CLUB_HIT_1 = 'club_hit_1',
+  CLUB_HIT_2 = 'club_hit_2',
+  CLUB_HIT_3 = 'club_hit_3',
   PUNCH_WHOOSH = 'punch_whoosh',
   PUNCH_HIT = 'punch_hit',
 
@@ -336,6 +340,10 @@ export const SOUND_CONFIG: Record<SoundId, SoundConfig> = {
   [SoundId.KNIFE_STAB_6]: { volume: 0.75, pitch: 1.0, pitchVariation: 0.1, pooled: true, category: 'sfx' },
   [SoundId.KNIFE_STAB_7]: { volume: 0.75, pitch: 1.0, pitchVariation: 0.1, pooled: true, category: 'sfx' },
   [SoundId.KNIFE_STAB_8]: { volume: 0.75, pitch: 1.0, pitchVariation: 0.1, pooled: true, category: 'sfx' },
+  // Club hit sounds (bloodless mode)
+  [SoundId.CLUB_HIT_1]: { volume: 0.8, pitch: 1.0, pitchVariation: 0.15, pooled: true, category: 'sfx' },
+  [SoundId.CLUB_HIT_2]: { volume: 0.8, pitch: 1.0, pitchVariation: 0.15, pooled: true, category: 'sfx' },
+  [SoundId.CLUB_HIT_3]: { volume: 0.8, pitch: 1.0, pitchVariation: 0.15, pooled: true, category: 'sfx' },
   [SoundId.PUNCH_WHOOSH]: {
     volume: 0.4,
     pitch: 1.0,
@@ -1188,6 +1196,10 @@ export const SOUND_PATHS: Partial<Record<SoundId, string>> = {
   [SoundId.KNIFE_STAB_6]: '/audio/sfx/attacks/knife_stab_6.mp3',
   [SoundId.KNIFE_STAB_7]: '/audio/sfx/attacks/knife_stab_7.mp3',
   [SoundId.KNIFE_STAB_8]: '/audio/sfx/attacks/knife_stab_8.mp3',
+  // Club hit sounds (bloodless mode)
+  [SoundId.CLUB_HIT_1]: '/audio/sfx/attacks/club_hit_1.mp3',
+  [SoundId.CLUB_HIT_2]: '/audio/sfx/attacks/club_hit_2.mp3',
+  [SoundId.CLUB_HIT_3]: '/audio/sfx/attacks/club_hit_3.mp3',
   [SoundId.PUNCH_WHOOSH]: '/audio/sfx/attacks/punch_whoosh.mp3',
   [SoundId.PUNCH_HIT]: '/audio/sfx/attacks/punch_hit.mp3',
 

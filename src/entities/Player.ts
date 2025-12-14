@@ -166,6 +166,9 @@ export class Player extends THREE.Group {
       // Disable real shadow casting (we use blob shadows instead)
       AnimationHelper.setupShadows(cachedGltf.scene, false, false);
 
+      // Recolor the dagger handle to black
+      this.recolorDaggerHandle(cachedGltf.scene);
+
       // Add to model container
       this.modelContainer.add(cachedGltf.scene);
 
@@ -197,6 +200,22 @@ export class Player extends THREE.Group {
     this.modelLoaded = true;
   }
 
+  /**
+   * Find the dagger mesh and set its handle to black
+   */
+  private recolorDaggerHandle(scene: THREE.Object3D): void {
+    scene.traverse((child) => {
+      if (child.name === 'dagger' && child instanceof THREE.Mesh) {
+        // Create a new material for the dagger handle (black/dark brown)
+        const handleMaterial = new THREE.MeshStandardMaterial({
+          color: 0x1a1a1a, // Very dark gray/black
+          roughness: 0.7,
+          metalness: 0.1,
+        });
+        child.material = handleMaterial;
+      }
+    });
+  }
 
   /**
    * Play animation by name (matching Sketchbook setAnimation - line 499)

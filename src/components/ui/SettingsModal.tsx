@@ -10,6 +10,8 @@ interface SettingsModalProps {
   mobileScheme: MobileControlScheme;
   onSchemeChange: (scheme: MobileControlScheme) => void;
   accelerometerSupported: boolean;
+  bloodlessMode: boolean;
+  onBloodlessModeChange: (enabled: boolean) => void;
 }
 
 const NEON = {
@@ -25,6 +27,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   mobileScheme,
   onSchemeChange,
   accelerometerSupported,
+  bloodlessMode,
+  onBloodlessModeChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [muted, setMuted] = useState(audioManager.getIsMuted());
@@ -173,6 +177,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   style={{ accentColor: NEON.orange }}
                 />
               </div>
+            </div>
+
+            {/* Gameplay Section */}
+            <div className="mb-4 md:mb-6">
+              <h3
+                className="text-[10px] md:text-xs retro tracking-[0.2em] mb-3"
+                style={{ color: NEON.magenta, textShadow: `0 0 8px ${NEON.magenta}40` }}
+              >
+                GAMEPLAY
+              </h3>
+
+              {/* Bloodless Mode Toggle */}
+              <button
+                onClick={() => onBloodlessModeChange(!bloodlessMode)}
+                className="w-full text-[10px] md:text-xs retro py-2 border transition-all hover:brightness-125"
+                style={{
+                  borderColor: bloodlessMode ? NEON.magenta : '#444',
+                  color: bloodlessMode ? NEON.magenta : '#666',
+                  textShadow: bloodlessMode ? `0 0 6px ${NEON.magenta}` : 'none',
+                  background: bloodlessMode ? `${NEON.magenta}10` : 'transparent',
+                }}
+              >
+                BLOODLESS MODE: {bloodlessMode ? 'ON' : 'OFF'}
+              </button>
+              <p className="text-[8px] retro mt-1 text-center" style={{ color: '#555' }}>
+                No blood effects, knockback only
+              </p>
             </div>
 
             {/* Controls Section (Mobile Only) */}

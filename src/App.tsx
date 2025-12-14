@@ -30,6 +30,7 @@ function App() {
   const [irisReady, setIrisReady] = useState(false);
   const [loadingFadeOut, setLoadingFadeOut] = useState(false);
   const [mobileScheme, setMobileScheme] = useState<MobileControlScheme>(() => loadSettings().mobileScheme);
+  const [bloodlessMode, setBloodlessMode] = useState(() => loadSettings().bloodlessMode);
   const [isMobile] = useState(() => isMobileDevice());
   const [accelerometerSupported] = useState(() => mobileInput.isAccelerometerSupported());
 
@@ -48,6 +49,12 @@ function App() {
   const handleSchemeChange = useCallback((scheme: MobileControlScheme) => {
     setMobileScheme(scheme);
     saveSetting('mobileScheme', scheme);
+  }, []);
+
+  // Handler for bloodless mode changes - saves to localStorage
+  const handleBloodlessModeChange = useCallback((enabled: boolean) => {
+    setBloodlessMode(enabled);
+    saveSetting('bloodlessMode', enabled);
   }, []);
 
   // Start loading AFTER user interaction (required for audio)
@@ -308,6 +315,8 @@ function App() {
               mobileScheme={mobileScheme}
               onSchemeChange={handleSchemeChange}
               accelerometerSupported={accelerometerSupported}
+              bloodlessMode={bloodlessMode}
+              onBloodlessModeChange={handleBloodlessModeChange}
             />
           <NotificationSystem
             onRegister={registerNotificationController}

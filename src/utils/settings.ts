@@ -11,6 +11,7 @@ export interface GameSettings {
   sfxVolume: number;
   muted: boolean;
   mobileScheme: MobileControlScheme;
+  bloodlessMode: boolean;
 }
 
 const DEFAULT_SETTINGS: GameSettings = {
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: GameSettings = {
   sfxVolume: 1.0,
   muted: false,
   mobileScheme: 'hybrid',
+  bloodlessMode: false,
 };
 
 export function loadSettings(): GameSettings {

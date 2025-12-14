@@ -59,6 +59,9 @@ export class Pedestrian extends THREE.Group {
   private deadVelocity: THREE.Vector3 = new THREE.Vector3();
   private timeSinceDeath: number = 0; // Track time for raycast limiting
 
+  // Stun knockback velocity (for alive pedestrians - bypasses Yuka steering)
+  private stunVelocity: THREE.Vector3 = new THREE.Vector3();
+
   // Pre-allocated vectors (reused every frame to avoid GC pressure)
   private readonly _tempPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _tempKnockback: THREE.Vector3 = new THREE.Vector3();
@@ -436,7 +439,6 @@ export class Pedestrian extends THREE.Group {
 
     // Dead body ragdoll physics (bounce off car, buildings, and floor)
     if (this.isDead) {
-      // ... (dead body logic remains the same)
       this.timeSinceDeath += deltaTime;
       const speed = this.deadVelocity.length();
       if (speed > 0.5) {
@@ -508,12 +510,49 @@ export class Pedestrian extends THREE.Group {
       return;
     }
 
-    // Update stumble timer
+    // Update stumble timer and apply stun knockback physics
     if (this.isStumbling) {
       this.stumbleTimer -= deltaTime;
+
+      // Apply stun velocity directly to position (bypasses Yuka steering)
+      const stunSpeed = this.stunVelocity.length();
+      if (stunSpeed > 0.1) {
+        const currentPos = (this as THREE.Group).position;
+
+        // Apply stun velocity to position
+        currentPos.x += this.stunVelocity.x * deltaTime;
+        currentPos.z += this.stunVelocity.z * deltaTime;
+
+        // Sync Yuka position to match
+        this.yukaVehicle.position.x = currentPos.x;
+        this.yukaVehicle.position.z = currentPos.z;
+
+        // Sync physics body
+        this.rigidBody.setNextKinematicTranslation({
+          x: currentPos.x,
+          y: currentPos.y + 0.5,
+          z: currentPos.z
+        });
+
+        // Update shadow
+        if (this.shadowIndex >= 0) {
+          this.shadowManager.updateShadow(this.shadowIndex, currentPos.x, currentPos.z, this.shadowRadius);
+        }
+
+        // Apply friction to slow down
+        this.stunVelocity.multiplyScalar(0.9);
+      }
+
       if (this.stumbleTimer <= 0) {
         this.isStumbling = false;
+        this.stunVelocity.set(0, 0, 0);
+        // Restore wander behavior after stumble
+        this.yukaVehicle.maxSpeed = this.walkSpeed;
+        this.setWanderBehavior();
       }
+
+      // Skip regular movement when stumbling - stun physics handles it
+      return;
     }
 
     // Update panic freeze timer (deer-in-headlights before fleeing)
@@ -638,20 +677,44 @@ export class Pedestrian extends THREE.Group {
 
   /**
    * Apply knockback/stumble effect when colliding with player
+   * Uses stunVelocity to bypass Yuka steering and directly move pedestrian
    */
   applyKnockback(direction: THREE.Vector3, force: number): void {
     if (this.isDead || this.isStumbling) return;
 
-    // Apply impulse to Yuka vehicle to make them stumble
-    // Reuse pre-allocated vector instead of clone()
+    // Set stun velocity - bypasses Yuka steering, applied directly in update()
     this._tempKnockback.copy(direction).normalize().multiplyScalar(force);
-    this.yukaVehicle.velocity.x += this._tempKnockback.x;
-    this.yukaVehicle.velocity.z += this._tempKnockback.z;
+    this.stunVelocity.set(this._tempKnockback.x, 0, this._tempKnockback.z);
+
+    // Clear Yuka steering so it doesn't fight the knockback
+    this.yukaVehicle.steering.clear();
+    this.yukaVehicle.maxSpeed = 0;
 
     // Set stumbling state and play RecieveHit animation
     this.isStumbling = true;
     this.stumbleTimer = PEDESTRIAN_CONFIG.STUMBLE_DURATION;
     this.playAnimation('RecieveHit', 0.1);
+  }
+
+  /**
+   * Apply death knockback - launches dead body in a direction (for bloodless mode bounce)
+   * Must be called AFTER pedestrian is dead
+   */
+  applyDeathKnockback(direction: THREE.Vector3, force: number): void {
+    if (!this.isDead) return;
+
+    // Normalize direction and apply force (negate to fly AWAY from attack)
+    this._tempKnockback.copy(direction).negate().normalize();
+
+    // Launch them - strong horizontal + vertical for dramatic bounce
+    const horizontalForce = force * 10;
+    const verticalForce = force * 5 + Math.random() * 10;
+
+    this.deadVelocity.set(
+      this._tempKnockback.x * horizontalForce,
+      verticalForce,
+      this._tempKnockback.z * horizontalForce
+    );
   }
 
   /**
@@ -709,6 +772,7 @@ export class Pedestrian extends THREE.Group {
     this.isStumbling = false;
     this.stumbleTimer = 0;
     this.deadVelocity.set(0, 0, 0);
+    this.stunVelocity.set(0, 0, 0);
 
     // TODO: Handle character type change (requires async model loading)
     // For now, we assume character type remains the same on reset
