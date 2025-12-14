@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameStats, TierConfig, Tier } from '../../types';
 import { TIER_CONFIGS, DEBUG_PERFORMANCE_PANEL } from '../../constants';
 import RampageVignette from './RampageVignette';
-import { gameAudio } from '../../audio/GameAudio';
-import { audioManager } from '../../audio/AudioManager';
+import { SettingsModal } from './SettingsModal';
+import { MobileControlScheme } from '../../input/MobileInputManager';
 
 // Neon colors from LoadingScreen
 const NEON = {
@@ -15,6 +15,9 @@ const NEON = {
 
 interface OverlayProps {
   stats: GameStats;
+  mobileScheme: MobileControlScheme;
+  onSchemeChange: (scheme: MobileControlScheme) => void;
+  accelerometerSupported: boolean;
 }
 
 // Pixel block bar component
@@ -57,34 +60,15 @@ const MiniPixelBar = ({ value, max, color, blocks = 6 }: { value: number; max: n
   );
 };
 
-const Overlay: React.FC<OverlayProps> = ({ stats }) => {
+const Overlay: React.FC<OverlayProps> = ({ stats, mobileScheme, onSchemeChange, accelerometerSupported }) => {
   const [uiHidden, setUiHidden] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [muted, setMuted] = useState(audioManager.getIsMuted());
-  const [musicVol, setMusicVol] = useState(audioManager.getMusicVolume());
-  const [sfxVol, setSfxVol] = useState(audioManager.getSfxVolume());
-  const [audioExpanded, setAudioExpanded] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  const handleMuteToggle = useCallback(() => {
-    const newMuted = gameAudio.toggleMute();
-    setMuted(newMuted);
-  }, []);
-
-  const handleMusicVol = useCallback((vol: number) => {
-    gameAudio.setMusicVolume(vol);
-    setMusicVol(vol);
-  }, []);
-
-  const handleSfxVol = useCallback((vol: number) => {
-    gameAudio.setSfxVolume(vol);
-    setSfxVol(vol);
   }, []);
 
   const currentConfig: TierConfig = TIER_CONFIGS[stats.tier];
@@ -180,76 +164,13 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
                   </div>
 
                   <div className="flex items-start gap-1">
-                    {/* Audio - expandable on mobile too */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setAudioExpanded(!audioExpanded)}
-                        className="bg-black/90 px-2 py-1 border-l-2 pointer-events-auto"
-                        style={{ borderColor: NEON.cyan }}
-                      >
-                        <span
-                          className="text-sm"
-                          style={{
-                            filter: muted ? 'grayscale(1) opacity(0.5)' : 'none',
-                            textShadow: muted ? 'none' : `0 0 6px ${NEON.cyan}`
-                          }}
-                        >
-                          {muted ? '🔇' : '🔊'}
-                        </span>
-                      </button>
-                      {/* Mobile audio dropdown */}
-                      {audioExpanded && (
-                        <div
-                          className="absolute top-full left-0 mt-1 bg-black border-2 p-2 min-w-[120px] z-50 pointer-events-auto"
-                          style={{ borderColor: NEON.cyan, boxShadow: `0 0 10px ${NEON.cyan}40` }}
-                        >
-                          <button
-                            onClick={handleMuteToggle}
-                            className="w-full text-[9px] retro py-1 mb-2 border"
-                            style={{
-                              borderColor: muted ? '#444' : NEON.cyan,
-                              color: muted ? '#666' : NEON.cyan
-                            }}
-                          >
-                            {muted ? 'UNMUTE' : 'MUTE'}
-                          </button>
-                          <div className="space-y-2">
-                            <div>
-                              <div className="flex justify-between text-[8px] retro mb-0.5">
-                                <span style={{ color: NEON.yellow }}>MUS</span>
-                                <span style={{ color: NEON.yellow }}>{Math.round(musicVol * 100)}</span>
-                              </div>
-                              <input
-                                type="range"
-                                min={0}
-                                max={1}
-                                step={0.1}
-                                value={musicVol}
-                                onChange={(e) => handleMusicVol(parseFloat(e.target.value))}
-                                className="w-full h-2"
-                                style={{ accentColor: NEON.yellow }}
-                              />
-                            </div>
-                            <div>
-                              <div className="flex justify-between text-[8px] retro mb-0.5">
-                                <span style={{ color: NEON.orange }}>SFX</span>
-                                <span style={{ color: NEON.orange }}>{Math.round(sfxVol * 100)}</span>
-                              </div>
-                              <input
-                                type="range"
-                                min={0}
-                                max={1}
-                                step={0.1}
-                                value={sfxVol}
-                                onChange={(e) => handleSfxVol(parseFloat(e.target.value))}
-                                className="w-full h-2"
-                                style={{ accentColor: NEON.orange }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    {/* Settings Modal */}
+                    <SettingsModal
+                      isMobile={isMobile}
+                      mobileScheme={mobileScheme}
+                      onSchemeChange={onSchemeChange}
+                      accelerometerSupported={accelerometerSupported}
+                    />
                     {/* Screenshot */}
                     <button
                       onClick={() => setUiHidden(!uiHidden)}
@@ -338,94 +259,15 @@ const Overlay: React.FC<OverlayProps> = ({ stats }) => {
               <>
                 {/* TOP ROW */}
                 <div className="flex justify-between items-start">
-                  {/* TOP LEFT - Vol + Snap (small) */}
+                  {/* TOP LEFT - Settings + Snap (small) */}
                   <div className="flex items-stretch gap-2">
-                    {/* VOL - Expandable */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setAudioExpanded(!audioExpanded)}
-                        className="h-full bg-black px-2 py-1.5 border-2 pointer-events-auto hover:brightness-125 transition-all flex items-center gap-1.5"
-                        style={{ borderColor: NEON.cyan, boxShadow: `0 0 10px ${NEON.cyan}20` }}
-                      >
-                        <span
-                          className="text-sm"
-                          style={{
-                            filter: muted ? 'grayscale(1) opacity(0.5)' : 'none',
-                            textShadow: muted ? 'none' : `0 0 8px ${NEON.cyan}80`
-                          }}
-                        >
-                          {muted ? '🔇' : '🔊'}
-                        </span>
-                        <span
-                          className="text-[9px] retro"
-                          style={{ color: NEON.cyan, textShadow: `0 0 6px ${NEON.cyan}60` }}
-                        >
-                          {muted ? 'OFF' : 'VOL'}
-                        </span>
-                      </button>
-                      <div className="absolute -top-1 -left-1 w-1.5 h-1.5 border-t border-l" style={{ borderColor: NEON.cyan }} />
-                      <div className="absolute -bottom-1 -right-1 w-1.5 h-1.5 border-b border-r" style={{ borderColor: NEON.cyan }} />
-
-                      {/* Dropdown */}
-                      {audioExpanded && (
-                        <div
-                          className="absolute top-full left-0 mt-2 bg-black border-2 p-3 min-w-[140px] z-50 pointer-events-auto"
-                          style={{ borderColor: NEON.cyan, boxShadow: `0 0 15px ${NEON.cyan}40` }}
-                        >
-                          <button
-                            onClick={handleMuteToggle}
-                            className="w-full text-[10px] retro py-1.5 mb-3 border"
-                            style={{
-                              borderColor: muted ? '#444' : NEON.cyan,
-                              color: muted ? '#666' : NEON.cyan,
-                              textShadow: muted ? 'none' : `0 0 6px ${NEON.cyan}`
-                            }}
-                          >
-                            {muted ? 'UNMUTE' : 'MUTE ALL'}
-                          </button>
-
-                          {/* Music */}
-                          <div className="mb-3">
-                            <div className="flex justify-between text-[10px] retro mb-1">
-                              <span style={{ color: NEON.yellow }}>MUSIC</span>
-                              <span style={{ color: NEON.yellow }}>{Math.round(musicVol * 100)}</span>
-                            </div>
-                            <input
-                              type="range"
-                              min={0}
-                              max={1}
-                              step={0.1}
-                              value={musicVol}
-                              onChange={(e) => handleMusicVol(parseFloat(e.target.value))}
-                              className="w-full h-2 appearance-none bg-neutral-800 cursor-pointer"
-                              style={{ accentColor: NEON.yellow }}
-                            />
-                          </div>
-
-                          {/* SFX */}
-                          <div>
-                            <div className="flex justify-between text-[10px] retro mb-1">
-                              <span style={{ color: NEON.orange }}>SFX</span>
-                              <span style={{ color: NEON.orange }}>{Math.round(sfxVol * 100)}</span>
-                            </div>
-                            <input
-                              type="range"
-                              min={0}
-                              max={1}
-                              step={0.1}
-                              value={sfxVol}
-                              onChange={(e) => handleSfxVol(parseFloat(e.target.value))}
-                              className="w-full h-2 appearance-none bg-neutral-800 cursor-pointer"
-                              style={{ accentColor: NEON.orange }}
-                            />
-                          </div>
-
-                          {/* Corner brackets */}
-                          <div className="absolute -top-1 -left-1 w-2 h-2 border-t-2 border-l-2" style={{ borderColor: NEON.cyan }} />
-                          <div className="absolute -bottom-1 -right-1 w-2 h-2 border-b-2 border-r-2" style={{ borderColor: NEON.cyan }} />
-                        </div>
-                      )}
-                    </div>
+                    {/* Settings Modal */}
+                    <SettingsModal
+                      isMobile={isMobile}
+                      mobileScheme={mobileScheme}
+                      onSchemeChange={onSchemeChange}
+                      accelerometerSupported={accelerometerSupported}
+                    />
 
                     {/* SNAP */}
                     <div className="relative">

@@ -3,6 +3,7 @@ import { LoadingState, LoadingPhase } from '../../core/Preloader';
 import { gameAudio } from '../../audio/GameAudio';
 import { MobileControlScheme } from '../../input/MobileInputManager';
 import { LeaderboardPanel } from './LeaderboardPanel';
+import { ControlSchemeSelector } from './ControlSchemeSelector';
 
 interface LoadingScreenProps {
   state: LoadingState;
@@ -44,11 +45,6 @@ const TAGLINES = [
   "NETWORKING, BUT VIOLENTLY.",
 ];
 
-const CONTROL_OPTIONS: Array<{ label: string; value: MobileControlScheme; hint: string }> = [
-  { label: 'TOUCH', value: 'touch', hint: 'Drag to move, tap to strike' },
-  { label: 'TILT', value: 'accelerometer', hint: 'Tilt to steer, tap to strike' },
-  { label: 'HYBRID', value: 'hybrid', hint: 'Tilt to steer, touch overrides' },
-];
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   state,
@@ -347,6 +343,17 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
           </div>
         )}
 
+        {/* Control scheme toggle - above start button */}
+        {showStart && isMobile && (
+          <div className="mb-6">
+            <ControlSchemeSelector
+              scheme={mobileScheme}
+              onChange={onSchemeChange}
+              accelerometerSupported={accelerometerSupported}
+            />
+          </div>
+        )}
+
         {/* Start Button */}
         {showStart && (
           <div className="text-center">
@@ -378,86 +385,6 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
                 }}
               />
             </button>
-
-            {/* Control scheme toggle */}
-            {isMobile && (
-              <div className="mt-6 flex flex-col items-center gap-3">
-                <p
-                  className="text-[10px] retro tracking-[0.25em]"
-                  style={{ color: NEON.cyan, textShadow: `0 0 8px ${NEON.cyan}60` }}
-                >
-                  CONTROL MODE
-                </p>
-                <div
-                  className="flex gap-2 rounded-full px-2 py-2 backdrop-blur-sm border"
-                  style={{
-                    borderColor: `${NEON.cyan}30`,
-                    background: 'linear-gradient(135deg, rgba(10,10,16,0.9), rgba(6,6,10,0.85))',
-                    boxShadow: `0 0 20px ${NEON.cyan}20`,
-                  }}
-                >
-                  {CONTROL_OPTIONS.map((option) => {
-                    const active = mobileScheme === option.value;
-                    const disabled = option.value !== 'touch' && !accelerometerSupported;
-                    return (
-                      <button
-                        key={option.value}
-                        onClick={() => !disabled && onSchemeChange(option.value)}
-                        disabled={disabled}
-                        className="relative flex items-center gap-2 rounded-full px-3 py-2 retro text-[11px] transition-all"
-                        style={{
-                          color: active ? '#0df' : '#7f8ea3',
-                          background: active
-                            ? `linear-gradient(135deg, ${NEON.cyan}20, ${NEON.magenta}15)`
-                            : 'rgba(255,255,255,0.03)',
-                          boxShadow: active
-                            ? `0 0 18px ${NEON.cyan}40, inset 0 0 0 1px ${NEON.cyan}40`
-                            : 'inset 0 0 0 1px rgba(255,255,255,0.05)',
-                          opacity: disabled ? 0.5 : 1,
-                        }}
-                      >
-                        <span
-                          className="relative inline-flex items-center justify-center w-7 h-7 rounded-full"
-                          style={{
-                            background: active
-                              ? `linear-gradient(135deg, ${NEON.cyan}50, ${NEON.magenta}30)`
-                              : '#0c0c14',
-                            boxShadow: active ? `0 0 10px ${NEON.cyan}60` : 'none',
-                          }}
-                        >
-                          <span
-                            className="absolute inset-[6px] rounded-full"
-                            style={{
-                              background:
-                                option.value === 'touch'
-                                  ? `radial-gradient(circle, ${NEON.red}80 0%, ${NEON.red}30 70%, transparent 100%)`
-                                  : option.value === 'accelerometer'
-                                    ? `linear-gradient(135deg, ${NEON.cyan}70 0%, ${NEON.yellow}40 100%)`
-                                    : `linear-gradient(135deg, ${NEON.cyan}70 0%, ${NEON.magenta}60 50%, ${NEON.yellow}50 100%)`,
-                              boxShadow: '0 0 12px rgba(0,0,0,0.4)',
-                            }}
-                          />
-                          <span
-                            className="absolute w-2 h-6 rounded-full opacity-70"
-                            style={{
-                              background: '#ffffff20',
-                              transform: 'rotate(-20deg)',
-                            }}
-                          />
-                        </span>
-                        <span className="tracking-[0.1em]">{option.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p
-                  className="text-[9px] retro tracking-widest text-center leading-tight"
-                  style={{ color: '#7f8ea3' }}
-                >
-                  Touch in the lower 60% overrides tilt when active.
-                </p>
-              </div>
-            )}
 
             {/* Blinking prompt */}
             <p

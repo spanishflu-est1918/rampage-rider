@@ -12,9 +12,10 @@ import { GameState, GameStats, Tier, KillNotification } from './types';
 import { VehicleType } from './constants';
 import ErrorBoundary from './components/ErrorBoundary';
 import { preloader, LoadingState } from './core/Preloader';
-import { gameAudio } from './audio';
+import { gameAudio, audioManager } from './audio';
 import { mobileInput, MobileControlScheme } from './input/MobileInputManager';
 import { isMobileDevice } from './utils/device';
+import { loadSettings, saveSetting } from './utils/settings';
 
 interface EngineControls {
   spawnVehicle: (type: VehicleType | null) => void;
@@ -28,9 +29,26 @@ function App() {
   const [irisActive, setIrisActive] = useState(false);
   const [irisReady, setIrisReady] = useState(false);
   const [loadingFadeOut, setLoadingFadeOut] = useState(false);
-  const [mobileScheme, setMobileScheme] = useState<MobileControlScheme>('hybrid');
+  const [mobileScheme, setMobileScheme] = useState<MobileControlScheme>(() => loadSettings().mobileScheme);
   const [isMobile] = useState(() => isMobileDevice());
   const [accelerometerSupported] = useState(() => mobileInput.isAccelerometerSupported());
+
+  // Apply saved audio settings on first interaction
+  useEffect(() => {
+    if (!hasUserInteracted) return;
+    const settings = loadSettings();
+    gameAudio.setMusicVolume(settings.musicVolume);
+    gameAudio.setSfxVolume(settings.sfxVolume);
+    if (settings.muted) {
+      audioManager.setMuted(true);
+    }
+  }, [hasUserInteracted]);
+
+  // Handler for mobile scheme changes - saves to localStorage
+  const handleSchemeChange = useCallback((scheme: MobileControlScheme) => {
+    setMobileScheme(scheme);
+    saveSetting('mobileScheme', scheme);
+  }, []);
 
   // Start loading AFTER user interaction (required for audio)
   useEffect(() => {
@@ -129,6 +147,7 @@ function App() {
     const applyScheme = async () => {
       if ((mobileScheme === 'accelerometer' || mobileScheme === 'hybrid') && !accelerometerSupported) {
         setMobileScheme('touch');
+        saveSetting('mobileScheme', 'touch');
         mobileInput.setScheme('touch');
         return;
       }
@@ -137,6 +156,7 @@ function App() {
         const granted = await mobileInput.requestAccelerometerPermission();
         if (!granted) {
           setMobileScheme('touch');
+          saveSetting('mobileScheme', 'touch');
           mobileInput.setScheme('touch');
           return;
         }
@@ -273,7 +293,7 @@ function App() {
             state={loadingState}
             onStart={startGame}
             mobileScheme={mobileScheme}
-            onSchemeChange={setMobileScheme}
+            onSchemeChange={handleSchemeChange}
             isMobile={isMobile}
             accelerometerSupported={accelerometerSupported}
           />
@@ -283,7 +303,12 @@ function App() {
       {gameState === GameState.PLAYING && (
         <>
           {!stats.inRampageMode && <SnowOverlay />}
-          <Overlay stats={stats} />
+          <Overlay
+              stats={stats}
+              mobileScheme={mobileScheme}
+              onSchemeChange={handleSchemeChange}
+              accelerometerSupported={accelerometerSupported}
+            />
           <NotificationSystem
             onRegister={registerNotificationController}
             showEnterPrompt={stats.isNearCar && !stats.isInVehicle}
