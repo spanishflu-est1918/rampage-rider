@@ -26,7 +26,13 @@ interface EngineControls {
 function App() {
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
   const [loadingState, setLoadingState] = useState<LoadingState>(() => preloader.getState());
-  const [hasUserInteracted, setHasUserInteracted] = useState(() => !isMobileDevice());
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const [introVideoWatched, setIntroVideoWatched] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [introVideoSrc] = useState(() => {
+    const videos = ['/video/intro.mp4', '/video/intro2.mp4', '/video/intro3.mp4'];
+    return videos[Math.floor(Math.random() * videos.length)];
+  });
   const [irisActive, setIrisActive] = useState(false);
   const [irisReady, setIrisReady] = useState(false);
   const [loadingFadeOut, setLoadingFadeOut] = useState(false);
@@ -62,9 +68,9 @@ function App() {
     }
   }, []);
 
-  // Start loading AFTER user interaction (required for audio)
+  // Start loading AFTER intro video (or immediately on desktop)
   useEffect(() => {
-    if (!hasUserInteracted) return;
+    if (!hasUserInteracted || !introVideoWatched) return;
 
     const unsubscribe = preloader.addProgressListener((state) => {
       setLoadingState(state);
@@ -79,7 +85,13 @@ function App() {
     return () => {
       unsubscribe();
     };
-  }, [hasUserInteracted]);
+  }, [hasUserInteracted, introVideoWatched]);
+
+  // Handle intro video end or skip
+  const handleVideoEnd = useCallback(() => {
+    setIntroVideoWatched(true);
+  }, []);
+
   const [stats, setStats] = useState<GameStats>({
     kills: 0,
     copKills: 0,
@@ -212,23 +224,27 @@ function App() {
   return (
     <div className="relative w-full h-[100dvh] min-h-[100dvh] overflow-hidden bg-neutral-900 select-none touch-none">
 
-      {/* 3D Game Layer */}
-      <ErrorBoundary>
-        <GameCanvas
-          gameActive={gameState === GameState.PLAYING}
-          onStatsUpdate={handleStatsUpdate}
-          onGameOver={handleGameOver}
-          onKillNotification={handleKillNotification}
-          onEngineReady={handleEngineReady}
-          onPauseToggle={togglePause}
-        />
-      </ErrorBoundary>
+      {/* 3D Game Layer - only mount after intro video to prevent early music */}
+      {introVideoWatched && (
+        <ErrorBoundary>
+          <GameCanvas
+            gameActive={gameState === GameState.PLAYING}
+            onStatsUpdate={handleStatsUpdate}
+            onGameOver={handleGameOver}
+            onKillNotification={handleKillNotification}
+            onEngineReady={handleEngineReady}
+            onPauseToggle={togglePause}
+          />
+        </ErrorBoundary>
+      )}
 
       {/* Tap to Start - required for audio permissions */}
       {!hasUserInteracted && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black cursor-pointer group"
           onClick={async () => {
+            // Unlock audio context on user gesture
+            await gameAudio.resume();
             // Request accelerometer permission on first tap (iOS requires user gesture)
             if (
               isMobile &&
@@ -240,64 +256,52 @@ function App() {
             setHasUserInteracted(true);
           }}
         >
-          {/* CRT scanline overlay */}
-          <div
-            className="absolute inset-0 pointer-events-none opacity-[0.03]"
-            style={{
-              backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)'
-            }}
-          />
-
-          {/* Vignette */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(0,0,0,0.8) 100%)'
-            }}
-          />
-
-          {/* Pulsing ring */}
-          <div className="relative">
+          <div className="flex flex-col items-center gap-6">
+            {/* Simple play button */}
             <div
-              className="absolute inset-0 -m-8 rounded-full animate-ping opacity-20"
-              style={{
-                background: 'radial-gradient(circle, #ff3333 0%, transparent 70%)',
-                animationDuration: '2s'
-              }}
-            />
-            <div
-              className="absolute inset-0 -m-4 rounded-full animate-pulse opacity-30"
-              style={{
-                background: 'radial-gradient(circle, #ff3333 0%, transparent 60%)',
-                animationDuration: '1.5s'
-              }}
-            />
-
-            {/* Simple tap indicator */}
-            <div
-              className="w-20 h-20 md:w-24 md:h-24 rounded-full border-2 flex items-center justify-center
-                         transition-all duration-300 group-hover:scale-110 group-active:scale-95"
-              style={{
-                borderColor: '#ff3333',
-                boxShadow: '0 0 30px rgba(255,51,51,0.4), inset 0 0 20px rgba(255,51,51,0.1)'
-              }}
+              className="w-20 h-20 md:w-24 md:h-24 border-2 border-white/40 flex items-center justify-center
+                         transition-transform duration-150 group-hover:scale-105 group-active:scale-95"
             >
               <div
-                className="w-0 h-0 ml-2"
+                className="ml-2 w-0 h-0"
                 style={{
-                  borderLeft: '20px solid #ff3333',
+                  borderLeft: '20px solid white',
                   borderTop: '12px solid transparent',
                   borderBottom: '12px solid transparent',
-                  filter: 'drop-shadow(0 0 8px rgba(255,51,51,0.8))'
+                  opacity: 0.8
                 }}
               />
             </div>
+            <p className="retro text-xs text-white/40 tracking-widest">
+              TAP TO START
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Intro Video - plays after tap, before loading */}
+      {hasUserInteracted && !introVideoWatched && (
+        <div
+          className="fixed inset-0 z-[190] bg-black cursor-pointer"
+          onClick={handleVideoEnd}
+        >
+          <video
+            ref={videoRef}
+            className="w-full h-full object-contain"
+            src={introVideoSrc}
+            playsInline
+            autoPlay
+            onEnded={handleVideoEnd}
+            onError={handleVideoEnd}
+          />
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/50 text-sm retro animate-pulse">
+            TAP TO SKIP
           </div>
         </div>
       )}
 
       {/* Loading Screen / Main Menu (combined) */}
-      {hasUserInteracted && gameState === GameState.MENU && (
+      {hasUserInteracted && introVideoWatched && gameState === GameState.MENU && (
         <div
           className={`transition-opacity duration-1000 ${loadingFadeOut ? 'opacity-0' : 'opacity-100'}`}
         >

@@ -268,7 +268,7 @@ export const SOUND_CONFIG: Record<SoundId, SoundConfig> = {
     category: 'sfx',
   },
   [SoundId.ALLAHU_AKBAR]: {
-    volume: 0.8,
+    volume: 0.2,
     pitch: 1.0,
     category: 'sfx',
   },
