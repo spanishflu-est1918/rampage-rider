@@ -30,7 +30,7 @@ function App() {
   const [introVideoWatched, setIntroVideoWatched] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [introVideoSrc] = useState(() => {
-    const videos = ['/video/intro.mp4', '/video/intro2.mp4', '/video/intro3.mp4'];
+    const videos = ['/video/intro.mp4', '/video/intro2.mp4', '/video/intro3.mp4', '/video/intro4.mp4'];
     return videos[Math.floor(Math.random() * videos.length)];
   });
   const [irisActive, setIrisActive] = useState(false);
