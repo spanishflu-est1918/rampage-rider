@@ -179,10 +179,9 @@ export class MotorbikeCopManager {
       desiredBosses = 0;
     }
 
-    // Check total cap
+    // Check total cap (use activeCops count, not variant counts which include dead-but-visible cops)
     const _totalDesired = desiredScouts + desiredSwarm + desiredBosses;
-    const currentTotal = this.scoutCount + this.swarmCount + this.bossCount;
-    if (currentTotal >= limits.MAX_TOTAL) {
+    if (activeCops >= limits.MAX_TOTAL) {
       this.previousHeat = heat;
       return;
     }

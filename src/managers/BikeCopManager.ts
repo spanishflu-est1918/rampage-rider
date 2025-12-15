@@ -79,8 +79,8 @@ export class BikeCopManager {
     if (heat >= 50) desiredCops = 2;
     else if (heat >= 25) desiredCops = 1;
 
-    // Spawn if needed
-    if (activeCops < desiredCops && this.cops.length < this.maxCops) {
+    // Spawn if needed (use activeCops, not this.cops.length, to avoid counting dead-but-visible cops)
+    if (activeCops < desiredCops && activeCops < this.maxCops) {
       this.spawnCop(playerPosition);
       this.lastSpawnTime = 0;
     }

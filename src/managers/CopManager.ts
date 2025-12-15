@@ -113,7 +113,8 @@ export class CopManager {
     else if (heat >= 25) desiredCops = 1;
 
     // Spawn more cops if below desired count
-    const copsToSpawn = Math.min(desiredCops - activeCops, this.maxCops - this.cops.length);
+    // Use activeCops (not this.cops.length) to avoid counting dead-but-visible cops
+    const copsToSpawn = Math.min(desiredCops - activeCops, this.maxCops - activeCops);
 
     for (let i = 0; i < copsToSpawn; i++) {
       this.spawnCop(playerPosition);
