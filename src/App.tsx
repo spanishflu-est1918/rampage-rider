@@ -30,7 +30,7 @@ function App() {
   const [introVideoWatched, setIntroVideoWatched] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [introVideoSrc] = useState(() => {
-    const videos = ['/video/intro.mp4', '/video/intro2.mp4', '/video/intro3.mp4', '/video/intro4.mp4'];
+    const videos = ['./video/intro.mp4', './video/intro2.mp4', './video/intro3.mp4', './video/intro4.mp4'];
     return videos[Math.floor(Math.random() * videos.length)];
   });
   const [irisActive, setIrisActive] = useState(false);
@@ -257,17 +257,24 @@ function App() {
           }}
         >
           <div className="flex flex-col items-center gap-6">
+            {/* Title image */}
+            <img
+              src="/og-image.jpg"
+              alt="Christmas Market Mayhem"
+              className="w-[80vw] max-w-md h-auto"
+              style={{ imageRendering: 'pixelated' }}
+            />
             {/* Simple play button */}
             <div
-              className="w-20 h-20 md:w-24 md:h-24 border-2 border-white/40 flex items-center justify-center
+              className="w-16 h-16 md:w-20 md:h-20 border-2 border-white/40 flex items-center justify-center
                          transition-transform duration-150 group-hover:scale-105 group-active:scale-95"
             >
               <div
-                className="ml-2 w-0 h-0"
+                className="ml-1.5 w-0 h-0"
                 style={{
-                  borderLeft: '20px solid white',
-                  borderTop: '12px solid transparent',
-                  borderBottom: '12px solid transparent',
+                  borderLeft: '16px solid white',
+                  borderTop: '10px solid transparent',
+                  borderBottom: '10px solid transparent',
                   opacity: 0.8
                 }}
               />
