@@ -1,11 +1,24 @@
 /**
  * Leaderboard service for flu-services API integration
  * Uses Vite proxy in dev (/api/flu -> flu-services.vercel.app)
- * API key is injected server-side by the proxy
+ * In production, API key is included in client bundle (acceptable for game leaderboard)
  */
 
-const API_BASE = '/api/flu';
+const API_BASE = import.meta.env.DEV ? '/api/flu' : 'https://flu-services.vercel.app/api';
+const API_KEY = import.meta.env.VITE_FLU_API_KEY || '';
 const GAME_SLUG = 'christmas-market-mayhem';
+
+// Auth header only needed in production (proxy handles it in dev)
+const getHeaders = (includeContentType = false): HeadersInit => {
+  const headers: HeadersInit = {};
+  if (!import.meta.env.DEV && API_KEY) {
+    headers['Authorization'] = `Bearer ${API_KEY}`;
+  }
+  if (includeContentType) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
+};
 
 export interface LeaderboardEntry {
   rank: number;
@@ -35,7 +48,8 @@ export interface SubmitScoreResponse {
 export async function fetchLeaderboard(limit = 10): Promise<LeaderboardResponse> {
   try {
     const response = await fetch(
-      `${API_BASE}/leaderboards/${GAME_SLUG}?limit=${limit}`
+      `${API_BASE}/leaderboards/${GAME_SLUG}?limit=${limit}`,
+      { headers: getHeaders() }
     );
 
     if (!response.ok) {
@@ -66,9 +80,7 @@ export async function submitScore(
       `${API_BASE}/leaderboards/${GAME_SLUG}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getHeaders(true),
         body: JSON.stringify({
           handle,
           score,
