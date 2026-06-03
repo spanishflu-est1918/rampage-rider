@@ -40,6 +40,7 @@ function App() {
   const [bloodlessMode, setBloodlessMode] = useState(() => loadSettings().bloodlessMode);
   const [isMobile] = useState(() => isMobileDevice());
   const [accelerometerSupported] = useState(() => mobileInput.isAccelerometerSupported());
+  const [engineReady, setEngineReady] = useState(false);
 
   // Apply saved audio settings on first interaction
   useEffect(() => {
@@ -206,6 +207,7 @@ function App() {
 
   const handleEngineReady = useCallback((controls: EngineControls) => {
     engineControlsRef.current = controls;
+    setEngineReady(true);
   }, []);
 
   const handleVehicleSelect = useCallback((vehicleType: VehicleType | null) => {
@@ -314,6 +316,7 @@ function App() {
         >
           <LoadingScreen
             state={loadingState}
+            readyToStart={engineReady}
             onStart={startGame}
             mobileScheme={mobileScheme}
             onSchemeChange={handleSchemeChange}

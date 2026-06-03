@@ -7,6 +7,7 @@ import { ControlSchemeSelector } from './ControlSchemeSelector';
 
 interface LoadingScreenProps {
   state: LoadingState;
+  readyToStart: boolean;
   onStart: () => void;
   mobileScheme: MobileControlScheme;
   onSchemeChange: (scheme: MobileControlScheme) => void;
@@ -48,6 +49,7 @@ const TAGLINES = [
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   state,
+  readyToStart,
   onStart,
   mobileScheme,
   onSchemeChange,
@@ -85,13 +87,18 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
     }
   }, [state.phase]);
 
-  // Delay button pressability by 1.5s after showing
+  // Delay button pressability by 1.5s after showing, then wait for engine init.
   useEffect(() => {
     if (showStart) {
-      const timer = setTimeout(() => setButtonEnabled(true), 1500);
+      const timer = setTimeout(() => setButtonEnabled(readyToStart), 1500);
       return () => clearTimeout(timer);
     }
-  }, [showStart]);
+  }, [readyToStart, showStart]);
+
+  useEffect(() => {
+    if (!showStart) return;
+    setButtonEnabled(readyToStart);
+  }, [readyToStart, showStart]);
 
   // Rotate taglines
   useEffect(() => {
@@ -376,7 +383,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
                 textShadow: '2px 2px 0 #000',
               }}
             >
-              <span className="relative z-10">START GAME</span>
+              <span className="relative z-10">
+                {readyToStart ? 'START GAME' : 'WARMING UP'}
+              </span>
               {/* Animated glow pulse */}
               <div
                 className="absolute inset-0 animate-pulse opacity-50"
@@ -410,7 +419,11 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
       {/* Footer */}
       <div className="absolute bottom-6 text-center">
         <p className="text-[8px] retro tracking-widest" style={{ color: '#444' }}>
-          {showStart ? 'PRESS START TO BEGIN' : 'LOADING ASSETS • PLEASE WAIT'}
+          {showStart
+            ? readyToStart
+              ? 'PRESS START TO BEGIN'
+              : 'INITIALIZING ENGINE • PLEASE WAIT'
+            : 'LOADING ASSETS • PLEASE WAIT'}
         </p>
       </div>
 

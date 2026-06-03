@@ -405,13 +405,12 @@ export class Engine {
     const { preloader } = await import('./Preloader');
     await preloader.preloadAll();
 
-    // Initialize audio system (requires user interaction first, handled by resume())
-    await gameAudio.init();
-    // Start menu music and Christmas market ambience
-    gameAudio.playMenuMusic();
-    gameAudio.startAmbient();
-    // Start positional table crowd (volume controlled by distance to biergarten tables)
-    gameAudio.startTableCrowd();
+    // Audio is useful, but it should never block scene/player creation on slow mobile networks.
+    void gameAudio.init().then(() => {
+      gameAudio.playMenuMusic();
+      gameAudio.startAmbient();
+      gameAudio.startTableCrowd();
+    });
 
     await this.physics.init();
     this.ai.init();
