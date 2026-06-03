@@ -72,6 +72,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
       engine.setCallbacks(onStatsUpdate, onGameOver, onKillNotification);
       engineRef.current = engine;
+      if (window.location.search.includes('debugEngine=1')) {
+        (window as typeof window & { __rampageEngine?: Engine }).__rampageEngine = engine;
+      }
       _initializingEngine = null;
       setEngineReady(true);
 
@@ -104,6 +107,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       if (engineRef.current) {
         try {
           engineRef.current.dispose();
+          if ((window as typeof window & { __rampageEngine?: Engine }).__rampageEngine === engineRef.current) {
+            delete (window as typeof window & { __rampageEngine?: Engine }).__rampageEngine;
+          }
           engineRef.current = null;
         } catch {
           // Ignore disposal errors
