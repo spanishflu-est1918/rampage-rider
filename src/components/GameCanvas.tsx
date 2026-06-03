@@ -14,6 +14,11 @@ interface EngineControls {
   setBloodlessMode: (value: boolean) => void;
 }
 
+interface DebugWindow extends Window {
+  __rampageEngine?: Engine;
+  __rampageEngineInitError?: unknown;
+}
+
 interface GameCanvasProps {
   onStatsUpdate: (stats: GameStats) => void;
   onGameOver: (stats: GameStats) => void;
@@ -51,10 +56,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       );
 
       _initializingEngine = engine;
+      const debugWindow = window as DebugWindow;
+      const debugEngine = window.location.search.includes('debugEngine=1');
+      if (debugEngine) {
+        debugWindow.__rampageEngine = engine;
+        delete debugWindow.__rampageEngineInitError;
+      }
 
       try {
         await engine.init();
-      } catch {
+      } catch (error) {
+        console.error('[GameCanvas] Engine init failed:', error);
+        if (debugEngine) {
+          debugWindow.__rampageEngineInitError = error;
+        }
         _initializingEngine = null;
         return;
       }
@@ -72,9 +87,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
       engine.setCallbacks(onStatsUpdate, onGameOver, onKillNotification);
       engineRef.current = engine;
-      if (window.location.search.includes('debugEngine=1')) {
-        (window as typeof window & { __rampageEngine?: Engine }).__rampageEngine = engine;
-      }
       _initializingEngine = null;
       setEngineReady(true);
 
@@ -107,8 +119,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       if (engineRef.current) {
         try {
           engineRef.current.dispose();
-          if ((window as typeof window & { __rampageEngine?: Engine }).__rampageEngine === engineRef.current) {
-            delete (window as typeof window & { __rampageEngine?: Engine }).__rampageEngine;
+          const debugWindow = window as DebugWindow;
+          if (debugWindow.__rampageEngine === engineRef.current) {
+            delete debugWindow.__rampageEngine;
           }
           engineRef.current = null;
         } catch {
