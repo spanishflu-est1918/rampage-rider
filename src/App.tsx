@@ -89,9 +89,32 @@ function App() {
   }, [hasUserInteracted, introVideoWatched]);
 
   // Handle intro video end or skip
-  const handleVideoEnd = useCallback(() => {
+  const finishIntroVideo = useCallback((event?: React.SyntheticEvent) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    }
+
     setIntroVideoWatched(true);
   }, []);
+
+  useEffect(() => {
+    if (!hasUserInteracted || introVideoWatched) return;
+
+    const timer = window.setTimeout(() => {
+      const video = videoRef.current;
+      if (!video || video.readyState === 0) {
+        finishIntroVideo();
+      }
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [finishIntroVideo, hasUserInteracted, introVideoWatched]);
 
   const [stats, setStats] = useState<GameStats>({
     kills: 0,
@@ -292,20 +315,28 @@ function App() {
       {hasUserInteracted && !introVideoWatched && (
         <div
           className="fixed inset-0 z-[190] bg-black cursor-pointer"
-          onClick={handleVideoEnd}
+          onPointerDown={finishIntroVideo}
+          onTouchStart={finishIntroVideo}
+          onClick={finishIntroVideo}
         >
           <video
             ref={videoRef}
-            className="w-full h-full object-contain"
+            className="w-full h-full object-contain pointer-events-none"
             src={introVideoSrc}
             playsInline
             autoPlay
-            onEnded={handleVideoEnd}
-            onError={handleVideoEnd}
+            onEnded={finishIntroVideo}
+            onError={finishIntroVideo}
           />
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/50 text-sm retro animate-pulse">
+          <button
+            type="button"
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/70 text-sm retro animate-pulse"
+            onPointerDown={finishIntroVideo}
+            onTouchStart={finishIntroVideo}
+            onClick={finishIntroVideo}
+          >
             TAP TO SKIP
-          </div>
+          </button>
         </div>
       )}
 
