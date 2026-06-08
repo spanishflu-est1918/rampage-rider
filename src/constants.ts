@@ -12,6 +12,7 @@ export const MOBILE_CONFIG = {
   PARTICLE_MULTIPLIER: 0.5, // Half particles
   DISABLE_FESTIVE_DECORATIONS: true,
   ANIMATION_LOD_DISTANCE_SQ: 225, // 15m (15*15) instead of 25m
+  RENDER_PIXEL_RATIO: 1.25, // Keep all visuals/gameplay, reduce mobile fill-rate pressure
 };
 
 // Debug flag for performance panel - set to true to show performance metrics

@@ -27,6 +27,7 @@ import {
   COLLISION_GROUPS,
   DEBUG_PERFORMANCE_PANEL,
   DEBUG_START_IN_RAMPAGE,
+  MOBILE_CONFIG,
 } from '../constants';
 import { BloodDecalSystem } from '../rendering/BloodDecalSystem';
 import { RampageDimension } from '../rendering/RampageDimension';
@@ -369,10 +370,11 @@ export class Engine {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
-      alpha: false
+      alpha: false,
+      powerPreference: 'high-performance'
     });
+    this.renderer.setPixelRatio(this.getTargetPixelRatio());
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = false;
     // this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -2365,7 +2367,13 @@ export class Engine {
     this.camera.bottom = frustumSize / -2;
     this.camera.updateProjectionMatrix();
 
+    this.renderer.setPixelRatio(this.getTargetPixelRatio());
     this.renderer.setSize(width, height);
+  }
+
+  private getTargetPixelRatio(): number {
+    const maxPixelRatio = isMobileDevice() ? MOBILE_CONFIG.RENDER_PIXEL_RATIO : 2;
+    return Math.min(window.devicePixelRatio || 1, maxPixelRatio);
   }
 
   private animate = (): void => {
